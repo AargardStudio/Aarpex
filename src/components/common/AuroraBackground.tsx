@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, memo } from "react";
 
 // Realistic star colour temperatures — mostly white and blue-white (hot,
 // common) with a smaller share of pale yellow/orange (cooler stars),
@@ -27,7 +27,7 @@ const STAR_COLORS = [
  * decorative: absolutely positioned, zero pointer events, sits behind
  * whatever is rendered after it (give sibling content `relative z-10`).
  */
-export const AuroraBackground: React.FC = () => {
+const AuroraBackgroundComponent: React.FC = () => {
   // A fixed, memoized set of star positions/colours/sizes so they don't
   // reshuffle on every re-render of the page that hosts this.
   const stars = useMemo(
@@ -84,3 +84,11 @@ export const AuroraBackground: React.FC = () => {
     </div>
   );
 };
+
+// Purely decorative and takes no props — memoized so that pages hosting it
+// (e.g. the Sign In / Sign Up screen) don't pay the cost of re-rendering and
+// re-reconciling ~137 star/nebula/galaxy elements on every keystroke of a
+// form field. Without this, each keypress re-ran this component's render
+// alongside the already-continuous CSS animations, competing for the main
+// thread and making typing feel laggy.
+export const AuroraBackground = memo(AuroraBackgroundComponent);
