@@ -166,6 +166,56 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+// Read-only diagnostics for confirming which environment variables are
+// actually configured on THIS deployment (e.g. right after setting them up
+// in Vercel) — reports presence/shape only, never the secret values
+// themselves, so it's safe to hit from a browser. Add `?live=1` to also
+// live-ping Supabase's REST endpoint with the configured URL/key (a real
+// connectivity check, not just "is it set").
+app.get("/api/env-check", async (req, res) => {
+  const present = (v?: string) => !!(v && v.trim().length > 0);
+
+  const checks: Record<string, any> = {
+    GEMINI_API_KEY: present(process.env.GEMINI_API_KEY),
+    APP_URL: present(process.env.APP_URL) ? process.env.APP_URL : false,
+    STRIPE_SECRET_KEY: present(process.env.STRIPE_SECRET_KEY),
+    STRIPE_PUBLISHABLE_KEY: present(process.env.STRIPE_PUBLISHABLE_KEY),
+    SUPABASE_URL: present(process.env.SUPABASE_URL) ? process.env.SUPABASE_URL : false,
+    SUPABASE_ANON_KEY: present(process.env.SUPABASE_ANON_KEY),
+    SUPABASE_SERVICE_ROLE_KEY: present(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    SUPABASE_DATABASE_URL: present(process.env.SUPABASE_DATABASE_URL)
+      ? /^postgres(ql)?:\/\//.test(process.env.SUPABASE_DATABASE_URL!.trim())
+        ? "set (looks like a valid postgres:// URI)"
+        : "set, but does NOT start with postgres:// or postgresql:// — this is wrong, check it"
+      : false,
+    SMTP_HOST: present(process.env.SMTP_HOST) ? process.env.SMTP_HOST : false,
+    SMTP_PORT: present(process.env.SMTP_PORT) ? process.env.SMTP_PORT : false,
+    SMTP_USER: present(process.env.SMTP_USER),
+    SMTP_PASS: present(process.env.SMTP_PASS),
+  };
+
+  if (req.query.live === "1" && present(process.env.SUPABASE_URL)) {
+    const cleanUrl = process.env.SUPABASE_URL!.trim().replace(/\/+$/, "");
+    const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || "").trim();
+    try {
+      const started = Date.now();
+      const r = await fetch(`${cleanUrl}/rest/v1/`, {
+        method: "GET",
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+      });
+      checks.SUPABASE_LIVE_CHECK = {
+        reachable: r.ok || r.status === 200,
+        statusCode: r.status,
+        latencyMs: Date.now() - started,
+      };
+    } catch (err: any) {
+      checks.SUPABASE_LIVE_CHECK = { reachable: false, error: err.message || "Network error reaching Supabase URL" };
+    }
+  }
+
+  res.json({ checkedAt: new Date().toISOString(), env: checks });
+});
+
 // AI Customer 360 Analysis
 app.post("/api/ai/customer-analysis", async (req, res) => {
   try {
