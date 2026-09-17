@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script>
+      // Safeguard against environments where window.fetch has only a getter,
+      // which causes "TypeError: Cannot set property fetch of #<Window> which has only a getter"
+      // when network wrappers, dev tools, or preview layers attempt to wrap window.fetch.
+      (function () {
+        try {
+          var activeFetch = window.fetch;
+          Object.defineProperty(window, 'fetch', {
+            get: function () {
+              return activeFetch;
+            },
+            set: function (newFetch) {
+              activeFetch = newFetch;
+            },
+            configurable: true,
+            enumerable: true,
+          });
+        } catch (e) {
+          try {
+            var proto = Object.getPrototypeOf(window) || (typeof Window !== 'undefined' && Window.prototype);
+            if (proto) {
+              var protoFetch = proto.fetch || window.fetch;
+              Object.defineProperty(proto, 'fetch', {
+                get: function () {
+                  return protoFetch;
+                },
+                set: function (newFetch) {
+                  protoFetch = newFetch;
+                },
+                configurable: true,
+                enumerable: true,
+              });
+            }
+          } catch (e2) {}
+        }
+      })();
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon-64.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/assets/aarpex-logo-192.png" />
+    <title>AarPex by Aargard Business Solutions</title>
+    <meta name="description" content="Multi-tenant enterprise CRM by Aargard Business Solutions featuring isolated workspaces, custom per-tenant Stripe billing, Hostinger & custom SMTP webmail integrations, and AI sales intelligence." />
+    <meta property="og:title" content="AarPex by Aargard Business Solutions" />
+    <meta property="og:description" content="Multi-tenant enterprise CRM by Aargard Business Solutions featuring isolated workspaces, custom per-tenant Stripe billing, Hostinger & custom SMTP webmail integrations, and AI sales intelligence." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

@@ -1,0 +1,6 @@
+{
+  "name": "AarPex by Aargard Business Solutions",
+  "description": "Multi-tenant enterprise CRM by Aargard Business Solutions featuring isolated workspaces, custom per-tenant Stripe billing, Hostinger & custom SMTP webmail integrations, and AI sales intelligence.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

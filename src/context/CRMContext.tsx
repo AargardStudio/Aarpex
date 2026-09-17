@@ -1,0 +1,1918 @@
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from "react";
+import {
+  Company,
+  Contact,
+  Lead,
+  Deal,
+  Pipeline,
+  Invoice,
+  Payment,
+  Activity,
+  Task,
+  Comment,
+  User,
+  UserRole,
+  UserPermissions,
+  ROLE_PERMISSIONS,
+  ROLE_LABELS,
+  DateFilterRange,
+  CustomerStatus,
+  Tenant,
+  TenantMember,
+  TenantStripeConfig,
+  TenantWebmailConfig,
+  CRMSettings,
+  SupabaseConfig,
+  EmailAttachment,
+  AuditLogEntry,
+} from "../types";
+import { isSupabaseAuthConfigured, getSupabaseAuthClient } from "../config/supabaseAuthClient";
+import {
+  syncTenantTable,
+  syncTenantRow,
+  fetchTenantTable,
+  createTenantWithOwner,
+  fetchMyTenantsFull,
+  savePendingTenantCreation,
+  clearPendingTenantCreation,
+  hasPendingTenantCreations,
+  flushPendingTenantCreations,
+} from "../lib/tenantDataSync";
+import {
+  initialCompanies,
+  initialContacts,
+  initialLeads,
+  initialDeals,
+  initialPipelines,
+  initialInvoices,
+  initialPayments,
+  initialActivities,
+  initialTasks,
+  initialComments,
+} from "../data/mockData";
+import { defaultTenants } from "../data/tenantData";
+import { PLATFORM_PLAN, PLATFORM_TRIAL_DAYS, FOUNDER_EMAIL } from "../data/subscriptionPlans";
+import { apiFetch } from "../lib/apiClient";
+
+// Local key for an in-progress "add another workspace" request (from
+// WorkspaceModal) that survives the full-page redirect to Stripe Checkout
+// and back — mirrors AuthPage's PENDING_SIGNUP_KEY, but for a user who is
+// already signed in and is provisioning an *additional* billed workspace
+// rather than completing sign-up.
+const PENDING_WORKSPACE_KEY = "crm_pending_workspace_v1";
+
+interface PendingWorkspace {
+  name: string;
+  industry: string;
+  currency: string;
+  companyName: string;
+  ownerEmail: string;
+}
+
+export type NavView =
+  | "Dashboard"
+  | "Leads"
+  | "Contacts"
+  | "Companies"
+  | "Deals"
+  | "Pipelines"
+  | "Activities"
+  | "Invoices"
+  | "Payments"
+  | "Revenue"
+  | "Stripe"
+  | "Tasks"
+  | "AI Insights"
+  | "Reports"
+  | "Settings";
+
+interface CRMContextType {
+  // Navigation & Active selection
+  activeNav: NavView;
+  setActiveNav: (nav: NavView) => void;
+  // Lets any view (e.g. a header "Billing" shortcut) jump straight into a
+  // specific Settings tab — read once by SettingsView and cleared.
+  settingsDeepLinkTab: string | null;
+  setSettingsDeepLinkTab: (tab: string | null) => void;
+  selectedCompanyId: string | null;
+  setSelectedCompanyId: (id: string | null) => void;
+  selectedDealId: string | null;
+  setSelectedDealId: (id: string | null) => void;
+  dateRange: DateFilterRange;
+  setDateRange: (range: DateFilterRange) => void;
+  currentUser: User;
+  setCurrentUser: (user: User) => void;
+  users: User[];
+  updateUserRole: (userId: string, role: UserRole | string, customPermissions?: Partial<UserPermissions>) => void;
+  addUser: (user: User) => void;
+  canPerform: (permission: keyof UserPermissions) => boolean;
+  signOut: () => void;
+  isAuthPageOpen: boolean;
+  setAuthPageOpen: (open: boolean) => void;
+  isBootstrapping: boolean;
+  authPageMode: "signin" | "signup";
+  setAuthPageMode: (mode: "signin" | "signup") => void;
+  isAccessControlOpen: boolean;
+  setAccessControlOpen: (open: boolean) => void;
+  importLeadsFromSpreadsheet: (importedLeads: Array<Omit<Lead, "id" | "createdDate">>) => number;
+
+  // Multi-Tenancy & Workspaces
+  tenants: Tenant[];
+  activeTenantId: string;
+  activeTenant: Tenant;
+  switchTenant: (tenantId: string) => void;
+  createTenant: (tenantData: Partial<Tenant>) => Tenant;
+  loadSampleData: () => void;
+  updateTenant: (tenantId: string, updates: Partial<Tenant>) => void;
+  deleteTenant: (tenantId: string) => void;
+  isCreateTenantModalOpen: boolean;
+  setCreateTenantModalOpen: (open: boolean) => void;
+
+  // Settings & Custom Configurations
+  settings: CRMSettings;
+  updateSettings: (updates: Partial<CRMSettings>) => void;
+  updateStripeConfig: (config: Partial<TenantStripeConfig>) => void;
+  updateWebmailConfig: (config: Partial<TenantWebmailConfig>) => void;
+  updateSupabaseConfig: (config: Partial<SupabaseConfig>) => void;
+  addAuditLogEntry: (action: string, details?: string, category?: AuditLogEntry["category"]) => void;
+
+  // Email Composer with Multiple Attachments
+  isEmailComposeOpen: boolean;
+  setEmailComposeOpen: (open: boolean) => void;
+  emailComposeProps: {
+    to?: string;
+    subject?: string;
+    body?: string;
+    attachments?: EmailAttachment[];
+    companyId?: string;
+    contactId?: string;
+    dealId?: string;
+  };
+  openEmailComposer: (props?: {
+    to?: string;
+    subject?: string;
+    body?: string;
+    attachments?: EmailAttachment[];
+    companyId?: string;
+    contactId?: string;
+    dealId?: string;
+  }) => void;
+
+  // Entities
+  companies: Company[];
+  contacts: Contact[];
+  leads: Lead[];
+  deals: Deal[];
+  pipelines: Pipeline[];
+  invoices: Invoice[];
+  payments: Payment[];
+  activities: Activity[];
+  tasks: Task[];
+  comments: Comment[];
+
+  // Data Actions
+  addCompany: (company: Omit<Company, "id" | "createdAt">) => Company;
+  updateCompany: (id: string, updates: Partial<Company>) => void;
+  deleteCompany: (id: string) => void;
+
+  addContact: (contact: Omit<Contact, "id" | "createdAt">) => Contact;
+  updateContact: (id: string, updates: Partial<Contact>) => void;
+  deleteContact: (id: string) => void;
+
+  addLead: (lead: Omit<Lead, "id" | "createdDate">) => Lead;
+  updateLead: (id: string, updates: Partial<Lead>) => void;
+  deleteLead: (id: string) => void;
+  moveLeadStatus: (leadId: string, newStatus: Lead["status"]) => void;
+  convertLead: (leadId: string, createDeal: boolean) => { company: Company; contact: Contact; deal?: Deal };
+
+  addDeal: (deal: Omit<Deal, "id" | "createdDate" | "weightedValue">) => Deal;
+  updateDeal: (id: string, updates: Partial<Deal>) => void;
+  deleteDeal: (id: string) => void;
+  moveDealStage: (dealId: string, newStageId: string, newPipelineId?: string) => void;
+
+  addPipeline: (pipeline: Omit<Pipeline, "id">) => void;
+  updatePipeline: (id: string, updates: Partial<Pipeline>) => void;
+  deletePipeline: (id: string) => void;
+
+  addInvoice: (invoice: Omit<Invoice, "id" | "subtotal" | "discount" | "tax" | "total" | "amountPaid" | "remainingBalance" | "status"> & { status?: Invoice["status"] }) => Invoice;
+  updateInvoice: (id: string, updates: Partial<Invoice>) => void;
+  deleteInvoice: (id: string) => void;
+  duplicateInvoice: (id: string) => Invoice;
+  markInvoicePaid: (id: string) => void;
+
+  addPayment: (payment: Omit<Payment, "id">) => Payment;
+  deletePayment: (id: string) => void;
+
+  addActivity: (activity: Omit<Activity, "id">) => void;
+  deleteActivity: (id: string) => void;
+
+  addTask: (task: Omit<Task, "id">) => void;
+  updateTask: (id: string, updates: Partial<Task>) => void;
+  toggleTaskStatus: (id: string) => void;
+  deleteTask: (id: string) => void;
+
+  addComment: (comment: Omit<Comment, "id" | "timestamp" | "userId" | "userName">) => void;
+  deleteComment: (id: string) => void;
+  addCommentReply: (commentId: string, replyText: string) => void;
+
+  clearAllData: () => void;
+
+  // Quick modals
+  isQuickCreateOpen: boolean;
+  setQuickCreateOpen: (open: boolean) => void;
+  quickCreateType: "lead" | "contact" | "company" | "deal" | "invoice" | "payment" | "activity" | "task";
+  setQuickCreateType: (type: "lead" | "contact" | "company" | "deal" | "invoice" | "payment" | "activity" | "task") => void;
+}
+
+const CRMContext = createContext<CRMContextType | undefined>(undefined);
+
+const STORAGE_KEYS = {
+  COMPANIES: "crm_companies_v1",
+  CONTACTS: "crm_contacts_v1",
+  LEADS: "crm_leads_v1",
+  DEALS: "crm_deals_v1",
+  PIPELINES: "crm_pipelines_v1",
+  INVOICES: "crm_invoices_v1",
+  PAYMENTS: "crm_payments_v1",
+  ACTIVITIES: "crm_activities_v1",
+  TASKS: "crm_tasks_v1",
+  COMMENTS: "crm_comments_v1",
+};
+
+export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [activeNav, setActiveNav] = useState<NavView>("Dashboard");
+  const [settingsDeepLinkTab, setSettingsDeepLinkTab] = useState<string | null>(null);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+  const [dateRange, setDateRange] = useState<DateFilterRange>("This Year");
+  const [isQuickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [quickCreateType, setQuickCreateType] = useState<"lead" | "contact" | "company" | "deal" | "invoice" | "payment" | "activity" | "task">("deal");
+
+  // No pre-seeded team roster — real members are added when they sign up or
+  // are invited into a workspace.
+  const [users, setUsers] = useState<User[]>(() => {
+    const saved = localStorage.getItem("crm_users_v2");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {}
+    }
+    return [];
+  });
+
+  const SIGNED_OUT_USER: User = { id: "", name: "", email: "", role: "viewer", avatar: "", status: "Pending" };
+
+  const [currentUser, setCurrentUser] = useState<User>(() => {
+    const saved = localStorage.getItem("crm_current_user_v2");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        // fallback
+      }
+    }
+    return SIGNED_OUT_USER;
+  });
+
+  // Require a real session before showing the app — starts closed only
+  // while the initial Supabase session check (below) is still running, to
+  // avoid a flash of the (empty) dashboard before we know the answer.
+  const [isAuthPageOpen, setAuthPageOpen] = useState(false);
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [authPageMode, setAuthPageMode] = useState<"signin" | "signup">("signin");
+  const [isEmailComposeOpen, setEmailComposeOpen] = useState(false);
+  const [emailComposeProps, setEmailComposeProps] = useState<{
+    to?: string;
+    subject?: string;
+    body?: string;
+    attachments?: EmailAttachment[];
+    companyId?: string;
+    contactId?: string;
+    dealId?: string;
+  }>({});
+
+  const openEmailComposer = (props?: {
+    to?: string;
+    subject?: string;
+    body?: string;
+    attachments?: EmailAttachment[];
+    companyId?: string;
+    contactId?: string;
+    dealId?: string;
+  }) => {
+    setEmailComposeProps(props || {});
+    setEmailComposeOpen(true);
+  };
+
+  const [isAccessControlOpen, setAccessControlOpen] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem("crm_users_v2", JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
+    localStorage.setItem("crm_current_user_v2", JSON.stringify(currentUser));
+  }, [currentUser]);
+
+  // Starts empty — no workspace exists until the signed-in user creates or
+  // is invited into a real one. The session bootstrap effect below (and
+  // switchTenant/createTenant) are the only things that ever populate this.
+  const [tenants, setTenants] = useState<Tenant[]>(() => {
+    const saved = localStorage.getItem("crm_tenants_v3");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {}
+    }
+    return defaultTenants;
+  });
+
+  const [activeTenantId, setActiveTenantId] = useState<string>(() => {
+    return localStorage.getItem("crm_active_tenant_id_v3") || "";
+  });
+
+  const [isCreateTenantModalOpen, setCreateTenantModalOpen] = useState(false);
+
+  const activeTenant = useMemo(() => {
+    return tenants.find((t) => t.id === activeTenantId) || tenants[0];
+  }, [tenants, activeTenantId]);
+
+  useEffect(() => {
+    localStorage.setItem("crm_tenants_v3", JSON.stringify(tenants));
+  }, [tenants]);
+
+  useEffect(() => {
+    localStorage.setItem("crm_active_tenant_id_v3", activeTenantId);
+  }, [activeTenantId]);
+
+  // Scoped tenant loader. Every workspace starts genuinely empty — the only
+  // built-in default is "pipelines", a structural default (stage
+  // names/colors, not sample company data) so Deals has somewhere to live.
+  const loadTenantEntity = <T,>(key: string, fallbackData: T): T => {
+    const scopedKey = `crm_tenant_${activeTenantId}_${key}`;
+    const saved = localStorage.getItem(scopedKey);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {}
+    }
+    if (key === "pipelines") return fallbackData;
+    return ([] as unknown) as T;
+  };
+
+  // Initial local storage hydration scoped by tenant
+  const [rawCompanies, setRawCompanies] = useState<Company[]>(() =>
+    loadTenantEntity("companies", initialCompanies)
+  );
+
+  const [contacts, setContacts] = useState<Contact[]>(() =>
+    loadTenantEntity("contacts", initialContacts)
+  );
+
+  const [leads, setLeads] = useState<Lead[]>(() =>
+    loadTenantEntity("leads", initialLeads)
+  );
+
+  const [deals, setDeals] = useState<Deal[]>(() =>
+    loadTenantEntity("deals", initialDeals)
+  );
+
+  const [pipelines, setPipelines] = useState<Pipeline[]>(() =>
+    loadTenantEntity("pipelines", initialPipelines)
+  );
+
+  const [invoices, setInvoices] = useState<Invoice[]>(() =>
+    loadTenantEntity("invoices", initialInvoices)
+  );
+
+  const [payments, setPayments] = useState<Payment[]>(() =>
+    loadTenantEntity("payments", initialPayments)
+  );
+
+  const [activities, setActivities] = useState<Activity[]>(() =>
+    loadTenantEntity("activities", initialActivities)
+  );
+
+  const [tasks, setTasks] = useState<Task[]>(() =>
+    loadTenantEntity("tasks", initialTasks)
+  );
+
+  const [comments, setComments] = useState<Comment[]>(() =>
+    loadTenantEntity("comments", initialComments)
+  );
+
+  // Every real tenant with Supabase configured mirrors its data to the
+  // tenants' Postgres tables on every change. Guarded by !isBootstrapping so
+  // the empty local state present before the initial fetch (below) resolves
+  // never overwrites what's already in the database.
+  const shouldSyncToSupabase = isSupabaseAuthConfigured() && Boolean(activeTenantId) && !isBootstrapping;
+
+  // The tenant row itself (plan, Stripe config, webmail config, etc.) mirrors
+  // to Supabase the same way the CRM record tables do above.
+  useEffect(() => {
+    if (shouldSyncToSupabase && activeTenant) syncTenantRow(activeTenant);
+  }, [activeTenant, shouldSyncToSupabase]);
+
+  // Persist to tenant-scoped storage
+  useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_companies`, JSON.stringify(rawCompanies));
+    if (shouldSyncToSupabase) syncTenantTable("companies", activeTenantId, rawCompanies);
+  }, [rawCompanies, activeTenantId]);
+
+  useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_contacts`, JSON.stringify(contacts));
+    if (shouldSyncToSupabase) syncTenantTable("contacts", activeTenantId, contacts);
+  }, [contacts, activeTenantId]);
+
+  useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_leads`, JSON.stringify(leads));
+    if (shouldSyncToSupabase) syncTenantTable("leads", activeTenantId, leads);
+  }, [leads, activeTenantId]);
+
+  useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_deals`, JSON.stringify(deals));
+    if (shouldSyncToSupabase) syncTenantTable("deals", activeTenantId, deals);
+  }, [deals, activeTenantId]);
+
+  useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_pipelines`, JSON.stringify(pipelines));
+    if (shouldSyncToSupabase) syncTenantTable("pipelines", activeTenantId, pipelines);
+  }, [pipelines, activeTenantId]);
+
+  useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_invoices`, JSON.stringify(invoices));
+    if (shouldSyncToSupabase) syncTenantTable("invoices", activeTenantId, invoices);
+  }, [invoices, activeTenantId]);
+
+  useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_payments`, JSON.stringify(payments));
+    if (shouldSyncToSupabase) syncTenantTable("payments", activeTenantId, payments);
+  }, [payments, activeTenantId]);
+
+  useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_activities`, JSON.stringify(activities));
+    if (shouldSyncToSupabase) syncTenantTable("activities", activeTenantId, activities);
+  }, [activities, activeTenantId]);
+
+  useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_tasks`, JSON.stringify(tasks));
+    if (shouldSyncToSupabase) syncTenantTable("tasks", activeTenantId, tasks);
+  }, [tasks, activeTenantId]);
+
+  useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_comments`, JSON.stringify(comments));
+    if (shouldSyncToSupabase) syncTenantTable("comments", activeTenantId, comments);
+  }, [comments, activeTenantId]);
+
+  // Whenever the active tenant changes (including the very first time it's
+  // set, by the session-bootstrap effect below), re-hydrate its records
+  // from the database instead of trusting whatever's cached in localStorage
+  // — the database is the source of truth once persistence is live. This
+  // runs independently of isBootstrapping (unlike the write-sync effects
+  // above) so it's exactly what populates state during bootstrap.
+  useEffect(() => {
+    if (!isSupabaseAuthConfigured() || !activeTenantId) return;
+    let cancelled = false;
+    (async () => {
+      const [
+        companiesRes,
+        contactsRes,
+        leadsRes,
+        dealsRes,
+        pipelinesRes,
+        invoicesRes,
+        paymentsRes,
+        activitiesRes,
+        tasksRes,
+        commentsRes,
+      ] = await Promise.all([
+        fetchTenantTable<Company>("companies", activeTenantId),
+        fetchTenantTable<Contact>("contacts", activeTenantId),
+        fetchTenantTable<Lead>("leads", activeTenantId),
+        fetchTenantTable<Deal>("deals", activeTenantId),
+        fetchTenantTable<Pipeline>("pipelines", activeTenantId),
+        fetchTenantTable<Invoice>("invoices", activeTenantId),
+        fetchTenantTable<Payment>("payments", activeTenantId),
+        fetchTenantTable<Activity>("activities", activeTenantId),
+        fetchTenantTable<Task>("tasks", activeTenantId),
+        fetchTenantTable<Comment>("comments", activeTenantId),
+      ]);
+      if (cancelled) return;
+      if (companiesRes) setRawCompanies(companiesRes);
+      if (contactsRes) setContacts(contactsRes);
+      if (leadsRes) setLeads(leadsRes);
+      if (dealsRes) setDeals(dealsRes);
+      if (pipelinesRes && pipelinesRes.length > 0) setPipelines(pipelinesRes);
+      if (invoicesRes) setInvoices(invoicesRes);
+      if (paymentsRes) setPayments(paymentsRes);
+      if (activitiesRes) setActivities(activitiesRes);
+      if (tasksRes) setTasks(tasksRes);
+      if (commentsRes) setComments(commentsRes);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTenantId]);
+
+  // Tenant workspace operations
+  const switchTenant = (targetId: string) => {
+    if (targetId === activeTenantId) return;
+
+    // Flush current tenant state before switching
+    localStorage.setItem(`crm_tenant_${activeTenantId}_companies`, JSON.stringify(rawCompanies));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_contacts`, JSON.stringify(contacts));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_leads`, JSON.stringify(leads));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_deals`, JSON.stringify(deals));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_pipelines`, JSON.stringify(pipelines));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_invoices`, JSON.stringify(invoices));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_payments`, JSON.stringify(payments));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_activities`, JSON.stringify(activities));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_tasks`, JSON.stringify(tasks));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_comments`, JSON.stringify(comments));
+
+    // Every workspace starts genuinely empty except "pipelines" (a
+    // structural default, not sample data) — see loadTenantEntity above.
+    const loadTarget = <T,>(key: string, defaultVal: T): T => {
+      const item = localStorage.getItem(`crm_tenant_${targetId}_${key}`);
+      if (item) {
+        try {
+          return JSON.parse(item);
+        } catch {}
+      }
+      if (key === "pipelines") return defaultVal;
+      return ([] as unknown) as T;
+    };
+
+    setActiveTenantId(targetId);
+    setRawCompanies(loadTarget("companies", initialCompanies));
+    setContacts(loadTarget("contacts", initialContacts));
+    setLeads(loadTarget("leads", initialLeads));
+    setDeals(loadTarget("deals", initialDeals));
+    setPipelines(loadTarget("pipelines", initialPipelines));
+    setInvoices(loadTarget("invoices", initialInvoices));
+    setPayments(loadTarget("payments", initialPayments));
+    setActivities(loadTarget("activities", initialActivities));
+    setTasks(loadTarget("tasks", initialTasks));
+    setComments(loadTarget("comments", initialComments));
+    setSelectedCompanyId(null);
+    setSelectedDealId(null);
+  };
+
+  // Opt-in action for a real (empty) workspace that wants to explore the
+  // product with the built-in sample dataset instead of starting blank.
+  const loadSampleData = () => {
+    setRawCompanies(initialCompanies);
+    setContacts(initialContacts);
+    setLeads(initialLeads);
+    setDeals(initialDeals);
+    setPipelines(initialPipelines);
+    setInvoices(initialInvoices);
+    setPayments(initialPayments);
+    setActivities(initialActivities);
+    setTasks(initialTasks);
+    setComments(initialComments);
+    addAuditLogEntry("Loaded sample data", "Populated this workspace with demo companies, deals, and invoices for exploration.", "general");
+  };
+
+  const createTenant = (tenantData: Partial<Tenant>): Tenant => {
+    // A real UUID so the tenant's id matches the row Supabase creates for
+    // it (when configured) with zero reconciliation — every CRM record
+    // synced under this tenant references this same id as its tenant_id.
+    const id =
+      typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `tenant-${Date.now().toString(36)}`;
+    const slug = (tenantData.name || "workspace").toLowerCase().replace(/[^a-z0-9]/g, "-");
+
+    // The one exempt founder account: always kept active, never gated behind
+    // a Stripe checkout. Every other workspace is only ever provisioned
+    // (see AuthPage's sign-up flow) after that account's owner has completed
+    // a real, live Stripe Checkout with a card on file — so it starts on the
+    // normal 7-day trial that auto-charges once the trial ends.
+    const ownerEmail = (tenantData.ownerEmail || currentUser.email || "").trim().toLowerCase();
+    const isFounderAccount = ownerEmail === FOUNDER_EMAIL.toLowerCase();
+
+    const newTenant: Tenant = {
+      id,
+      name: tenantData.name || "New Workspace",
+      slug,
+      logo: tenantData.name ? tenantData.name.charAt(0).toUpperCase() : "W",
+      industry: tenantData.industry || "General Enterprise",
+      currency: tenantData.currency || "USD",
+      createdAt: new Date().toISOString(),
+      ownerEmail: currentUser.email,
+      plan: tenantData.plan || "Growth",
+      companyName: tenantData.companyName || tenantData.name || "New Enterprise Corp",
+      taxId: tenantData.taxId || "",
+      commissionRate: tenantData.commissionRate ?? 10,
+      // Every new workspace starts on a 7-day free trial of the flat-rate
+      // platform plan; nextBillingDate doubles as "trial ends / first charge
+      // date" since there's only ever one plan. The founder account is kept
+      // permanently active instead, with no trial/billing clock running.
+      billingCycle: "monthly",
+      subscriptionStatus: isFounderAccount ? "active" : "trialing",
+      subscriptionPrice: PLATFORM_PLAN.monthlyPrice,
+      seatsAllocated: PLATFORM_PLAN.seats,
+      nextBillingDate: new Date(Date.now() + PLATFORM_TRIAL_DAYS * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0],
+      // Real Stripe identifiers, when this workspace was provisioned right
+      // after a completed live Checkout session (see AuthPage) — left
+      // undefined for the founder account, which never goes through Stripe.
+      subscriptionId: tenantData.subscriptionId,
+      stripeCustomerId: tenantData.stripeCustomerId,
+      cardLast4: tenantData.cardLast4,
+      cardBrand: tenantData.cardBrand,
+      members: [
+        {
+          userId: currentUser.id,
+          name: currentUser.name,
+          email: currentUser.email,
+          role: "admin",
+          joinedAt: new Date().toISOString(),
+        },
+      ],
+      stripeConfig: {
+        isEnabled: false,
+        publishableKey: "",
+        secretKey: "",
+        currency: tenantData.currency || "USD",
+        isLiveMode: false,
+        status: "unconfigured",
+        accountName: `${tenantData.name || "Workspace"} Merchant`,
+      },
+      webmailConfig: {
+        isEnabled: true,
+        provider: "hostinger",
+        email: currentUser.email,
+        displayName: currentUser.name,
+        password: "",
+        smtpHost: "smtp.hostinger.com",
+        smtpPort: 465,
+        smtpEncryption: "SSL",
+        imapHost: "imap.hostinger.com",
+        imapPort: 993,
+        imapEncryption: "SSL",
+        replyTo: currentUser.email,
+        status: "unconfigured",
+        signature: `--\n${currentUser.name}\n${tenantData.name || "Workspace"}`,
+      },
+    };
+
+    setTenants((prev) => [...prev, newTenant]);
+    switchTenant(id);
+
+    // Create the matching row (+ owner membership) in Supabase in the
+    // background so the UI never blocks on network latency. The attempt is
+    // recorded in a local retry queue *before* it's fired — if it fails
+    // (offline, a dropped connection, a transient error) the workspace stays
+    // queued and is retried automatically on the next app load (see the
+    // session-bootstrap effect below), instead of silently disappearing the
+    // moment the page reloads because Supabase never got the row.
+    if (isSupabaseAuthConfigured()) {
+      const creationArgs = {
+        id,
+        name: newTenant.name,
+        industry: newTenant.industry,
+        currency: newTenant.currency,
+        companyName: newTenant.companyName,
+        taxId: newTenant.taxId,
+        commissionRate: newTenant.commissionRate,
+        ownerName: currentUser.name,
+        ownerEmail: currentUser.email,
+      };
+      savePendingTenantCreation(creationArgs);
+      void createTenantWithOwner(creationArgs).then((result) => {
+        if (result) {
+          clearPendingTenantCreation(id);
+        }
+        // On failure it simply stays in the pending queue — the next app
+        // load (or the next successful hydrate) will retry it.
+      });
+    }
+
+    return newTenant;
+  };
+
+  const updateTenant = (tenantId: string, updates: Partial<Tenant>) => {
+    setTenants((prev) =>
+      prev.map((t) => (t.id === tenantId ? { ...t, ...updates } : t))
+    );
+  };
+
+  const deleteTenant = (tenantId: string) => {
+    if (tenants.length <= 1) return;
+    const remaining = tenants.filter((t) => t.id !== tenantId);
+    setTenants(remaining);
+    if (activeTenantId === tenantId) {
+      switchTenant(remaining[0].id);
+    }
+  };
+
+  // Session bootstrap: require a real, currently-valid Supabase session
+  // before showing the app at all — no more falling back to a local demo
+  // user/workspace when nobody's actually signed in. Runs once on mount,
+  // then keeps itself in sync via onAuthStateChange (sign-out anywhere
+  // reopens AuthPage; a fresh sign-in populates real workspace data).
+  useEffect(() => {
+    if (!isSupabaseAuthConfigured()) {
+      // No real auth backend configured for this deployment — there's
+      // nothing to authenticate against, so always require sign-in rather
+      // than ever falling into a local-only "it just works" demo state.
+      setTenants([]);
+      setActiveTenantId("");
+      setCurrentUser(SIGNED_OUT_USER);
+      setUsers([]);
+      setAuthPageOpen(true);
+      setIsBootstrapping(false);
+      return;
+    }
+
+    const supabase = getSupabaseAuthClient();
+    let cancelled = false;
+
+    const hydrateFromSession = async (sessionUser: { id: string; email?: string; user_metadata?: any } | null) => {
+      if (!sessionUser || !sessionUser.email) {
+        setTenants([]);
+        setActiveTenantId("");
+        setCurrentUser(SIGNED_OUT_USER);
+        setUsers([]);
+        setAuthPageOpen(true);
+        return;
+      }
+
+      const displayName =
+        sessionUser.user_metadata?.full_name ||
+        sessionUser.email.split("@")[0].replace(/[._]/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+      const initials =
+        displayName
+          .split(/\s+/)
+          .map((s: string) => s[0])
+          .filter(Boolean)
+          .slice(0, 2)
+          .join("")
+          .toUpperCase() || "US";
+
+      const realUser: User = {
+        id: sessionUser.id,
+        name: displayName,
+        email: sessionUser.email,
+        role: "admin",
+        roleTitle: "Workspace Owner",
+        avatar: initials,
+        status: "Active",
+        lastLogin: "Active Now",
+      };
+      setCurrentUser(realUser);
+      setUsers([realUser]);
+
+      // Before trusting Supabase as the source of truth, give any workspace
+      // that was created but never confirmed server-side (e.g. the create
+      // RPC failed on a flaky connection, or the tab closed/redeployed
+      // before it landed) one more chance to actually land there. Without
+      // this, a real workspace that only exists in local cache would be
+      // wiped out below the moment fetchMyTenantsFull() comes back empty.
+      if (hasPendingTenantCreations()) {
+        await flushPendingTenantCreations();
+        if (cancelled) return;
+      }
+
+      const myTenants = await fetchMyTenantsFull();
+      if (cancelled) return;
+
+      if (myTenants === null) {
+        // The fetch itself failed (offline, a transient Supabase error,
+        // etc.) — this is NOT the same as "this user has zero workspaces".
+        // Keep whatever is already in local state/localStorage rather than
+        // wiping it out on a network hiccup; the next successful hydrate
+        // (retry on reload, or the next onAuthStateChange fire) will
+        // reconcile it properly.
+        setAuthPageOpen(false);
+        return;
+      }
+
+      if (myTenants.length > 0) {
+        setTenants(myTenants);
+        setActiveTenantId((prev) => (myTenants.some((t) => t.id === prev) ? prev : myTenants[0].id));
+      } else if (hasPendingTenantCreations()) {
+        // Supabase genuinely has no rows for this user *yet*, but there's a
+        // workspace creation still queued for retry (its RPC call hasn't
+        // succeeded even after the flush attempt above, likely because the
+        // network is down right now). Keep the locally cached workspace
+        // instead of showing an empty shell — it will keep retrying.
+      } else {
+        // Signed in, confirmed zero workspaces, and nothing pending — the
+        // sign-up flow creates one via createTenant(); a returning user with
+        // none shows an empty shell rather than crashing (every activeTenant
+        // read elsewhere is optional-chained for exactly this state).
+        setTenants([]);
+        setActiveTenantId("");
+      }
+      setAuthPageOpen(false);
+    };
+
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (cancelled) return;
+      await hydrateFromSession(data.session?.user || null);
+      if (!cancelled) setIsBootstrapping(false);
+    })();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      void hydrateFromSession(session?.user || null);
+    });
+
+    return () => {
+      cancelled = true;
+      authListener?.subscription?.unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Handles the return trip from Stripe Checkout for a signed-in user who
+  // was adding an *additional* workspace via WorkspaceModal (as opposed to
+  // AuthPage's own sign-up flow, which handles its own redirect). Stripe
+  // redirects here with ?subscription=success&session_id=... or
+  // ?subscription=cancelled — a full page reload, so the modal's React
+  // state doesn't survive it; the pending workspace details saved to
+  // localStorage right before the redirect are what let this finish the
+  // job. Waits for session bootstrap to finish first so currentUser/tenants
+  // are populated before creating the new one, and only ever runs once.
+  const hasProcessedWorkspaceRedirectRef = useRef(false);
+  useEffect(() => {
+    if (isBootstrapping || hasProcessedWorkspaceRedirectRef.current) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const subscriptionParam = params.get("subscription");
+    if (!subscriptionParam) return;
+
+    const pendingRaw = localStorage.getItem(PENDING_WORKSPACE_KEY);
+    if (!pendingRaw) return;
+
+    hasProcessedWorkspaceRedirectRef.current = true;
+    // Scrub the query string so a refresh doesn't reprocess a stale result.
+    window.history.replaceState({}, "", window.location.pathname);
+
+    if (subscriptionParam === "cancelled") {
+      localStorage.removeItem(PENDING_WORKSPACE_KEY);
+      return;
+    }
+
+    if (subscriptionParam !== "success") return;
+
+    let pending: PendingWorkspace;
+    try {
+      pending = JSON.parse(pendingRaw);
+    } catch {
+      localStorage.removeItem(PENDING_WORKSPACE_KEY);
+      return;
+    }
+
+    const sessionId = params.get("session_id");
+
+    (async () => {
+      let subscriptionId: string | undefined;
+      let stripeCustomerId: string | undefined;
+      let cardLast4: string | undefined;
+      let cardBrand: string | undefined;
+
+      if (sessionId) {
+        try {
+          const verifyRes = await apiFetch("/api/subscriptions/verify-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId }),
+          });
+          const verifyData = await verifyRes.json();
+          subscriptionId = verifyData.subscriptionId || undefined;
+          stripeCustomerId = verifyData.customerId || undefined;
+          cardLast4 = verifyData.cardLast4 || undefined;
+          cardBrand = verifyData.cardBrand || undefined;
+        } catch (err) {
+          // The card was still charged/confirmed on Stripe's side regardless
+          // — proceed with provisioning even if this lookup failed, rather
+          // than leaving the paying customer stuck with no new workspace.
+          console.error(err);
+        }
+      }
+
+      const created = createTenant({
+        name: pending.name,
+        industry: pending.industry,
+        currency: pending.currency,
+        companyName: pending.companyName,
+        ownerEmail: pending.ownerEmail,
+        plan: PLATFORM_PLAN.id,
+        subscriptionId,
+        stripeCustomerId,
+        cardLast4,
+        cardBrand,
+      });
+      switchTenant(created.id);
+      localStorage.removeItem(PENDING_WORKSPACE_KEY);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBootstrapping]);
+
+  // activeTenant can be undefined for the brief window between a real
+  // sign-in and that user's first workspace existing (e.g. mid-signup, or
+  // an account with zero workspaces) — every field here falls back safely
+  // so the app shell doesn't crash while that resolves.
+  const settings: CRMSettings = useMemo(
+    () => ({
+      companyName: activeTenant?.companyName || activeTenant?.name || "",
+      taxId: activeTenant?.taxId || "",
+      currency: activeTenant?.currency === "EUR" ? "EUR (€)" : activeTenant?.currency === "GBP" ? "GBP (£)" : "USD ($)",
+      commissionRate: activeTenant?.commissionRate ?? 10,
+    }),
+    [activeTenant]
+  );
+
+  const updateSettings = (updates: Partial<CRMSettings>) => {
+    setTenants((prev) =>
+      prev.map((t) => {
+        if (t.id === activeTenantId) {
+          return {
+            ...t,
+            companyName: updates.companyName ?? t.companyName,
+            taxId: updates.taxId ?? t.taxId,
+            currency: updates.currency?.includes("EUR") ? "EUR" : updates.currency?.includes("GBP") ? "GBP" : "USD",
+            commissionRate: updates.commissionRate ?? t.commissionRate,
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  const updateStripeConfig = (configUpdates: Partial<TenantStripeConfig>) => {
+    setTenants((prev) =>
+      prev.map((t) => {
+        if (t.id === activeTenantId) {
+          return {
+            ...t,
+            stripeConfig: {
+              ...t.stripeConfig,
+              ...configUpdates,
+            },
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  const updateWebmailConfig = (configUpdates: Partial<TenantWebmailConfig>) => {
+    setTenants((prev) =>
+      prev.map((t) => {
+        if (t.id === activeTenantId) {
+          return {
+            ...t,
+            webmailConfig: {
+              ...t.webmailConfig,
+              ...configUpdates,
+            },
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  const updateSupabaseConfig = (configUpdates: Partial<SupabaseConfig>) => {
+    setTenants((prev) =>
+      prev.map((t) => {
+        if (t.id === activeTenantId) {
+          const current = t.supabaseConfig || {
+            url: "",
+            anonKey: "",
+            isConnected: false,
+          };
+          return {
+            ...t,
+            supabaseConfig: {
+              ...current,
+              ...configUpdates,
+            },
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  // Billing / security audit trail, scoped per tenant. Capped at 200 entries
+  // per tenant so it never grows unbounded in localStorage.
+  const addAuditLogEntry = (action: string, details?: string, category: AuditLogEntry["category"] = "general") => {
+    setTenants((prev) =>
+      prev.map((t) => {
+        if (t.id !== activeTenantId) return t;
+        const entry: AuditLogEntry = {
+          id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          timestamp: new Date().toISOString(),
+          actor: currentUser?.name || currentUser?.email || "Unknown User",
+          action,
+          details,
+          category,
+        };
+        const nextLog = [entry, ...(t.auditLog || [])].slice(0, 200);
+        return { ...t, auditLog: nextLog };
+      })
+    );
+  };
+
+  // Derived Company calculations based on live financial and deal records
+  const companies: Company[] = useMemo(() => {
+    const now = new Date();
+    return rawCompanies.map((c) => {
+      const companyDeals = deals.filter((d) => d.companyId === c.id);
+      const companyInvoices = invoices.filter((i) => i.companyId === c.id);
+      const companyPayments = payments.filter((p) => p.companyId === c.id);
+      const companyActivities = activities.filter((a) => a.companyId === c.id);
+
+      const wonDeals = companyDeals.filter((d) => d.status === "Won");
+      const openDeals = companyDeals.filter((d) => d.status === "Open");
+      const lostDeals = companyDeals.filter((d) => d.status === "Lost");
+
+      const totalInvoiced = companyInvoices.reduce((acc, inv) => acc + (inv.total || 0), 0);
+      const totalPaid = companyPayments.reduce((acc, p) => acc + (p.amount || 0), 0);
+      const outstandingBalance = companyInvoices.reduce((acc, inv) => acc + (inv.remainingBalance || 0), 0);
+
+      const overdueBalance = companyInvoices
+        .filter((inv) => inv.remainingBalance > 0 && new Date(inv.dueDate) < now)
+        .reduce((acc, inv) => acc + inv.remainingBalance, 0);
+
+      // Won deals value + total paid invoices
+      const wonDealsTotal = wonDeals.reduce((acc, d) => acc + (d.dealValue || 0), 0);
+      const totalRevenue = Math.max(wonDealsTotal, totalPaid);
+
+      // Average payment days calculation
+      let totalPaymentDays = 0;
+      let settledCount = 0;
+      companyInvoices.forEach((inv) => {
+        if (inv.status === "Paid" && inv.issueDate) {
+          const matchingPayment = companyPayments.find((p) => p.invoiceId === inv.id);
+          if (matchingPayment) {
+            const days = Math.max(1, Math.round((new Date(matchingPayment.date).getTime() - new Date(inv.issueDate).getTime()) / 86400000));
+            totalPaymentDays += days;
+            settledCount++;
+          }
+        }
+      });
+      const averagePaymentDays = settledCount > 0 ? Math.round(totalPaymentDays / settledCount) : 18;
+
+      // Last and next activity
+      const sortedActivities = [...companyActivities].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const lastActivityDate = sortedActivities[0]?.date || undefined;
+
+      const companyTasks = tasks.filter((t) => t.companyId === c.id && t.status !== "Completed");
+      const sortedTasks = [...companyTasks].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+      const nextActivityDate = sortedTasks[0]?.dueDate || undefined;
+
+      // Smart status update if severely overdue or highly valued
+      let status = c.status;
+      if (overdueBalance > 15000 && status !== "At Risk" && status !== "Former Customer") {
+        // Can be flagged At Risk
+      }
+
+      return {
+        ...c,
+        totalRevenue,
+        totalInvoiced,
+        totalPaid,
+        outstandingBalance,
+        overdueBalance,
+        averagePaymentDays,
+        dealsCount: companyDeals.length,
+        openDealsCount: openDeals.length,
+        wonDealsCount: wonDeals.length,
+        lostDealsCount: lostDeals.length,
+        lastActivityDate,
+        nextActivityDate,
+      };
+    });
+  }, [rawCompanies, deals, invoices, payments, activities, tasks]);
+
+  // Company Actions
+  const addCompany = (companyData: Omit<Company, "id" | "createdAt">): Company => {
+    const newId = `comp_${Date.now()}`;
+    const newCompany: Company = {
+      ...companyData,
+      id: newId,
+      createdAt: new Date().toISOString().split("T")[0],
+      customerValue: companyData.customerValue || 0,
+      tags: companyData.tags || [],
+    };
+    setRawCompanies((prev) => [newCompany, ...prev]);
+    return newCompany;
+  };
+
+  const updateCompany = (id: string, updates: Partial<Company>) => {
+    setRawCompanies((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
+  };
+
+  const deleteCompany = (id: string) => {
+    setRawCompanies((prev) => prev.filter((c) => c.id !== id));
+    if (selectedCompanyId === id) setSelectedCompanyId(null);
+  };
+
+  // Contact Actions
+  const addContact = (contactData: Omit<Contact, "id" | "createdAt">): Contact => {
+    const newId = `cnt_${Date.now()}`;
+    const newContact: Contact = {
+      ...contactData,
+      id: newId,
+      createdAt: new Date().toISOString().split("T")[0],
+      tags: contactData.tags || [],
+    };
+    setContacts((prev) => [newContact, ...prev]);
+    return newContact;
+  };
+
+  const updateContact = (id: string, updates: Partial<Contact>) => {
+    setContacts((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
+  };
+
+  const deleteContact = (id: string) => {
+    setContacts((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  // Lead Actions
+  const addLead = (leadData: Omit<Lead, "id" | "createdDate">): Lead => {
+    const newId = `LD-${Math.floor(100 + Math.random() * 900)}`;
+    const newLead: Lead = {
+      ...leadData,
+      id: newId,
+      createdDate: new Date().toISOString().split("T")[0],
+      tags: leadData.tags || [],
+    };
+    setLeads((prev) => [newLead, ...prev]);
+    return newLead;
+  };
+
+  const updateLead = (id: string, updates: Partial<Lead>) => {
+    setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, ...updates } : l)));
+  };
+
+  const deleteLead = (id: string) => {
+    setLeads((prev) => prev.filter((l) => l.id !== id));
+  };
+
+  const moveLeadStatus = (leadId: string, newStatus: Lead["status"]) => {
+    setLeads((prev) =>
+      prev.map((l) => {
+        if (l.id === leadId) {
+          return {
+            ...l,
+            status: newStatus,
+            lastContact: new Date().toISOString().split("T")[0],
+          };
+        }
+        return l;
+      })
+    );
+  };
+
+  const convertLead = (leadId: string, createDeal: boolean) => {
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead) throw new Error("Lead not found");
+
+    // Check if company exists or create
+    let existingCompany = rawCompanies.find((c) => c.name.toLowerCase() === lead.company.toLowerCase());
+    if (!existingCompany) {
+      existingCompany = addCompany({
+        name: lead.company,
+        industry: lead.industry || "General Industry",
+        website: lead.website || "",
+        country: lead.country || "United States",
+        city: lead.city || "",
+        address: "",
+        phone: lead.phone || "",
+        email: lead.email || "",
+        salesperson: lead.salesperson || currentUser.name,
+        status: "Qualified Prospect",
+        customerValue: lead.estimatedValue || 0,
+        notes: `Converted from Lead ${lead.id}. ${lead.notes}`,
+        tags: [...(lead.tags || []), "Converted Lead"],
+      });
+    }
+
+    // Create Contact
+    const nameParts = lead.name.trim().split(" ");
+    const firstName = nameParts[0] || "Contact";
+    const lastName = nameParts.slice(1).join(" ") || "";
+    const newContact = addContact({
+      firstName,
+      lastName,
+      position: lead.jobTitle || "Lead",
+      companyId: existingCompany.id,
+      email: lead.email,
+      phone: lead.phone,
+      whatsapp: lead.whatsapp,
+      country: lead.country,
+      city: lead.city,
+      status: "Active",
+      leadSource: lead.source,
+      salesperson: lead.salesperson || currentUser.name,
+      notes: `Converted from Lead ${lead.id}`,
+      tags: ["Converted"],
+    });
+
+    let newDeal: Deal | undefined = undefined;
+    if (createDeal) {
+      const defaultPipeline = pipelines.find((p) => p.isDefault) || pipelines[0];
+      const defaultStage = defaultPipeline.stages[2] || defaultPipeline.stages[0]; // Qualified stage
+      newDeal = addDeal({
+        name: `${lead.company} - Expansion Core`,
+        companyId: existingCompany.id,
+        contactId: newContact.id,
+        salesperson: lead.salesperson || currentUser.name,
+        pipelineId: defaultPipeline.id,
+        stageId: defaultStage.id,
+        status: "Open",
+        dealValue: lead.estimatedValue || 50000,
+        currency: "USD",
+        probability: defaultStage.probability,
+        expectedCloseDate: lead.expectedCloseDate || new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
+        productService: "Core Enterprise Solution",
+        source: lead.source,
+        priority: lead.priority === "Urgent" ? "High" : lead.priority === "High" ? "High" : "Medium",
+        lastActivity: new Date().toISOString().split("T")[0],
+        nextActivity: "Initial qualification and discovery call",
+        notes: `Deal generated from lead conversion ${lead.id}. Notes: ${lead.notes}`,
+      });
+    }
+
+    // Update lead status to Converted
+    setLeads((prev) =>
+      prev.map((l) =>
+        l.id === leadId
+          ? {
+              ...l,
+              status: "Converted",
+              convertedCompanyId: existingCompany!.id,
+              convertedDealId: newDeal?.id,
+            }
+          : l
+      )
+    );
+
+    // Log Activity
+    addActivity({
+      type: "Note",
+      companyId: existingCompany.id,
+      contactId: newContact.id,
+      dealId: newDeal?.id,
+      date: new Date().toISOString().split("T")[0],
+      time: "10:00",
+      user: currentUser.name,
+      description: `Lead ${lead.name} (${lead.company}) was converted to qualified contact and deal.`,
+      outcome: "Converted successfully",
+      nextAction: "Schedule initial strategic alignment call",
+    });
+
+    return { company: existingCompany, contact: newContact, deal: newDeal };
+  };
+
+  // Deal Actions
+  const addDeal = (dealData: Omit<Deal, "id" | "createdDate" | "weightedValue">): Deal => {
+    const newId = `DL-${Math.floor(200 + Math.random() * 800)}`;
+    const probability = dealData.probability || 50;
+    const weightedValue = Math.round((dealData.dealValue * probability) / 100);
+    const newDeal: Deal = {
+      ...dealData,
+      id: newId,
+      probability,
+      weightedValue,
+      createdDate: new Date().toISOString().split("T")[0],
+      lastActivity: dealData.lastActivity || new Date().toISOString().split("T")[0],
+      nextActivity: dealData.nextActivity || "Follow up on proposal",
+    };
+    setDeals((prev) => [newDeal, ...prev]);
+
+    // Log activity
+    addActivity({
+      type: "Note",
+      companyId: dealData.companyId,
+      contactId: dealData.contactId,
+      dealId: newId,
+      date: new Date().toISOString().split("T")[0],
+      time: "09:00",
+      user: dealData.salesperson || currentUser.name,
+      description: `Deal created: "${dealData.name}" valued at $${dealData.dealValue.toLocaleString()}`,
+      outcome: "Deal opened in pipeline",
+      nextAction: dealData.nextActivity || "Follow up with client",
+    });
+
+    return newDeal;
+  };
+
+  const updateDeal = (id: string, updates: Partial<Deal>) => {
+    setDeals((prev) =>
+      prev.map((d) => {
+        if (d.id === id) {
+          const updated = { ...d, ...updates };
+          if (updates.dealValue !== undefined || updates.probability !== undefined) {
+            const prob = updated.probability || 0;
+            updated.weightedValue = Math.round((updated.dealValue * prob) / 100);
+          }
+          return updated;
+        }
+        return d;
+      })
+    );
+  };
+
+  const deleteDeal = (id: string) => {
+    setDeals((prev) => prev.filter((d) => d.id !== id));
+  };
+
+  const moveDealStage = (dealId: string, newStageId: string, newPipelineId?: string) => {
+    setDeals((prev) =>
+      prev.map((d) => {
+        if (d.id === dealId) {
+          const pipeId = newPipelineId || d.pipelineId;
+          const pipeline = pipelines.find((p) => p.id === pipeId);
+          const stage = pipeline?.stages.find((s) => s.id === newStageId);
+          const probability = stage ? stage.probability : d.probability;
+          let status: Deal["status"] = d.status;
+
+          if (stage?.isWon) status = "Won";
+          else if (stage?.isLost) status = "Lost";
+          else status = "Open";
+
+          const updated: Deal = {
+            ...d,
+            pipelineId: pipeId,
+            stageId: newStageId,
+            probability,
+            weightedValue: Math.round((d.dealValue * probability) / 100),
+            status,
+            lastActivity: new Date().toISOString().split("T")[0],
+          };
+
+          // If moved to Won, record activity & update company customer status
+          if (status === "Won" && d.status !== "Won") {
+            setTimeout(() => {
+              addActivity({
+                type: "Proposal",
+                companyId: d.companyId,
+                contactId: d.contactId,
+                dealId: d.id,
+                date: new Date().toISOString().split("T")[0],
+                time: "11:00",
+                user: currentUser.name,
+                description: `Deal "${d.name}" closed WON ($${d.dealValue.toLocaleString()})!`,
+                outcome: "Contract finalized and signed",
+                nextAction: "Generate onboarding invoice and schedule kickoff",
+              });
+              updateCompany(d.companyId, { status: "Active Customer" });
+            }, 50);
+          }
+
+          return updated;
+        }
+        return d;
+      })
+    );
+  };
+
+  // Pipeline Actions
+  const addPipeline = (pipelineData: Omit<Pipeline, "id">) => {
+    const newPipeline: Pipeline = {
+      ...pipelineData,
+      id: `pipe_${Date.now()}`,
+    };
+    setPipelines((prev) => [...prev, newPipeline]);
+  };
+
+  const updatePipeline = (id: string, updates: Partial<Pipeline>) => {
+    setPipelines((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+  };
+
+  const deletePipeline = (id: string) => {
+    if (pipelines.length <= 1) return; // Keep at least one
+    setPipelines((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  // Invoice Calculations & Actions
+  const calculateInvoiceTotals = (items: Invoice["items"], initialDiscount = 0) => {
+    const subtotal = items.reduce((sum, itm) => sum + (itm.quantity * itm.unitPrice), 0);
+    const itemDiscounts = items.reduce((sum, itm) => sum + (itm.quantity * itm.unitPrice * (itm.discountPercent / 100)), 0);
+    const discount = itemDiscounts || initialDiscount;
+    const taxableAmount = Math.max(0, subtotal - discount);
+    const tax = items.reduce((sum, itm) => sum + (itm.quantity * itm.unitPrice * (itm.taxPercent / 100)), 0);
+    const total = Math.round(taxableAmount + tax);
+    return { subtotal, discount, tax, total };
+  };
+
+  const addInvoice = (invoiceData: Omit<Invoice, "id" | "subtotal" | "discount" | "tax" | "total" | "amountPaid" | "remainingBalance" | "status"> & { status?: Invoice["status"] }): Invoice => {
+    const newId = `INV-2026-${Math.floor(100 + Math.random() * 900)}`;
+    const items = invoiceData.items.map((item, idx) => ({
+      ...item,
+      id: item.id || `itm_${Date.now()}_${idx}`,
+      total: Math.round(item.quantity * item.unitPrice * (1 - (item.discountPercent || 0) / 100) * (1 + (item.taxPercent || 0) / 100)),
+    }));
+    const { subtotal, discount, tax, total } = calculateInvoiceTotals(items);
+    const amountPaid = 0;
+    const remainingBalance = total;
+    const status: Invoice["status"] = invoiceData.status || "Sent";
+
+    const newInvoice: Invoice = {
+      ...invoiceData,
+      id: newId,
+      invoiceNumber: invoiceData.invoiceNumber || newId,
+      items,
+      subtotal,
+      discount,
+      tax,
+      total,
+      amountPaid,
+      remainingBalance,
+      status,
+    };
+
+    setInvoices((prev) => [newInvoice, ...prev]);
+
+    // Log Activity
+    addActivity({
+      type: "Invoice",
+      companyId: invoiceData.companyId,
+      contactId: invoiceData.contactId,
+      dealId: invoiceData.dealId,
+      date: invoiceData.issueDate || new Date().toISOString().split("T")[0],
+      time: "09:30",
+      user: currentUser.name,
+      description: `Invoice ${newId} issued for $${total.toLocaleString()}`,
+      outcome: `Invoice status: ${status}`,
+      nextAction: `Follow up on payment before due date ${invoiceData.dueDate}`,
+    });
+
+    return newInvoice;
+  };
+
+  const updateInvoice = (id: string, updates: Partial<Invoice>) => {
+    setInvoices((prev) =>
+      prev.map((inv) => {
+        if (inv.id === id) {
+          const items = updates.items || inv.items;
+          const { subtotal, discount, tax, total } = calculateInvoiceTotals(items);
+          const amountPaid = updates.amountPaid !== undefined ? updates.amountPaid : inv.amountPaid;
+          const remainingBalance = Math.max(0, total - amountPaid);
+          let status = updates.status || inv.status;
+
+          if (amountPaid >= total && total > 0) status = "Paid";
+          else if (amountPaid > 0 && amountPaid < total) status = "Partially Paid";
+          else if (new Date(inv.dueDate) < new Date() && remainingBalance > 0 && status !== "Cancelled") status = "Overdue";
+
+          return {
+            ...inv,
+            ...updates,
+            items,
+            subtotal,
+            discount,
+            tax,
+            total,
+            amountPaid,
+            remainingBalance,
+            status,
+          };
+        }
+        return inv;
+      })
+    );
+  };
+
+  const deleteInvoice = (id: string) => {
+    setInvoices((prev) => prev.filter((i) => i.id !== id));
+  };
+
+  const duplicateInvoice = (id: string): Invoice => {
+    const existing = invoices.find((i) => i.id === id);
+    if (!existing) throw new Error("Invoice not found");
+
+    return addInvoice({
+      invoiceNumber: `INV-2026-${Math.floor(100 + Math.random() * 900)}`,
+      companyId: existing.companyId,
+      contactId: existing.contactId,
+      dealId: existing.dealId,
+      issueDate: new Date().toISOString().split("T")[0],
+      dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
+      currency: existing.currency,
+      items: existing.items.map((itm) => ({ ...itm, id: `itm_${Date.now()}_${Math.random()}` })),
+      notes: `Duplicated from ${existing.invoiceNumber}. ${existing.notes || ""}`,
+      status: "Draft",
+    });
+  };
+
+  const markInvoicePaid = (id: string) => {
+    const invoice = invoices.find((i) => i.id === id);
+    if (!invoice) return;
+
+    const remaining = invoice.remainingBalance;
+    if (remaining > 0) {
+      addPayment({
+        paymentNumber: `PAY-${Math.floor(500 + Math.random() * 500)}`,
+        companyId: invoice.companyId,
+        invoiceId: invoice.id,
+        dealId: invoice.dealId,
+        date: new Date().toISOString().split("T")[0],
+        amount: remaining,
+        currency: invoice.currency,
+        paymentMethod: "Bank Transfer",
+        reference: `SETTLE-${invoice.invoiceNumber}`,
+        notes: `Full settlement of invoice ${invoice.invoiceNumber}`,
+        recordedBy: currentUser.name,
+      });
+    }
+  };
+
+  // Payment Actions & Strict Balance Reconciliations
+  const addPayment = (paymentData: Omit<Payment, "id">): Payment => {
+    const newId = `PAY-${Math.floor(500 + Math.random() * 500)}`;
+    const newPayment: Payment = {
+      ...paymentData,
+      id: newId,
+      paymentNumber: paymentData.paymentNumber || newId,
+    };
+
+    setPayments((prev) => [newPayment, ...prev]);
+
+    // Update target invoice
+    setInvoices((prev) =>
+      prev.map((inv) => {
+        if (inv.id === paymentData.invoiceId) {
+          const newAmountPaid = (inv.amountPaid || 0) + paymentData.amount;
+          const newRemaining = Math.max(0, inv.total - newAmountPaid);
+          let newStatus: Invoice["status"] = inv.status;
+
+          if (newRemaining <= 0) {
+            newStatus = "Paid";
+          } else {
+            newStatus = "Partially Paid";
+          }
+
+          return {
+            ...inv,
+            amountPaid: newAmountPaid,
+            remainingBalance: newRemaining,
+            status: newStatus,
+          };
+        }
+        return inv;
+      })
+    );
+
+    // Log Activity
+    addActivity({
+      type: "Payment",
+      companyId: paymentData.companyId,
+      dealId: paymentData.dealId,
+      date: paymentData.date || new Date().toISOString().split("T")[0],
+      time: "14:15",
+      user: paymentData.recordedBy || currentUser.name,
+      description: `Payment ${newId} recorded: $${paymentData.amount.toLocaleString()} via ${paymentData.paymentMethod} (Ref: ${paymentData.reference})`,
+      outcome: "Payment credited to balance",
+      nextAction: "Issue payment receipt to customer",
+    });
+
+    return newPayment;
+  };
+
+  const deletePayment = (id: string) => {
+    const payment = payments.find((p) => p.id === id);
+    if (!payment) return;
+
+    setPayments((prev) => prev.filter((p) => p.id !== id));
+
+    // Reverse payment from invoice
+    setInvoices((prev) =>
+      prev.map((inv) => {
+        if (inv.id === payment.invoiceId) {
+          const updatedPaid = Math.max(0, inv.amountPaid - payment.amount);
+          const updatedRemaining = Math.max(0, inv.total - updatedPaid);
+          let updatedStatus: Invoice["status"] = inv.status;
+          if (updatedPaid === 0) updatedStatus = "Sent";
+          else if (updatedRemaining > 0) updatedStatus = "Partially Paid";
+
+          return {
+            ...inv,
+            amountPaid: updatedPaid,
+            remainingBalance: updatedRemaining,
+            status: updatedStatus,
+          };
+        }
+        return inv;
+      })
+    );
+  };
+
+  // Activity Actions
+  const addActivity = (activityData: Omit<Activity, "id">) => {
+    const newActivity: Activity = {
+      ...activityData,
+      id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    };
+    setActivities((prev) => [newActivity, ...prev]);
+  };
+
+  const deleteActivity = (id: string) => {
+    setActivities((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  // Task Actions
+  const addTask = (taskData: Omit<Task, "id">) => {
+    const newTask: Task = {
+      ...taskData,
+      id: `tsk_${Date.now()}`,
+    };
+    setTasks((prev) => [newTask, ...prev]);
+  };
+
+  const updateTask = (id: string, updates: Partial<Task>) => {
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+  };
+
+  const toggleTaskStatus = (id: string) => {
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t.id === id) {
+          return {
+            ...t,
+            status: t.status === "Completed" ? "To Do" : "Completed",
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  const deleteTask = (id: string) => {
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  // Comment Actions
+  const addComment = (commentData: Omit<Comment, "id" | "timestamp" | "userId" | "userName">) => {
+    const now = new Date();
+    const formatted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+
+    const newComment: Comment = {
+      ...commentData,
+      id: `cm_${Date.now()}`,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userAvatar: currentUser.avatar,
+      timestamp: formatted,
+      replies: [],
+    };
+    setComments((prev) => [newComment, ...prev]);
+  };
+
+  const deleteComment = (id: string) => {
+    setComments((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const addCommentReply = (commentId: string, replyText: string) => {
+    const now = new Date();
+    const formatted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+
+    setComments((prev) =>
+      prev.map((c) => {
+        if (c.id === commentId) {
+          const newReply = {
+            id: `rep_${Date.now()}`,
+            userName: currentUser.name,
+            content: replyText,
+            timestamp: formatted,
+          };
+          return {
+            ...c,
+            replies: [...(c.replies || []), newReply],
+          };
+        }
+        return c;
+      })
+    );
+  };
+
+  const clearAllData = () => {
+    setRawCompanies([]);
+    setContacts([]);
+    setLeads([]);
+    setDeals([]);
+    setInvoices([]);
+    setPayments([]);
+    setActivities([]);
+    setTasks([]);
+    setComments([]);
+  };
+
+  // RBAC Permission Evaluator
+  const canPerform = (permission: keyof UserPermissions): boolean => {
+    if (!currentUser) return false;
+    // Explicit user-level permission override if configured
+    if (currentUser.permissions && currentUser.permissions[permission] !== undefined) {
+      return !!currentUser.permissions[permission];
+    }
+    const roleKey = (currentUser.role || "viewer") as UserRole;
+    const basePermissions = ROLE_PERMISSIONS[roleKey] || ROLE_PERMISSIONS.viewer;
+    return !!basePermissions[permission];
+  };
+
+  // Dynamic Role & Permission Update. `role` accepts a plain UserRole or the
+  // literal string "custom" for a selective, checkbox-built permission set
+  // that doesn't map to any preset role.
+  const updateUserRole = (userId: string, role: UserRole | string, customPermissions?: Partial<UserPermissions>) => {
+    const roleInfo = ROLE_LABELS[role as UserRole] || { title: role === "custom" ? "Custom Role" : role };
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id === userId) {
+          const updated: User = {
+            ...u,
+            role,
+            roleTitle: roleInfo.title,
+            permissions: customPermissions !== undefined ? customPermissions : u.permissions,
+          };
+          if (currentUser.id === userId) {
+            setCurrentUser(updated);
+          }
+          return updated;
+        }
+        return u;
+      })
+    );
+  };
+
+  const addUser = (newUser: User) => {
+    setUsers((prev) => [newUser, ...prev]);
+  };
+
+  // Real sign-out: ends the Supabase session. The session-bootstrap effect's
+  // onAuthStateChange listener picks up the SIGNED_OUT event and clears
+  // tenants/users/currentUser and reopens AuthPage — no local-only identity
+  // switching happens here anymore.
+  const signOut = () => {
+    if (isSupabaseAuthConfigured()) {
+      void getSupabaseAuthClient().auth.signOut();
+    } else {
+      setCurrentUser(SIGNED_OUT_USER);
+      setTenants([]);
+      setActiveTenantId("");
+      setUsers([]);
+      setAuthPageOpen(true);
+    }
+  };
+
+  // Bulk Lead Import from Spreadsheet / Excel / Google Sheets
+  const importLeadsFromSpreadsheet = (
+    importedLeads: Array<Omit<Lead, "id" | "createdDate">>
+  ): number => {
+    const newRecords: Lead[] = importedLeads.map((item, idx) => ({
+      ...item,
+      id: `lead_imp_${Date.now()}_${idx}`,
+      createdDate: new Date().toISOString().split("T")[0],
+      salesperson: item.salesperson || currentUser.name,
+    }));
+
+    setLeads((prev) => [...newRecords, ...prev]);
+
+    // Record system audit activity
+    addActivity({
+      type: "Note",
+      description: `Bulk imported ${newRecords.length} leads from spreadsheet by ${currentUser.name}`,
+      date: new Date().toISOString().split("T")[0],
+      time: new Date().toTimeString().slice(0, 5),
+      user: currentUser.name,
+      outcome: `Imported ${newRecords.length} records successfully`,
+      nextAction: "Assign leads to sales representatives",
+    });
+
+    return newRecords.length;
+  };
+
+  return (
+    <CRMContext.Provider
+      value={{
+        activeNav,
+        setActiveNav,
+        settingsDeepLinkTab,
+        setSettingsDeepLinkTab,
+        selectedCompanyId,
+        setSelectedCompanyId,
+        selectedDealId,
+        setSelectedDealId,
+        dateRange,
+        setDateRange,
+        currentUser,
+        setCurrentUser,
+        users,
+        updateUserRole,
+        addUser,
+        canPerform,
+        signOut,
+        isAuthPageOpen,
+        setAuthPageOpen,
+        isBootstrapping,
+        authPageMode,
+        setAuthPageMode,
+        isAccessControlOpen,
+        setAccessControlOpen,
+        importLeadsFromSpreadsheet,
+
+        tenants,
+        activeTenantId,
+        activeTenant,
+        switchTenant,
+        createTenant,
+        loadSampleData,
+        updateTenant,
+        deleteTenant,
+        isCreateTenantModalOpen,
+        setCreateTenantModalOpen,
+
+        settings,
+        updateSettings,
+        updateStripeConfig,
+        updateWebmailConfig,
+        updateSupabaseConfig,
+        addAuditLogEntry,
+
+        isEmailComposeOpen,
+        setEmailComposeOpen,
+        emailComposeProps,
+        openEmailComposer,
+
+        companies,
+        contacts,
+        leads,
+        deals,
+        pipelines,
+        invoices,
+        payments,
+        activities,
+        tasks,
+        comments,
+
+        addCompany,
+        updateCompany,
+        deleteCompany,
+
+        addContact,
+        updateContact,
+        deleteContact,
+
+        addLead,
+        updateLead,
+        deleteLead,
+        moveLeadStatus,
+        convertLead,
+
+        addDeal,
+        updateDeal,
+        deleteDeal,
+        moveDealStage,
+
+        addPipeline,
+        updatePipeline,
+        deletePipeline,
+
+        addInvoice,
+        updateInvoice,
+        deleteInvoice,
+        duplicateInvoice,
+        markInvoicePaid,
+
+        addPayment,
+        deletePayment,
+
+        addActivity,
+        deleteActivity,
+
+        addTask,
+        updateTask,
+        toggleTaskStatus,
+        deleteTask,
+
+        addComment,
+        deleteComment,
+        addCommentReply,
+
+        clearAllData,
+
+        isQuickCreateOpen,
+        setQuickCreateOpen,
+        quickCreateType,
+        setQuickCreateType,
+      }}
+    >
+      {children}
+    </CRMContext.Provider>
+  );
+};
+
+export const useCRM = () => {
+  const context = useContext(CRMContext);
+  if (!context) {
+    throw new Error("useCRM must be used within a CRMProvider");
+  }
+  return context;
+};
