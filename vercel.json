@@ -3,21 +3,9 @@
   "buildCommand": "vite build",
   "outputDirectory": "public",
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/server.ts"
-    },
-    {
-      "source": "/app/assets/(.*)",
-      "destination": "/assets/$1"
-    },
-    {
-      "source": "/app",
-      "destination": "/server.ts"
-    },
-    {
-      "source": "/app/(.*)",
-      "destination": "/server.ts"
-    }
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/app/assets/(.*)", "destination": "/assets/$1" },
+    { "source": "/app", "destination": "/api" },
+    { "source": "/app/(.*)", "destination": "/api" }
   ]
 }
