@@ -35,6 +35,7 @@ const CRMMainContent: React.FC = () => {
     isEmailComposeOpen,
     setEmailComposeOpen,
     emailComposeProps,
+    tenants,
   } = useCRM();
 
   // While the initial Supabase session check is in flight, render nothing
@@ -54,6 +55,26 @@ const CRMMainContent: React.FC = () => {
         defaultMode={authPageMode}
         onSuccess={() => setAuthPageOpen(false)}
       />
+    );
+  }
+
+  // Signed in, but this account has no real (database-backed) workspace
+  // yet. Previously this fell through to the full app shell, which looked
+  // and behaved exactly like a normal, working workspace -- it was
+  // actually a local-only placeholder ("Workspace") that never synced to
+  // Supabase, so anything entered here quietly lived only in this one
+  // browser and could vanish on the next sign-in. Block the whole app
+  // behind a mandatory "create your workspace" screen instead: no
+  // dashboard, sidebar, or any other view is reachable until a real tenant
+  // exists. CRMContext's session-bootstrap effect already forces
+  // isCreateTenantModalOpen open the moment it confirms zero tenants; this
+  // is what keeps it open and un-dismissible instead of letting it be
+  // closed into the old fake-workspace state.
+  if (tenants.length === 0) {
+    return (
+      <div className="min-h-screen w-full bg-[#0d0f12] flex items-center justify-center p-4">
+        <WorkspaceModal mandatory />
+      </div>
     );
   }
 

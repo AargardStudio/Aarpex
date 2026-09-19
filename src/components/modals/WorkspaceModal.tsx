@@ -8,8 +8,17 @@ import { PLATFORM_PLAN, PLATFORM_TRIAL_DAYS, FOUNDER_EMAIL, buildPlatformPayment
 // sign-up — read back by the redirect-completion effect in CRMContext.
 const PENDING_WORKSPACE_KEY = "crm_pending_workspace_v1";
 
-export const WorkspaceModal: React.FC = () => {
-  const { isCreateTenantModalOpen, setCreateTenantModalOpen, createTenant, currentUser } = useCRM();
+export interface WorkspaceModalProps {
+  // True only for the "you're signed in but have zero real workspaces"
+  // gate rendered by App.tsx. In that mode this is the only thing on
+  // screen (there's no dashboard behind it to fall back into), so it
+  // can't be dismissed without either creating a workspace or signing
+  // out -- no X button, no backdrop-click close, no plain "Cancel".
+  mandatory?: boolean;
+}
+
+export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({ mandatory = false }) => {
+  const { isCreateTenantModalOpen, setCreateTenantModalOpen, createTenant, currentUser, signOut } = useCRM();
 
   const [name, setName] = useState("");
   const [industry, setIndustry] = useState("Enterprise SaaS");
@@ -20,7 +29,7 @@ export const WorkspaceModal: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
 
-  if (!isCreateTenantModalOpen) return null;
+  if (!mandatory && !isCreateTenantModalOpen) return null;
 
   const isFounderAccount = (currentUser.email || "").trim().toLowerCase() === FOUNDER_EMAIL.toLowerCase();
 
@@ -78,9 +87,8 @@ export const WorkspaceModal: React.FC = () => {
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-      <div className="bg-[#181b21] border border-[#2d323f] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden text-xs text-slate-200">
+  const content = (
+    <div className="bg-[#181b21] border border-[#2d323f] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden text-xs text-slate-200">
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#2d323f] flex items-center justify-between bg-[#121418]">
           <div className="flex items-center gap-2.5">
@@ -88,16 +96,24 @@ export const WorkspaceModal: React.FC = () => {
               <Building2 className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-white">Create Multi-Tenant Workspace</h2>
-              <p className="text-[11px] text-slate-400">Launch an isolated organization instance with its own ledgers, custom Stripe & Webmail</p>
+              <h2 className="text-sm font-bold text-white">
+                {mandatory ? "Create Your Workspace" : "Create Multi-Tenant Workspace"}
+              </h2>
+              <p className="text-[11px] text-slate-400">
+                {mandatory
+                  ? "Every AarPex account works inside a workspace — create yours to continue. This is required once, the first time you sign in."
+                  : "Launch an isolated organization instance with its own ledgers, custom Stripe & Webmail"}
+              </p>
             </div>
           </div>
-          <button
-            onClick={() => setCreateTenantModalOpen(false)}
-            className="w-7 h-7 rounded-lg bg-[#252a36] hover:bg-[#2f3544] text-slate-400 hover:text-white flex items-center justify-center transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          {!mandatory && (
+            <button
+              onClick={() => setCreateTenantModalOpen(false)}
+              className="w-7 h-7 rounded-lg bg-[#252a36] hover:bg-[#2f3544] text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {/* Form */}
@@ -209,13 +225,23 @@ export const WorkspaceModal: React.FC = () => {
 
           {/* Actions */}
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#2d323f]">
-            <button
-              type="button"
-              onClick={() => setCreateTenantModalOpen(false)}
-              className="px-4 py-2 bg-[#252a36] hover:bg-[#2f3544] text-slate-300 font-semibold rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
+            {mandatory ? (
+              <button
+                type="button"
+                onClick={() => signOut()}
+                className="px-4 py-2 bg-[#252a36] hover:bg-[#2f3544] text-slate-300 font-semibold rounded-lg transition-colors"
+              >
+                Sign Out
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setCreateTenantModalOpen(false)}
+                className="px-4 py-2 bg-[#252a36] hover:bg-[#2f3544] text-slate-300 font-semibold rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+            )}
             <button
               type="submit"
               disabled={!name.trim() || isSubmitting}
@@ -234,7 +260,19 @@ export const WorkspaceModal: React.FC = () => {
             </button>
           </div>
         </form>
-      </div>
+    </div>
+  );
+
+  // Non-mandatory (adding an additional workspace to an already-working
+  // account): render as a dismissible modal overlay, as before. Mandatory
+  // (the zero-tenant first-sign-in gate): App.tsx already provides the
+  // full-screen backdrop and centering, so just render the card itself --
+  // there's nothing behind it to overlay.
+  if (mandatory) return content;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+      {content}
     </div>
   );
 };

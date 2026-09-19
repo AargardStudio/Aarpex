@@ -800,12 +800,17 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // network is down right now). Keep the locally cached workspace
         // instead of showing an empty shell — it will keep retrying.
       } else {
-        // Signed in, confirmed zero workspaces, and nothing pending — the
-        // sign-up flow creates one via createTenant(); a returning user with
-        // none shows an empty shell rather than crashing (every activeTenant
-        // read elsewhere is optional-chained for exactly this state).
+        // Signed in, confirmed zero workspaces, and nothing pending. This
+        // used to just show an empty shell — but that shell looked and
+        // behaved exactly like a real, working workspace (its own
+        // localStorage-cached "Workspace" placeholder), so people worked in
+        // it for real without ever noticing nothing they entered was being
+        // saved anywhere. Force the create-workspace modal open instead —
+        // see the mandatory-workspace gate in App.tsx, which keeps it open
+        // and blocks the rest of the app until a real tenant exists.
         setTenants([]);
         setActiveTenantId("");
+        setCreateTenantModalOpen(true);
       }
       setAuthPageOpen(false);
     };
