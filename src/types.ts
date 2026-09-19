@@ -250,6 +250,46 @@ export interface Lead {
   convertedDealId?: string;
 }
 
+// ----------------------------------------------------------------------------
+// Email Marketing — AI-generated outbound sequences targeting leads/contacts.
+// ----------------------------------------------------------------------------
+export type SalesTechnique = "Need-Based" | "Emotional" | "Problem-Solution";
+export type EmailCampaignTechnique = SalesTechnique | "Mixed";
+export type EmailFrequency = "Daily" | "Weekly" | "Biweekly" | "Monthly" | "Custom";
+export type EmailStepStatus = "Draft" | "Scheduled" | "Sent" | "Failed";
+export type EmailCampaignStatus = "Draft" | "Active" | "Paused" | "Completed";
+
+export interface EmailStep {
+  id: string;
+  stepNumber: number; // 1 = initial send, 2+ = follow-ups
+  delayDays: number; // days after the previous step (0 for step 1)
+  technique: SalesTechnique;
+  subject: string;
+  // May contain {{firstName}} / {{company}} / {{jobTitle}} merge tags,
+  // substituted per-recipient at send time.
+  body: string;
+  status: EmailStepStatus;
+  scheduledDate?: string; // ISO date this step becomes due to send
+  sentDate?: string;
+}
+
+export interface EmailCampaign {
+  id: string;
+  name: string;
+  audienceType: "Leads" | "Contacts";
+  audienceIds: string[];
+  frequency: EmailFrequency;
+  frequencyDays: number; // resolved cadence in days (7 for Weekly, etc.)
+  followUpCount: number; // number of follow-ups after the initial email (0-6)
+  technique: EmailCampaignTechnique;
+  status: EmailCampaignStatus;
+  steps: EmailStep[];
+  createdDate: string;
+  startDate?: string;
+  salesperson: string;
+  notes?: string;
+}
+
 export interface Deal {
   id: string;
   name: string;

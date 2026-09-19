@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 import Stripe from "stripe";
@@ -640,6 +641,122 @@ Return pure valid JSON only.`;
       suggestedResponse: "Offer flexible scheduling or initial trial terms.",
       closeLikelihoodSummary: "Estimated 60% probability with proactive follow-up.",
       data: { winProbability: 60, dealHealth: "Average" },
+      source: "fallback",
+    });
+  }
+});
+
+// AI Email Marketing Campaign Generator
+// Generates one outbound email SEQUENCE (an initial send plus N follow-ups)
+// for a whole audience of selected leads/contacts at once, using merge tags
+// ({{firstName}}, {{company}}, {{jobTitle}}) instead of one AI call per
+// recipient -- the frontend substitutes those per-recipient at send time.
+app.post("/api/ai/email-campaign", async (req, res) => {
+  try {
+    const {
+      audienceType, // "Leads" | "Contacts"
+      audienceSample, // small sample for context, e.g. [{firstName, company, jobTitle, industry}]
+      audienceCount, // total recipients selected
+      technique, // "Need-Based" | "Emotional" | "Problem-Solution" | "Mixed"
+      followUpCount, // number of follow-ups after the initial email (0-6)
+      frequency, // "Daily" | "Weekly" | "Biweekly" | "Monthly" | "Custom"
+      frequencyDays, // resolved cadence in days
+      senderName,
+      senderCompany,
+    } = req.body;
+
+    const totalSteps = 1 + Math.max(0, Number(followUpCount) || 0);
+    const rotation = ["Need-Based", "Emotional", "Problem-Solution"];
+    const resolveTechnique = (stepIdx: number) =>
+      technique === "Mixed" ? rotation[stepIdx % rotation.length] : technique || "Need-Based";
+    const cadenceDays = Number(frequencyDays) || 7;
+
+    const sampleLine =
+      (audienceSample || [])
+        .slice(0, 5)
+        .map((p: any) => `${p.firstName || "there"} @ ${p.company || "their company"} (${p.jobTitle || "unknown role"}, ${p.industry || "unspecified industry"})`)
+        .join(" | ") || "No sample provided";
+
+    const OPENINGS: Record<string, string> = {
+      "Need-Based": `Hi {{firstName}},\n\nI wanted to reach out because teams like {{company}}'s often struggle with the exact operational gap ${senderCompany || "we"} was built to close. Given your role, I think there's a clear fit worth exploring.\n\nWould a quick 15-minute call this week make sense to see if it's relevant for {{company}}?\n\nBest regards,\n${senderName || "The Team"}\n${senderCompany || ""}`,
+      "Emotional": `Hi {{firstName}},\n\nMost teams at companies like {{company}} don't realize how much time and momentum they're losing until it's already cost them a quarter. I don't want that to be your story.\n\nCan we grab 15 minutes so I can show you what a better path looks like for {{company}}?\n\nWarmly,\n${senderName || "The Team"}\n${senderCompany || ""}`,
+      "Problem-Solution": `Hi {{firstName}},\n\nHere's the problem I keep seeing at companies like {{company}}: slow, manual processes quietly eating margin. Here's the fix: a system built to close exactly that gap, with measurable results in weeks, not quarters.\n\nOpen to a short call this week to walk through how it would apply to {{company}} specifically?\n\nBest,\n${senderName || "The Team"}\n${senderCompany || ""}`,
+    };
+
+    const buildFallbackStep = (stepNumber: number, stepTechnique: string, delayDays: number) => {
+      const prefix = stepNumber === 1 ? "" : `Following up on my note from ${delayDays} day(s) ago — `;
+      return {
+        stepNumber,
+        technique: stepTechnique,
+        delayDays,
+        subject: stepNumber === 1 ? `Quick idea for {{company}}` : `Re: Quick idea for {{company}} (follow-up ${stepNumber - 1})`,
+        body: prefix + (OPENINGS[stepTechnique] || OPENINGS["Need-Based"]),
+      };
+    };
+
+    const fallbackSteps = Array.from({ length: totalSteps }, (_, i) =>
+      buildFallbackStep(i + 1, resolveTechnique(i), i === 0 ? 0 : cadenceDays)
+    );
+
+    const prompt = `You are a world-class B2B email marketing strategist writing an outbound email SEQUENCE for ${senderCompany || "a B2B company"}.
+
+Audience: ${audienceCount || (audienceSample || []).length || "several"} ${audienceType === "Contacts" ? "existing contacts" : "sales leads"}.
+Sample of who's in this audience: ${sampleLine}
+
+Write a sequence of exactly ${totalSteps} email(s): step 1 is the initial outreach, steps 2+ are follow-ups spaced ${cadenceDays} day(s) apart (cadence: ${frequency || "Weekly"}).
+
+Sales technique to use per step: ${
+      technique === "Mixed"
+        ? `rotate through Need-Based, Emotional, and Problem-Solution across the steps in that order (repeat the cycle if there are more steps than techniques)`
+        : `use the "${technique}" technique for every step, but vary the angle, subject line, and specific value proposition in each follow-up so it never feels like a repeat`
+    }.
+
+Where "Need-Based" foregrounds a concrete operational/business need, "Emotional" foregrounds urgency, aspiration, or the cost of inaction, and "Problem-Solution" foregrounds a specific pain point paired with a specific fix.
+
+Every email MUST use the merge tags {{firstName}} and {{company}} (and {{jobTitle}} where natural) instead of real names, so the same template can personalize per recipient at send time. Keep each email under 150 words, end with a clear single call-to-action, and make follow-ups reference that this is a follow-up without being repetitive of earlier steps.
+
+Return pure JSON only, no markdown fences, in this exact shape:
+{
+  "steps": [
+    { "stepNumber": 1, "technique": "Need-Based" | "Emotional" | "Problem-Solution", "subject": "...", "body": "..." }
+  ]
+}`;
+
+    const rawAiText = await callGeminiSafe(prompt);
+    if (rawAiText) {
+      try {
+        const parsed = JSON.parse(rawAiText);
+        const aiSteps = Array.isArray(parsed.steps) ? parsed.steps : [];
+        if (aiSteps.length > 0) {
+          const steps = aiSteps.slice(0, totalSteps).map((s: any, i: number) => ({
+            stepNumber: i + 1,
+            technique: rotation.includes(s.technique) ? s.technique : resolveTechnique(i),
+            delayDays: i === 0 ? 0 : cadenceDays,
+            subject: s.subject || fallbackSteps[i]?.subject || "Quick idea for {{company}}",
+            body: s.body || fallbackSteps[i]?.body || "",
+          }));
+          while (steps.length < totalSteps) {
+            steps.push(fallbackSteps[steps.length]);
+          }
+          return res.json({ steps, source: "gemini" });
+        }
+      } catch {
+        // fall through to heuristic
+      }
+    }
+
+    return res.json({ steps: fallbackSteps, source: "heuristic" });
+  } catch {
+    return res.json({
+      steps: [
+        {
+          stepNumber: 1,
+          technique: "Need-Based",
+          delayDays: 0,
+          subject: "Quick idea for {{company}}",
+          body: "Hi {{firstName}},\n\nWanted to reach out about a way we could help {{company}}. Would you be open to a short call this week?\n\nBest regards,\nSales Team",
+        },
+      ],
       source: "fallback",
     });
   }
@@ -2198,13 +2315,6 @@ app.get(["/app", "/app/*"], (_req, res) => {
 // Vite Middleware for Dev and Static Serving for Production
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
-    // Dynamically imported (never a static top-level import) so this large,
-    // dev-only, ESM-first package is never pulled into the bundled Vercel
-    // Function -- bundling it unconditionally was crashing the deployed
-    // function at cold start (500 FUNCTION_INVOCATION_FAILED) even though
-    // this branch never actually runs in production (VERCEL is always set
-    // there, see the guard around startServer() below).
-    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",

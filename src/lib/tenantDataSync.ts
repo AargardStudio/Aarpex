@@ -34,7 +34,8 @@ export type TenantTable =
   | "payments"
   | "activities"
   | "tasks"
-  | "comments";
+  | "comments"
+  | "email_campaigns";
 
 // camelCase -> snake_case, applied to every key of every object.
 function toSnakeCase(key: string): string {
@@ -51,6 +52,7 @@ const FIELD_OVERRIDES: Partial<Record<TenantTable, Record<string, string>>> = {
   leads: { createdDate: "created_at" },
   deals: { createdDate: "created_at" },
   comments: { timestamp: "created_at" },
+  email_campaigns: { createdDate: "created_at" },
 };
 
 // Fields that exist on the app object but are purely derived/computed and

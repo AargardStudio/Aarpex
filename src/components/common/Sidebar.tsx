@@ -34,7 +34,7 @@ interface NavItem {
   icon: React.ElementType;
   badge?: number | string;
   badgeColor?: string;
-  category: "Core" | "Sales" | "Finance" | "Productivity" | "Intelligence" | "System";
+  category: "Core" | "Sales" | "Finance" | "Productivity" | "Intelligence" | "Marketing" | "System";
 }
 
 export const Sidebar: React.FC = () => {
@@ -45,6 +45,7 @@ export const Sidebar: React.FC = () => {
     deals,
     invoices,
     tasks,
+    emailCampaigns,
     setQuickCreateOpen,
     setSelectedCompanyId,
     currentUser,
@@ -92,6 +93,14 @@ export const Sidebar: React.FC = () => {
     { name: "Tasks", icon: CheckSquare, badge: pendingTasksCount, category: "Productivity" },
     { name: "AI Insights", icon: Sparkles, badge: "Gemini", badgeColor: "bg-[#252a36] text-teal-300 border border-[#3d4455] font-semibold", category: "Intelligence" },
 
+    {
+      name: "Email Marketing",
+      icon: Mail,
+      badge: emailCampaigns.filter((c) => c.status === "Active").length || undefined,
+      badgeColor: "bg-[#252a36] text-teal-300 border border-[#3d4455] font-semibold",
+      category: "Marketing",
+    },
+
     { name: "Reports", icon: BarChart3, category: "System" },
     { name: "Settings", icon: Settings, category: "System" },
   ];
@@ -102,6 +111,7 @@ export const Sidebar: React.FC = () => {
     "Finance",
     "Productivity",
     "Intelligence",
+    "Marketing",
     "System",
   ];
 

@@ -16,6 +16,7 @@ import { PaymentsView } from "./components/views/PaymentsView";
 import { RevenueView } from "./components/views/RevenueView";
 import { StripeView } from "./components/views/StripeView";
 import { AiInsightsView } from "./components/views/AiInsightsView";
+import { EmailMarketingView } from "./components/views/EmailMarketingView";
 import { ReportsView } from "./components/views/ReportsView";
 import { SettingsView } from "./components/views/SettingsView";
 import { Company360Drawer } from "./components/company/Company360Drawer";
@@ -107,6 +108,8 @@ const CRMMainContent: React.FC = () => {
         return <StripeView />;
       case "aiinsights":
         return <AiInsightsView />;
+      case "emailmarketing":
+        return <EmailMarketingView />;
       case "reports":
         return <ReportsView />;
       case "settings":

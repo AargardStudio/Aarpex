@@ -25,6 +25,7 @@ import {
   SupabaseConfig,
   EmailAttachment,
   AuditLogEntry,
+  EmailCampaign,
 } from "../types";
 import { isSupabaseAuthConfigured, getSupabaseAuthClient } from "../config/supabaseAuthClient";
 import {
@@ -83,6 +84,7 @@ export type NavView =
   | "Stripe"
   | "Tasks"
   | "AI Insights"
+  | "Email Marketing"
   | "Reports"
   | "Settings";
 
@@ -169,6 +171,7 @@ interface CRMContextType {
   activities: Activity[];
   tasks: Task[];
   comments: Comment[];
+  emailCampaigns: EmailCampaign[];
 
   // Data Actions
   addCompany: (company: Omit<Company, "id" | "createdAt">) => Company;
@@ -214,6 +217,10 @@ interface CRMContextType {
   addComment: (comment: Omit<Comment, "id" | "timestamp" | "userId" | "userName">) => void;
   deleteComment: (id: string) => void;
   addCommentReply: (commentId: string, replyText: string) => void;
+
+  addEmailCampaign: (campaign: Omit<EmailCampaign, "id" | "createdDate">) => EmailCampaign;
+  updateEmailCampaign: (id: string, updates: Partial<EmailCampaign>) => void;
+  deleteEmailCampaign: (id: string) => void;
 
   clearAllData: () => void;
 
@@ -401,6 +408,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadTenantEntity("comments", initialComments)
   );
 
+  const [emailCampaigns, setEmailCampaigns] = useState<EmailCampaign[]>(() =>
+    loadTenantEntity("emailCampaigns", [] as EmailCampaign[])
+  );
+
   // Every real tenant with Supabase configured mirrors its data to the
   // tenants' Postgres tables on every change. Guarded by !isBootstrapping so
   // the empty local state present before the initial fetch (below) resolves
@@ -464,6 +475,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (shouldSyncToSupabase) syncTenantTable("comments", activeTenantId, comments);
   }, [comments, activeTenantId]);
 
+  useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_emailCampaigns`, JSON.stringify(emailCampaigns));
+    if (shouldSyncToSupabase) syncTenantTable("email_campaigns", activeTenantId, emailCampaigns);
+  }, [emailCampaigns, activeTenantId]);
+
   // Whenever the active tenant changes (including the very first time it's
   // set, by the session-bootstrap effect below), re-hydrate its records
   // from the database instead of trusting whatever's cached in localStorage
@@ -485,6 +501,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activitiesRes,
         tasksRes,
         commentsRes,
+        emailCampaignsRes,
       ] = await Promise.all([
         fetchTenantTable<Company>("companies", activeTenantId),
         fetchTenantTable<Contact>("contacts", activeTenantId),
@@ -496,6 +513,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetchTenantTable<Activity>("activities", activeTenantId),
         fetchTenantTable<Task>("tasks", activeTenantId),
         fetchTenantTable<Comment>("comments", activeTenantId),
+        fetchTenantTable<EmailCampaign>("email_campaigns", activeTenantId),
       ]);
       if (cancelled) return;
       if (companiesRes) setRawCompanies(companiesRes);
@@ -508,6 +526,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (activitiesRes) setActivities(activitiesRes);
       if (tasksRes) setTasks(tasksRes);
       if (commentsRes) setComments(commentsRes);
+      if (emailCampaignsRes) setEmailCampaigns(emailCampaignsRes);
     })();
     return () => {
       cancelled = true;
@@ -530,6 +549,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(`crm_tenant_${activeTenantId}_activities`, JSON.stringify(activities));
     localStorage.setItem(`crm_tenant_${activeTenantId}_tasks`, JSON.stringify(tasks));
     localStorage.setItem(`crm_tenant_${activeTenantId}_comments`, JSON.stringify(comments));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_emailCampaigns`, JSON.stringify(emailCampaigns));
 
     // Every workspace starts genuinely empty except "pipelines" (a
     // structural default, not sample data) — see loadTenantEntity above.
@@ -555,6 +575,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActivities(loadTarget("activities", initialActivities));
     setTasks(loadTarget("tasks", initialTasks));
     setComments(loadTarget("comments", initialComments));
+    setEmailCampaigns(loadTarget("emailCampaigns", [] as EmailCampaign[]));
     setSelectedCompanyId(null);
     setSelectedDealId(null);
   };
@@ -1699,6 +1720,29 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  // Email Marketing Actions
+  const addEmailCampaign = (campaignData: Omit<EmailCampaign, "id" | "createdDate">): EmailCampaign => {
+    const newId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `camp_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const newCampaign: EmailCampaign = {
+      ...campaignData,
+      id: newId,
+      createdDate: new Date().toISOString().split("T")[0],
+    };
+    setEmailCampaigns((prev) => [newCampaign, ...prev]);
+    return newCampaign;
+  };
+
+  const updateEmailCampaign = (id: string, updates: Partial<EmailCampaign>) => {
+    setEmailCampaigns((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
+  };
+
+  const deleteEmailCampaign = (id: string) => {
+    setEmailCampaigns((prev) => prev.filter((c) => c.id !== id));
+  };
+
   const clearAllData = () => {
     setRawCompanies([]);
     setContacts([]);
@@ -1709,6 +1753,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActivities([]);
     setTasks([]);
     setComments([]);
+    setEmailCampaigns([]);
   };
 
   // RBAC Permission Evaluator
@@ -1856,6 +1901,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activities,
         tasks,
         comments,
+        emailCampaigns,
 
         addCompany,
         updateCompany,
@@ -1900,6 +1946,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addComment,
         deleteComment,
         addCommentReply,
+
+        addEmailCampaign,
+        updateEmailCampaign,
+        deleteEmailCampaign,
 
         clearAllData,
 
