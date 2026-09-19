@@ -1,6 +1,5 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 import Stripe from "stripe";
@@ -2199,6 +2198,13 @@ app.get(["/app", "/app/*"], (_req, res) => {
 // Vite Middleware for Dev and Static Serving for Production
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
+    // Dynamically imported (never a static top-level import) so this large,
+    // dev-only, ESM-first package is never pulled into the bundled Vercel
+    // Function -- bundling it unconditionally was crashing the deployed
+    // function at cold start (500 FUNCTION_INVOCATION_FAILED) even though
+    // this branch never actually runs in production (VERCEL is always set
+    // there, see the guard around startServer() below).
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
