@@ -115,7 +115,7 @@ export const Sidebar: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0">
             <img
-              src="/assets/aarpex-logo-192.png"
+              src={`${import.meta.env.BASE_URL}assets/aarpex-logo-192.png`}
               alt="AarPex"
               className="w-8 h-8 rounded-lg border border-teal-500/40 shadow-sm shrink-0 object-cover"
             />

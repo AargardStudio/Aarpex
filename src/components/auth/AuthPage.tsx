@@ -386,7 +386,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       {/* Top Brand Header */}
       <div className="w-full max-w-xl text-center mb-6 z-10">
         <img
-          src="/assets/aarpex-logo-192.png"
+          src={`${import.meta.env.BASE_URL}assets/aarpex-logo-192.png`}
           alt="AarPex"
           className="w-16 h-16 rounded-2xl mx-auto mb-3 shadow-lg shadow-teal-500/10 border border-[#2d323f]"
         />
