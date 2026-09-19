@@ -5,7 +5,7 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/app/assets/(.*)", "destination": "/assets/$1" },
-    { "source": "/app", "destination": "/api" },
-    { "source": "/app/(.*)", "destination": "/api" }
+    { "source": "/app", "destination": "/index.html" },
+    { "source": "/app/(.*)", "destination": "/index.html" }
   ]
 }
