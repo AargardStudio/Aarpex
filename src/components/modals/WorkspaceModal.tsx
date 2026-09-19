@@ -1,12 +1,7 @@
 import React, { useState } from "react";
 import { useCRM } from "../../context/CRMContext";
 import { Building2, X, Plus, Sparkles, Check, Globe, Shield } from "lucide-react";
-import { PLATFORM_PLAN, PLATFORM_TRIAL_DAYS, FOUNDER_EMAIL, buildPlatformPaymentLinkUrl, generatePendingReferenceId } from "../../data/subscriptionPlans";
-
-// Mirrors AuthPage's PENDING_SIGNUP_KEY, but for a signed-in user
-// provisioning an *additional* billed workspace rather than completing
-// sign-up — read back by the redirect-completion effect in CRMContext.
-const PENDING_WORKSPACE_KEY = "crm_pending_workspace_v1";
+import { PLATFORM_PLAN, PLATFORM_TRIAL_DAYS, FOUNDER_EMAIL } from "../../data/subscriptionPlans";
 
 export interface WorkspaceModalProps {
   // True only for the "you're signed in but have zero real workspaces"
@@ -38,52 +33,27 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({ mandatory = fals
     if (!name.trim()) return;
     setCheckoutError("");
 
-    // The one exempt founder account — always kept active, never routed
-    // through Stripe Checkout.
-    if (isFounderAccount) {
-      setIsSubmitting(true);
-      try {
-        createTenant({
-          name: name.trim(),
-          industry,
-          currency,
-          plan,
-          companyName: companyName.trim() || name.trim(),
-        });
-        setCreateTenantModalOpen(false);
-        setName("");
-        setCompanyName("");
-      } finally {
-        setIsSubmitting(false);
-      }
-      return;
-    }
-
-    // Every other new workspace is its own billed subscription and must go
-    // through AarPex's platform Stripe Payment Link — with a chargeable card
-    // on file — before it's provisioned, exactly like sign-up. The workspace
-    // is only ever created after Stripe redirects back with a confirmed
-    // payment (see the redirect-completion effect in CRMContext). This
-    // Payment Link is the permanent, primary checkout — see
-    // subscriptionPlans.ts for why.
+    // Every workspace — founder account or not — is provisioned immediately
+    // on the platform's 7-day free trial (createTenant already sets
+    // subscriptionStatus: "trialing" and a nextBillingDate 7 days out for
+    // non-founder accounts, and "active" with no trial clock for the
+    // founder). No Stripe redirect happens at creation time.
     setIsSubmitting(true);
     try {
-      const pending = {
+      createTenant({
         name: name.trim(),
         industry,
         currency,
+        plan,
         companyName: companyName.trim() || name.trim(),
-        ownerEmail: currentUser.email,
-      };
-      localStorage.setItem(PENDING_WORKSPACE_KEY, JSON.stringify(pending));
-
-      const referenceId = generatePendingReferenceId();
-      window.location.href = buildPlatformPaymentLinkUrl(currentUser.email, referenceId);
-      // Execution ends here — the browser is navigating away to Stripe.
+      });
+      setCreateTenantModalOpen(false);
+      setName("");
+      setCompanyName("");
     } catch (err: any) {
-      localStorage.removeItem(PENDING_WORKSPACE_KEY);
+      setCheckoutError(err.message || "Unable to create workspace. Please try again.");
+    } finally {
       setIsSubmitting(false);
-      setCheckoutError(err.message || "Unable to start checkout. Please try again.");
     }
   };
 
@@ -213,7 +183,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({ mandatory = fals
 
           {!isFounderAccount && (
             <p className="text-[10px] text-slate-500 -mt-1">
-              You'll be asked to add a card on the next step — nothing is charged until this workspace's 7-day trial ends.
+              This workspace starts on a {PLATFORM_TRIAL_DAYS}-day free trial — no card required today.
             </p>
           )}
 
@@ -248,15 +218,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({ mandatory = fals
               className="px-4 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white font-bold rounded-lg flex items-center gap-1.5 transition-colors shadow-sm"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>
-                {isSubmitting
-                  ? isFounderAccount
-                    ? "Provisioning..."
-                    : "Redirecting to Stripe..."
-                  : isFounderAccount
-                  ? "Create Workspace"
-                  : "Continue to Payment"}
-              </span>
+              <span>{isSubmitting ? "Provisioning..." : "Create Workspace"}</span>
             </button>
           </div>
         </form>

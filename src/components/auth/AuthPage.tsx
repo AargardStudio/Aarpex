@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { UserRole, ROLE_LABELS, Tenant } from "../../types";
 import { getSupabaseAuthClient, isSupabaseAuthConfigured } from "../../config/supabaseAuthClient";
-import { PLATFORM_PLAN, PLATFORM_TRIAL_DAYS, FOUNDER_EMAIL, buildPlatformPaymentLinkUrl, generatePendingReferenceId } from "../../data/subscriptionPlans";
+import { PLATFORM_PLAN, PLATFORM_TRIAL_DAYS } from "../../data/subscriptionPlans";
 import { apiFetch } from "../../lib/apiClient";
 import { AuroraBackground } from "../common/AuroraBackground";
 
@@ -304,52 +304,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         return;
       }
 
-      const isFounderAccount = signUpEmail.trim().toLowerCase() === FOUNDER_EMAIL.toLowerCase();
-
-      if (isFounderAccount) {
-        // The one exempt account — always kept active, never routed through
-        // Stripe Checkout.
-        provisionWorkspace({
-          name: newOrgName.trim(),
-          industry: newOrgIndustry,
-          currency: newOrgCurrency,
-          ownerEmail: signUpEmail.trim(),
-        });
-        setIsLoading(false);
-        setTimeout(() => {
-          if (onSuccess) onSuccess();
-        }, 800);
-        return;
-      }
-
-      // Every other new account must add a real card and complete payment
-      // on AarPex's platform Stripe Payment Link — with a chargeable payment
-      // method on file — before its workspace is provisioned. The workspace
-      // itself is only ever created after Stripe redirects back with a
-      // confirmed payment (see the redirect-completion effect above), so
-      // there is no path to a free/simulated workspace for anyone but the
-      // founder account. This Payment Link is the permanent, primary
-      // checkout for every sign-up — see subscriptionPlans.ts for why.
-      const pending: PendingSignup = {
-        email: signUpEmail.trim(),
-        name: signUpName.trim(),
-        organizationName: newOrgName.trim(),
+      // Every new account — founder or not — is provisioned immediately on
+      // AarPex's platform plan with its 7-day free trial. provisionWorkspace
+      // (via createTenant) already sets subscriptionStatus: "trialing" and a
+      // nextBillingDate PLATFORM_TRIAL_DAYS days out for non-founder
+      // accounts, and "active" with no trial clock for the founder account.
+      // No Stripe redirect happens at sign-up time.
+      provisionWorkspace({
+        name: newOrgName.trim(),
         industry: newOrgIndustry,
         currency: newOrgCurrency,
-      };
-
-      try {
-        localStorage.setItem(PENDING_SIGNUP_KEY, JSON.stringify(pending));
-
-        setSuccessNotice("Redirecting you to Stripe to add a payment method and start your 7-day free trial…");
-        const referenceId = generatePendingReferenceId();
-        window.location.href = buildPlatformPaymentLinkUrl(pending.email, referenceId);
-        // Execution ends here — the browser is navigating away to Stripe.
-      } catch (checkoutErr: any) {
-        localStorage.removeItem(PENDING_SIGNUP_KEY);
-        setIsLoading(false);
-        setErrorMessage(checkoutErr.message || "Unable to start checkout. Please try again.");
-      }
+        ownerEmail: signUpEmail.trim(),
+      });
+      setIsLoading(false);
+      setTimeout(() => {
+        if (onSuccess) onSuccess();
+      }, 800);
     } catch (err: any) {
       setErrorMessage(err.message || "Unable to reach the authentication service. Please try again.");
       setIsLoading(false);
@@ -663,7 +633,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </div>
                   <p className="text-[10px] text-slate-500 flex items-center gap-1.5 pt-0.5">
                     <CreditCard className="w-3 h-3 text-slate-400 shrink-0" />
-                    You'll be asked to add a card on the next step — nothing is charged until your trial ends.
+                    Your workspace is ready instantly — no card required to start your trial.
                   </p>
                 </div>
               </div>
