@@ -761,13 +761,27 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
 // Campaign Detail — view/edit steps, send due follow-ups
 // ----------------------------------------------------------------------------
 const CampaignDetailModal: React.FC<{ campaign: EmailCampaign; onClose: () => void }> = ({ campaign, onClose }) => {
-  const { leads, contacts, companies, activeTenant, currentUser, updateEmailCampaign, addActivity } = useCRM();
+  const { leads, contacts, companies, activeTenant, currentUser, updateEmailCampaign, addActivity, checkCampaignReplies } = useCRM();
   const [sendingStepId, setSendingStepId] = useState<string | null>(null);
+  const [isCheckingReplies, setIsCheckingReplies] = useState(false);
 
+  const repliedIds = campaign.repliedAudienceIds || [];
+
+  const handleCheckReplies = async () => {
+    setIsCheckingReplies(true);
+    try {
+      await checkCampaignReplies(campaign.id);
+    } finally {
+      setIsCheckingReplies(false);
+    }
+  };
+
+  // Follow-ups skip anyone who has already replied -- see the Inbox section,
+  // which is what populates campaign.repliedAudienceIds.
   const recipients: Recipient[] = useMemo(() => {
     if (campaign.audienceType === "Leads") {
       return leads
-        .filter((l) => campaign.audienceIds.includes(l.id))
+        .filter((l) => campaign.audienceIds.includes(l.id) && !repliedIds.includes(l.id))
         .map((l) => ({
           id: l.id,
           email: l.email,
@@ -777,7 +791,7 @@ const CampaignDetailModal: React.FC<{ campaign: EmailCampaign; onClose: () => vo
         }));
     }
     return contacts
-      .filter((c) => campaign.audienceIds.includes(c.id))
+      .filter((c) => campaign.audienceIds.includes(c.id) && !repliedIds.includes(c.id))
       .map((c) => {
         const comp = companies.find((co) => co.id === c.companyId);
         return {
@@ -788,7 +802,7 @@ const CampaignDetailModal: React.FC<{ campaign: EmailCampaign; onClose: () => vo
           jobTitle: c.position || "your role",
         };
       });
-  }, [campaign, leads, contacts, companies]);
+  }, [campaign, leads, contacts, companies, repliedIds]);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -845,15 +859,28 @@ const CampaignDetailModal: React.FC<{ campaign: EmailCampaign; onClose: () => vo
           <div>
             <h2 className="text-sm font-bold text-white">{campaign.name}</h2>
             <p className="text-[11px] text-slate-400">
-              {recipients.length} {campaign.audienceType.toLowerCase()} &bull; {campaign.technique} &bull; {campaign.frequency}
+              {recipients.length} still active {campaign.audienceType.toLowerCase()}
+              {repliedIds.length > 0 && ` · ${repliedIds.length} replied (follow-ups paused)`}
+              {" · "}
+              {campaign.technique} &bull; {campaign.frequency}
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="w-7 h-7 rounded-lg bg-[#252a36] hover:bg-[#2f3544] text-slate-400 hover:text-white flex items-center justify-center"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCheckReplies}
+              disabled={isCheckingReplies}
+              className="px-2.5 py-1.5 bg-[#252a36] hover:bg-[#2f3544] text-teal-300 rounded-lg text-[11px] font-bold border border-[#3d4455] whitespace-nowrap"
+              title="Scan the connected mailbox for replies from this campaign's audience"
+            >
+              {isCheckingReplies ? "Checking..." : "Check for Replies"}
+            </button>
+            <button
+              onClick={onClose}
+              className="w-7 h-7 rounded-lg bg-[#252a36] hover:bg-[#2f3544] text-slate-400 hover:text-white flex items-center justify-center shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar">

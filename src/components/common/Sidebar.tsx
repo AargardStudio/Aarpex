@@ -26,6 +26,7 @@ import {
   UserPlus,
   LogOut,
   Landmark,
+  Inbox as InboxIcon,
 } from "lucide-react";
 import { ROLE_LABELS, UserRole } from "../../types";
 
@@ -98,6 +99,13 @@ export const Sidebar: React.FC = () => {
       icon: Mail,
       badge: emailCampaigns.filter((c) => c.status === "Active").length || undefined,
       badgeColor: "bg-[#252a36] text-teal-300 border border-[#3d4455] font-semibold",
+      category: "Marketing",
+    },
+    {
+      name: "Inbox",
+      icon: InboxIcon,
+      badge: emailCampaigns.reduce((sum, c) => sum + c.audienceIds.filter((id) => !(c.repliedAudienceIds || []).includes(id)).length, 0) || undefined,
+      badgeColor: "bg-[#252a36] text-amber-300 border border-[#3d4455] font-semibold",
       category: "Marketing",
     },
 

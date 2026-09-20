@@ -26,6 +26,8 @@ import {
   EmailAttachment,
   AuditLogEntry,
   EmailCampaign,
+  CallLogEntry,
+  CompanyAIAnalysis,
 } from "../types";
 import { isSupabaseAuthConfigured, getSupabaseAuthClient } from "../config/supabaseAuthClient";
 import {
@@ -85,6 +87,7 @@ export type NavView =
   | "Tasks"
   | "AI Insights"
   | "Email Marketing"
+  | "Inbox"
   | "Reports"
   | "Settings";
 
@@ -221,6 +224,12 @@ interface CRMContextType {
   addEmailCampaign: (campaign: Omit<EmailCampaign, "id" | "createdDate">) => EmailCampaign;
   updateEmailCampaign: (id: string, updates: Partial<EmailCampaign>) => void;
   deleteEmailCampaign: (id: string) => void;
+  checkCampaignReplies: (campaignId: string) => Promise<void>;
+
+  // Business Profile: AI analysis + manual call log riding on a Company record.
+  runCompanyAIAnalysis: (companyId: string) => Promise<void>;
+  addCallLogEntry: (companyId: string, entry: Omit<CallLogEntry, "id" | "createdAt" | "loggedBy">) => void;
+  deleteCallLogEntry: (companyId: string, entryId: string) => void;
 
   clearAllData: () => void;
 
@@ -1141,6 +1150,73 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (selectedCompanyId === id) setSelectedCompanyId(null);
   };
 
+  // Business Profile: runs the same Gemini-powered account analysis used
+  // elsewhere in the app (customer health, churn risk, opportunities) and
+  // persists the result onto the company record itself, so it shows up on
+  // the Company 360 drawer's Business Profile tab without having to be
+  // regenerated every time the drawer opens. Safe to call on a brand-new
+  // company with no deals/invoices/activities yet -- the endpoint has a
+  // heuristic fallback either way.
+  const runCompanyAIAnalysis = async (companyId: string): Promise<void> => {
+    const company = rawCompanies.find((c) => c.id === companyId);
+    if (!company) return;
+    try {
+      const companyDeals = deals.filter((d) => d.companyId === companyId);
+      const companyContacts = contacts.filter((c) => c.companyId === companyId);
+      const companyInvoices = invoices.filter((i) => i.companyId === companyId);
+      const companyActivities = activities.filter((a) => a.companyId === companyId);
+      const res = await apiFetch("/api/ai/customer-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company,
+          contacts: companyContacts,
+          deals: companyDeals,
+          invoices: companyInvoices,
+          activities: companyActivities,
+        }),
+      });
+      const data = await res.json();
+      const analysis: CompanyAIAnalysis = {
+        healthScore: data.healthScore ?? 50,
+        healthStatus: data.healthStatus || "Stable",
+        churnRisk: data.churnRisk || "Medium",
+        churnReason: data.churnReason || "",
+        summary: data.summary || data.relationshipSummary || "",
+        actionableRecommendations: data.actionableRecommendations || [],
+        opportunities: data.opportunities || [],
+        recommendedAction: data.recommendedAction,
+        generatedAt: new Date().toISOString(),
+        source: data.source === "gemini" ? "gemini" : "heuristic",
+      };
+      updateCompany(companyId, { aiAnalysis: analysis });
+    } catch (err) {
+      console.error("[CRMContext] runCompanyAIAnalysis failed:", err);
+      // Leave the company without an aiAnalysis rather than blocking the
+      // rest of the lead-creation flow on an AI/network hiccup.
+    }
+  };
+
+  const addCallLogEntry = (companyId: string, entry: Omit<CallLogEntry, "id" | "createdAt" | "loggedBy">) => {
+    const newEntry: CallLogEntry = {
+      ...entry,
+      id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      loggedBy: currentUser.name,
+      createdAt: new Date().toISOString(),
+    };
+    setRawCompanies((prev) =>
+      prev.map((c) => (c.id === companyId ? { ...c, callLog: [newEntry, ...(c.callLog || [])] } : c))
+    );
+  };
+
+  const deleteCallLogEntry = (companyId: string, entryId: string) => {
+    setRawCompanies((prev) =>
+      prev.map((c) =>
+        c.id === companyId ? { ...c, callLog: (c.callLog || []).filter((e) => e.id !== entryId) } : c
+      )
+    );
+  };
+
   // Contact Actions
   const addContact = (contactData: Omit<Contact, "id" | "createdAt">): Contact => {
     const newId = `cnt_${Date.now()}`;
@@ -1172,6 +1248,65 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       tags: leadData.tags || [],
     };
     setLeads((prev) => [newLead, ...prev]);
+
+    // Business Profile: every new lead gets its own Company (the business)
+    // and Contact (the person) automatically -- reusing an existing company
+    // by name / contact by email when one already matches, rather than
+    // creating duplicates every time the same business submits another lead.
+    if (newLead.company && newLead.company.trim()) {
+      let company = rawCompanies.find(
+        (c) => c.name.trim().toLowerCase() === newLead.company.trim().toLowerCase()
+      );
+      if (!company) {
+        company = addCompany({
+          name: newLead.company,
+          industry: newLead.industry || "General Industry",
+          website: newLead.website || "",
+          country: newLead.country || "",
+          city: newLead.city || "",
+          address: "",
+          phone: newLead.phone || "",
+          email: newLead.email || "",
+          salesperson: newLead.salesperson || currentUser.name,
+          status: "Lead",
+          customerValue: 0,
+          notes: `Auto-created from Lead ${newLead.id}.`,
+          tags: ["Auto-Created", "From Lead"],
+          sourceLeadId: newLead.id,
+        } as Omit<Company, "id" | "createdAt">);
+      }
+
+      if (newLead.email && newLead.email.trim()) {
+        const existingContact = contacts.find(
+          (c) => c.email.trim().toLowerCase() === newLead.email.trim().toLowerCase()
+        );
+        if (!existingContact) {
+          const nameParts = newLead.name.trim().split(" ");
+          addContact({
+            firstName: nameParts[0] || newLead.name || "Lead",
+            lastName: nameParts.slice(1).join(" ") || "",
+            position: newLead.jobTitle || "",
+            companyId: company.id,
+            email: newLead.email,
+            phone: newLead.phone || "",
+            whatsapp: newLead.whatsapp,
+            country: newLead.country || "",
+            city: newLead.city || "",
+            status: "Active",
+            leadSource: newLead.source || "Lead Form",
+            salesperson: newLead.salesperson || currentUser.name,
+            notes: `Auto-created from Lead ${newLead.id}. ${newLead.notes || ""}`.trim(),
+            tags: ["Auto-Created", "From Lead"],
+          });
+        }
+      }
+
+      // Kick off the AI business-profile analysis in the background -- it's
+      // fine if this takes a moment or even fails; the profile still works
+      // without it and can always be regenerated from the Company 360 drawer.
+      void runCompanyAIAnalysis(company.id);
+    }
+
     return newLead;
   };
 
@@ -1743,6 +1878,60 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEmailCampaigns((prev) => prev.filter((c) => c.id !== id));
   };
 
+  // Inbox / reply-tracking: scans the workspace's own connected mailbox (via
+  // IMAP, using whatever webmail credentials are on the active tenant) for
+  // any reply from this campaign's audience, and records who has replied so
+  // the Email Marketing view can stop sending them further follow-ups.
+  const checkCampaignReplies = async (campaignId: string): Promise<void> => {
+    const campaign = emailCampaigns.find((c) => c.id === campaignId);
+    if (!campaign) return;
+
+    const emailsByAudienceId = new Map<string, string>();
+    campaign.audienceIds.forEach((id) => {
+      const email =
+        campaign.audienceType === "Leads"
+          ? leads.find((l) => l.id === id)?.email
+          : contacts.find((c) => c.id === id)?.email;
+      if (email && email.trim()) emailsByAudienceId.set(id, email.trim().toLowerCase());
+    });
+
+    const addresses = Array.from(new Set(emailsByAudienceId.values()));
+    if (addresses.length === 0) {
+      updateEmailCampaign(campaignId, { lastReplyCheckAt: new Date().toISOString() });
+      return;
+    }
+
+    try {
+      const webmail = activeTenant?.webmailConfig;
+      const res = await apiFetch("/api/webmail/check-replies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: webmail?.email,
+          password: webmail?.password,
+          imapHost: webmail?.imapHost,
+          imapPort: webmail?.imapPort,
+          imapEncryption: webmail?.imapEncryption,
+          addresses,
+          sinceDate: campaign.createdDate,
+        }),
+      });
+      const data = await res.json();
+      const repliedSet = new Set<string>(data.repliedEmails || []);
+      const newlyReplied = Array.from(emailsByAudienceId.entries())
+        .filter(([, email]) => repliedSet.has(email))
+        .map(([id]) => id);
+      const mergedReplied = Array.from(new Set([...(campaign.repliedAudienceIds || []), ...newlyReplied]));
+
+      updateEmailCampaign(campaignId, {
+        repliedAudienceIds: mergedReplied,
+        lastReplyCheckAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error("[CRMContext] checkCampaignReplies failed:", err);
+    }
+  };
+
   const clearAllData = () => {
     setRawCompanies([]);
     setContacts([]);
@@ -1950,6 +2139,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addEmailCampaign,
         updateEmailCampaign,
         deleteEmailCampaign,
+        checkCampaignReplies,
+
+        runCompanyAIAnalysis,
+        addCallLogEntry,
+        deleteCallLogEntry,
 
         clearAllData,
 

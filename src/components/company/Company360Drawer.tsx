@@ -24,9 +24,21 @@ import {
   CornerDownRight,
   ShieldCheck,
   ShieldAlert,
+  IdCard,
+  PhoneCall,
+  Trash2,
 } from "lucide-react";
-import { CustomerStatus } from "../../types";
+import { CustomerStatus, CallLogEntry } from "../../types";
 import { apiFetch } from "../../lib/apiClient";
+
+const CALL_OUTCOMES: CallLogEntry["outcome"][] = [
+  "Connected",
+  "No Answer",
+  "Voicemail",
+  "Follow-Up Needed",
+  "Not Interested",
+  "Closed",
+];
 
 export const Company360Drawer: React.FC = () => {
   const {
@@ -47,11 +59,22 @@ export const Company360Drawer: React.FC = () => {
     setQuickCreateOpen,
     setQuickCreateType,
     currentUser,
+    runCompanyAIAnalysis,
+    addCallLogEntry,
+    deleteCallLogEntry,
   } = useCRM();
 
   const [activeTab, setActiveTab] = useState<
-    "overview" | "deals" | "invoices" | "timeline" | "comments" | "ai"
+    "overview" | "deals" | "invoices" | "timeline" | "comments" | "ai" | "profile"
   >("overview");
+
+  // Business Profile tab state
+  const [isProfileAnalyzing, setIsProfileAnalyzing] = useState(false);
+  const [callDate, setCallDate] = useState(new Date().toISOString().split("T")[0]);
+  const [callDuration, setCallDuration] = useState(5);
+  const [callOutcome, setCallOutcome] = useState<CallLogEntry["outcome"]>("Connected");
+  const [callContactId, setCallContactId] = useState("");
+  const [callSummary, setCallSummary] = useState("");
 
   // Inline activity logging state
   const [newActivityType, setNewActivityType] = useState<any>("Call");
@@ -168,6 +191,32 @@ export const Company360Drawer: React.FC = () => {
     } finally {
       setIsGeneratingPitch(false);
     }
+  };
+
+  const handleRunProfileAnalysis = async () => {
+    setIsProfileAnalyzing(true);
+    try {
+      await runCompanyAIAnalysis(company.id);
+    } finally {
+      setIsProfileAnalyzing(false);
+    }
+  };
+
+  const handleLogCall = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!callSummary.trim()) return;
+    const contact = companyContacts.find((c) => c.id === callContactId);
+    addCallLogEntry(company.id, {
+      contactId: contact?.id,
+      contactName: contact ? `${contact.firstName} ${contact.lastName}`.trim() : undefined,
+      date: callDate,
+      durationMinutes: callDuration,
+      outcome: callOutcome,
+      summary: callSummary.trim(),
+    });
+    setCallSummary("");
+    setCallDuration(5);
+    setCallOutcome("Connected");
   };
 
   const statusColors: Record<CustomerStatus, string> = {
@@ -299,6 +348,7 @@ export const Company360Drawer: React.FC = () => {
         <div className="flex border-b border-slate-200 px-6 bg-white overflow-x-auto">
           {[
             { id: "overview", label: "Overview & Contacts", icon: Building2 },
+            { id: "profile", label: "Business Profile", icon: IdCard },
             { id: "deals", label: `Deals (${companyDeals.length})`, icon: Briefcase },
             { id: "invoices", label: `Invoices & Ledger (${companyInvoices.length})`, icon: Receipt },
             { id: "timeline", label: `Activity (${companyActivities.length})`, icon: CalendarCheck },
@@ -839,6 +889,245 @@ export const Company360Drawer: React.FC = () => {
           )}
 
           {/* AI INTELLIGENCE & PITCH GENERATOR */}
+          {activeTab === "profile" && (
+            <div className="space-y-6">
+              {/* Business Details */}
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                  <IdCard className="w-3.5 h-3.5 text-indigo-600" />
+                  Business Details
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span>{company.website || "No website on file"}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span>{[company.city, company.country].filter(Boolean).join(", ") || "Location unknown"}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span>{company.phone || "No phone on file"}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span>{company.email || "No email on file"}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Briefcase className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span>{company.industry || "Industry not specified"}</span>
+                  </div>
+                  {company.sourceLeadId && (
+                    <div className="flex items-center gap-2 text-slate-600">
+                      <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span>Auto-created from lead {company.sourceLeadId}</span>
+                    </div>
+                  )}
+                </div>
+                {company.notes && (
+                  <div className="pt-2 border-t border-slate-100">
+                    <div className="text-[11px] font-semibold text-slate-500 mb-1">Notes</div>
+                    <p className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">{company.notes}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* AI Analysis */}
+              <div className="p-5 bg-[#181b21] text-white rounded-2xl border border-[#2d323f] shadow-xl space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 font-bold text-sm text-teal-300">
+                      <Sparkles className="w-4 h-4 text-teal-400" />
+                      AI Business Analysis
+                    </div>
+                    <p className="text-xs text-slate-300 max-w-lg">
+                      {company.aiAnalysis
+                        ? `Last generated ${new Date(company.aiAnalysis.generatedAt).toLocaleString()}`
+                        : "Runs automatically when this business is created from a lead."}
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleRunProfileAnalysis}
+                    disabled={isProfileAnalyzing}
+                    className="px-4 py-2 bg-[#252a36] hover:bg-[#2f3544] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm border border-[#3d4455] transition-all shrink-0"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                    {isProfileAnalyzing ? "Analyzing..." : company.aiAnalysis ? "Regenerate" : "Run Analysis"}
+                  </button>
+                </div>
+
+                {company.aiAnalysis && (
+                  <div className="space-y-4 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="p-3 bg-[#121418] rounded-xl border border-[#2d323f]">
+                        <div className="text-[11px] text-slate-400 font-semibold">Health Score</div>
+                        <div className="text-2xl font-extrabold text-teal-300 font-mono mt-0.5">
+                          {company.aiAnalysis.healthScore}
+                          <span className="text-xs font-normal text-slate-500">/100</span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">{company.aiAnalysis.healthStatus}</div>
+                      </div>
+                      <div className="p-3 bg-[#121418] rounded-xl border border-[#2d323f]">
+                        <div className="text-[11px] text-slate-400 font-semibold">Churn Risk</div>
+                        <div
+                          className={`text-lg font-bold mt-0.5 ${
+                            company.aiAnalysis.churnRisk === "High" || company.aiAnalysis.churnRisk === "Critical"
+                              ? "text-rose-400"
+                              : company.aiAnalysis.churnRisk === "Medium"
+                              ? "text-amber-400"
+                              : "text-emerald-400"
+                          }`}
+                        >
+                          {company.aiAnalysis.churnRisk}
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">{company.aiAnalysis.churnReason}</p>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-slate-200 leading-relaxed">{company.aiAnalysis.summary}</p>
+
+                    {company.aiAnalysis.actionableRecommendations.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        <span className="font-semibold text-slate-300 text-[11px] uppercase tracking-wide">
+                          Recommended Actions
+                        </span>
+                        {company.aiAnalysis.actionableRecommendations.map((item, idx) => (
+                          <div key={idx} className="flex items-center gap-2 text-slate-300 text-xs">
+                            <ArrowUpRight className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                            <span>{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Call Log */}
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                  <PhoneCall className="w-3.5 h-3.5 text-indigo-600" />
+                  Call Log ({(company.callLog || []).length})
+                </h4>
+
+                <form onSubmit={handleLogCall} className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">Contact</label>
+                    <select
+                      value={callContactId}
+                      onChange={(e) => setCallContactId(e.target.value)}
+                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    >
+                      <option value="">Unspecified</option>
+                      {companyContacts.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.firstName} {c.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">Date</label>
+                    <input
+                      type="date"
+                      value={callDate}
+                      onChange={(e) => setCallDate(e.target.value)}
+                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">Duration (min)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={callDuration}
+                      onChange={(e) => setCallDuration(Number(e.target.value) || 0)}
+                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">Outcome</label>
+                    <select
+                      value={callOutcome}
+                      onChange={(e) => setCallOutcome(e.target.value as CallLogEntry["outcome"])}
+                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    >
+                      {CALL_OUTCOMES.map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">Summary</label>
+                    <textarea
+                      value={callSummary}
+                      onChange={(e) => setCallSummary(e.target.value)}
+                      rows={2}
+                      placeholder="What was discussed on the call..."
+                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs resize-none"
+                    />
+                  </div>
+                  <div className="sm:col-span-2 flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={!callSummary.trim()}
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Log Call
+                    </button>
+                  </div>
+                </form>
+
+                <div className="space-y-2">
+                  {(company.callLog || []).length === 0 && (
+                    <p className="text-xs text-slate-400 text-center py-4">No calls logged yet.</p>
+                  )}
+                  {(company.callLog || []).map((entry) => (
+                    <div key={entry.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-700">
+                          <span>{new Date(entry.date).toLocaleDateString()}</span>
+                          <span className="text-slate-300">•</span>
+                          <span>{entry.durationMinutes} min</span>
+                          <span className="text-slate-300">•</span>
+                          <span
+                            className={
+                              entry.outcome === "Connected" || entry.outcome === "Closed"
+                                ? "text-emerald-600"
+                                : entry.outcome === "Not Interested"
+                                ? "text-rose-600"
+                                : "text-amber-600"
+                            }
+                          >
+                            {entry.outcome}
+                          </span>
+                          {entry.contactName && (
+                            <>
+                              <span className="text-slate-300">•</span>
+                              <span className="text-slate-500">{entry.contactName}</span>
+                            </>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-600">{entry.summary}</p>
+                        <p className="text-[10px] text-slate-400">Logged by {entry.loggedBy}</p>
+                      </div>
+                      <button
+                        onClick={() => deleteCallLogEntry(company.id, entry.id)}
+                        className="text-slate-300 hover:text-rose-500 shrink-0"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === "ai" && (
             <div className="space-y-6">
               {/* Action Banner */}

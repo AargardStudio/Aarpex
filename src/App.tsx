@@ -17,6 +17,7 @@ import { RevenueView } from "./components/views/RevenueView";
 import { StripeView } from "./components/views/StripeView";
 import { AiInsightsView } from "./components/views/AiInsightsView";
 import { EmailMarketingView } from "./components/views/EmailMarketingView";
+import { InboxView } from "./components/views/InboxView";
 import { ReportsView } from "./components/views/ReportsView";
 import { SettingsView } from "./components/views/SettingsView";
 import { Company360Drawer } from "./components/company/Company360Drawer";
@@ -25,6 +26,7 @@ import { UserAccessControlModal } from "./components/auth/UserAccessControlModal
 import { WorkspaceModal } from "./components/modals/WorkspaceModal";
 import { AuthPage } from "./components/auth/AuthPage";
 import { EmailComposeModal } from "./components/modals/EmailComposeModal";
+import { FloatingAIChat } from "./components/common/FloatingAIChat";
 
 const CRMMainContent: React.FC = () => {
   const {
@@ -110,6 +112,8 @@ const CRMMainContent: React.FC = () => {
         return <AiInsightsView />;
       case "emailmarketing":
         return <EmailMarketingView />;
+      case "inbox":
+        return <InboxView />;
       case "reports":
         return <ReportsView />;
       case "settings":
@@ -164,6 +168,9 @@ const CRMMainContent: React.FC = () => {
         contactId={emailComposeProps.contactId}
         dealId={emailComposeProps.dealId}
       />
+
+      {/* Floating AI Chat -- available on every signed-in screen */}
+      <FloatingAIChat />
     </div>
   );
 };

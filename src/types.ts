@@ -168,10 +168,52 @@ export interface User {
   status?: "Active" | "Pending" | "Suspended";
 }
 
+// ----------------------------------------------------------------------------
+// Business Profile — the AI-analysis + call-log layer that rides along with
+// a Company record. A "business profile" isn't a separate entity: it's this
+// bundle of fields living on the Company that gets auto-populated the moment
+// a Lead is added, and shown on the Company 360 drawer's own tab.
+// ----------------------------------------------------------------------------
+export interface CompanyAIAnalysis {
+  healthScore: number;
+  healthStatus: "Healthy" | "Stable" | "At Risk" | "Critical";
+  churnRisk: "Low" | "Medium" | "High" | "Critical";
+  churnReason: string;
+  summary: string;
+  actionableRecommendations: string[];
+  opportunities?: Array<{
+    type: string;
+    title: string;
+    description: string;
+    estimatedValue?: number;
+    confidence?: string;
+  }>;
+  recommendedAction?: string;
+  generatedAt: string;
+  source: "gemini" | "heuristic";
+}
+
+export interface CallLogEntry {
+  id: string;
+  contactId?: string;
+  contactName?: string;
+  date: string;
+  durationMinutes: number;
+  outcome: "Connected" | "No Answer" | "Voicemail" | "Follow-Up Needed" | "Not Interested" | "Closed";
+  summary: string;
+  loggedBy: string;
+  createdAt: string;
+}
+
 export interface Company {
   id: string;
   name: string;
   logo?: string;
+  // Business Profile fields (see above) — all optional so existing
+  // companies created before this feature keep working unchanged.
+  aiAnalysis?: CompanyAIAnalysis;
+  callLog?: CallLogEntry[];
+  sourceLeadId?: string;
   industry: string;
   website: string;
   country: string;
@@ -288,6 +330,11 @@ export interface EmailCampaign {
   startDate?: string;
   salesperson: string;
   notes?: string;
+  // Reply-tracking (Inbox section): audienceIds confirmed to have replied via
+  // IMAP inbox scan -- their remaining scheduled follow-up steps are
+  // auto-paused once they show up here.
+  repliedAudienceIds?: string[];
+  lastReplyCheckAt?: string;
 }
 
 export interface Deal {

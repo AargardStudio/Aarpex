@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import { GoogleGenAI } from "@google/genai";
 import Stripe from "stripe";
 import nodemailer from "nodemailer";
+import { ImapFlow } from "imapflow";
 import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
@@ -1155,6 +1156,91 @@ Return pure valid JSON only.`;
   }
 });
 
+// AI Chat Assistant — powers the floating chat bubble ("Sales Intelligence
+// Copilot") in the bottom-right corner of every screen. It answers
+// questions using a compact summary of the workspace's own CRM data (never
+// raw record dumps, to keep prompts small) and can suggest a screen to
+// navigate to, but never creates/edits/deletes anything itself.
+const VALID_NAV_VIEWS = [
+  "Dashboard", "Leads", "Contacts", "Companies", "Deals", "Pipelines",
+  "Activities", "Invoices", "Payments", "Revenue", "Stripe", "Tasks",
+  "AI Insights", "Email Marketing", "Inbox", "Reports", "Settings",
+];
+
+app.post("/api/ai/chat-assistant", async (req, res) => {
+  try {
+    const { message, history, context } = req.body;
+    if (!message || typeof message !== "string") {
+      return res.status(400).json({ error: "message is required" });
+    }
+
+    const lowerMsg = message.toLowerCase();
+    const navKeywordMap: Record<string, string> = {
+      lead: "Leads", contact: "Contacts", compan: "Companies", deal: "Deals",
+      pipeline: "Pipelines", activit: "Activities", invoice: "Invoices",
+      payment: "Payments", revenue: "Revenue", stripe: "Stripe", task: "Tasks",
+      insight: "AI Insights", campaign: "Email Marketing", "email market": "Email Marketing",
+      inbox: "Inbox", repl: "Inbox", report: "Reports", setting: "Settings",
+      dashboard: "Dashboard",
+    };
+    let fallbackNav: string | null = null;
+    if (/\b(show|open|go to|take me|navigate|view)\b/.test(lowerMsg)) {
+      for (const [kw, nav] of Object.entries(navKeywordMap)) {
+        if (lowerMsg.includes(kw)) {
+          fallbackNav = nav;
+          break;
+        }
+      }
+    }
+
+    const ctx = context || {};
+    const fallbackReply = fallbackNav
+      ? `Opening ${fallbackNav} for you now.`
+      : `Here's a quick snapshot: ${ctx.leadsCount ?? 0} leads, ${ctx.openDealsCount ?? 0} open deals worth $${(ctx.openDealsValue ?? 0).toLocaleString()}, and ${ctx.overdueInvoicesCount ?? 0} overdue invoices. Ask me something more specific and I'll dig into it.`;
+
+    const prompt = `You are the AI assistant embedded in AarPex, a Sales Intelligence System built by Aargard Business Solutions. You live in a small floating chat bubble in the corner of the app.
+
+Here is a compact snapshot of the signed-in user's workspace data (use ONLY this to answer -- never invent numbers or records that aren't here):
+${JSON.stringify(ctx, null, 2)}
+
+Recent conversation (oldest first):
+${JSON.stringify((history || []).slice(-8))}
+
+The user just said: "${message}"
+
+Reply conversationally and concisely (2-4 sentences, no bullet points) using the data above. If the user is asking to see, open, or navigate to a specific screen, also set "navigateTo" to the single best-matching value from this exact list: ${VALID_NAV_VIEWS.map((v) => `"${v}"`).join(", ")}. If no navigation is being requested, set "navigateTo" to null. You cannot create, edit, or delete any records -- if asked to do so, say so plainly and suggest where in the app they can do it themselves.
+
+Return pure JSON only: {"reply": string, "navigateTo": string | null}`;
+
+    const rawAiText = await callGeminiSafe(prompt);
+    if (rawAiText) {
+      try {
+        const parsed = JSON.parse(rawAiText);
+        const navigateTo = VALID_NAV_VIEWS.includes(parsed.navigateTo) ? parsed.navigateTo : null;
+        return res.json({
+          reply: parsed.reply || fallbackReply,
+          navigateTo,
+          source: "gemini",
+        });
+      } catch {
+        // Fall through to heuristic reply below
+      }
+    }
+
+    return res.json({
+      reply: fallbackReply,
+      navigateTo: fallbackNav,
+      source: "heuristic",
+    });
+  } catch (err: any) {
+    res.json({
+      reply: "I ran into an issue reaching the AI service just now -- try again in a moment.",
+      navigateTo: null,
+      source: "fallback",
+    });
+  }
+});
+
 // Stripe Invoicing Integration Endpoints
 
 // 1. Get Stripe configuration status
@@ -2204,6 +2290,99 @@ app.post("/api/webmail/send-email", async (req, res) => {
       success: false,
       error: err.message || "Failed to dispatch email.",
     });
+  }
+});
+
+// Inbox reply-tracking: checks the tenant's own mailbox (via IMAP, using the
+// same webmail credentials already stored for sending) for any reply from a
+// given list of lead/contact email addresses -- used to auto-pause further
+// Email Marketing follow-ups once someone has actually written back. Client
+// sends the tenant's IMAP config per-request (server is stateless), exactly
+// like /api/webmail/send-email does for SMTP.
+app.post("/api/webmail/check-replies", async (req, res) => {
+  const {
+    email,
+    password,
+    imapHost,
+    imapPort = 993,
+    imapEncryption = "SSL",
+    addresses = [],
+    sinceDate,
+  } = req.body || {};
+
+  const cleanAddresses: string[] = Array.isArray(addresses)
+    ? addresses.filter((a: any) => typeof a === "string" && a.trim()).map((a: string) => a.trim().toLowerCase())
+    : [];
+
+  if (cleanAddresses.length === 0) {
+    return res.json({ repliedEmails: [], checked: 0, simulated: false, checkedAt: new Date().toISOString() });
+  }
+
+  // No real mailbox credentials configured yet -- can't check anything, but
+  // this isn't an error, just "nothing to report" so the UI can say so.
+  if (!password || !password.trim() || !email || !email.trim() || !imapHost || !imapHost.trim()) {
+    return res.json({
+      repliedEmails: [],
+      checked: cleanAddresses.length,
+      simulated: true,
+      checkedAt: new Date().toISOString(),
+      message: "No webmail IMAP credentials configured for this workspace yet -- connect one in Settings to enable real reply detection.",
+    });
+  }
+
+  let client: ImapFlow | null = null;
+  try {
+    client = new ImapFlow({
+      host: imapHost.trim(),
+      port: Number(imapPort) || 993,
+      secure: (imapEncryption || "SSL").toUpperCase() !== "STARTTLS",
+      auth: { user: email.trim(), pass: password.trim() },
+      logger: false,
+      tls: { rejectUnauthorized: false },
+    });
+
+    await client.connect();
+    const lock = await client.getMailboxLock("INBOX");
+    const repliedEmails = new Set<string>();
+
+    try {
+      const searchWindow = sinceDate ? new Date(sinceDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      for (const address of cleanAddresses) {
+        try {
+          const uids = await client.search({ from: address, since: searchWindow }, { uid: true });
+          if (uids && uids.length > 0) {
+            repliedEmails.add(address);
+          }
+        } catch (perAddressErr) {
+          // One address failing to search shouldn't abort the whole batch.
+          console.error(`[check-replies] search failed for ${address}:`, perAddressErr);
+        }
+      }
+    } finally {
+      lock.release();
+    }
+
+    return res.json({
+      repliedEmails: Array.from(repliedEmails),
+      checked: cleanAddresses.length,
+      simulated: false,
+      checkedAt: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    console.error("[check-replies] IMAP connection failed:", err.message || err);
+    return res.status(200).json({
+      repliedEmails: [],
+      checked: cleanAddresses.length,
+      simulated: true,
+      checkedAt: new Date().toISOString(),
+      message: `Couldn't connect to the mailbox to check for replies: ${err.message || "unknown error"}`,
+    });
+  } finally {
+    try {
+      await client?.logout();
+    } catch {
+      // best-effort cleanup only
+    }
   }
 });
 
