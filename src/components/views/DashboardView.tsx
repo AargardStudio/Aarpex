@@ -13,7 +13,9 @@ import {
   Sparkles,
   ArrowUpRight,
   ChevronRight,
+  ChevronDown,
   ShieldCheck,
+  Megaphone,
 } from "lucide-react";
 import {
   BarChart,
@@ -26,6 +28,7 @@ import {
   Legend,
 } from "recharts";
 import { apiFetch } from "../../lib/apiClient";
+import { RELEASE_NOTES } from "../../data/releaseNotes";
 
 export const DashboardView: React.FC = () => {
   const {
@@ -45,6 +48,9 @@ export const DashboardView: React.FC = () => {
 
   const [briefing, setBriefing] = useState<any>(null);
   const [isBriefingLoading, setIsBriefingLoading] = useState(false);
+  const [showAllUpdates, setShowAllUpdates] = useState(false);
+  const latestRelease = RELEASE_NOTES[0];
+  const olderReleases = RELEASE_NOTES.slice(1);
 
   // Computed Metrics
   const openDeals = deals.filter((d) => d.status === "Open");
@@ -243,6 +249,85 @@ export const DashboardView: React.FC = () => {
                 <span className="text-slate-300 text-[11px] leading-snug">
                   {alert}
                 </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* What's New in AarPex -- version banner + marketed release highlights */}
+      <div className="bg-[#181b21] rounded-2xl p-4 sm:p-5 border border-[#2d323f] shadow-lg text-white space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <span className="w-7 h-7 rounded-lg bg-teal-500/15 border border-teal-500/30 flex items-center justify-center shrink-0">
+              <Megaphone className="w-3.5 h-3.5 text-teal-400" />
+            </span>
+            <h3 className="text-sm font-bold text-white">What&apos;s New in AarPex</h3>
+            <span className="px-2 py-0.5 rounded-full bg-[#252a36] border border-[#3d4455] text-teal-300 text-[10px] font-bold font-mono">
+              v{latestRelease.version}
+            </span>
+          </div>
+          {olderReleases.length > 0 && (
+            <button
+              onClick={() => setShowAllUpdates((v) => !v)}
+              className="text-xs text-teal-400 hover:text-teal-300 font-semibold flex items-center gap-0.5"
+            >
+              {showAllUpdates ? "Hide earlier updates" : "See earlier updates"}
+              <ChevronDown
+                className={`w-3.5 h-3.5 transition-transform ${showAllUpdates ? "rotate-180" : ""}`}
+              />
+            </button>
+          )}
+        </div>
+
+        {/* Latest release, front and center */}
+        <div className="p-4 bg-gradient-to-br from-[#121418] to-[#161a21] rounded-xl border border-[#2d323f] space-y-2.5">
+          <div className="flex items-center justify-between flex-wrap gap-1">
+            <span className="font-extrabold text-teal-300 text-sm sm:text-base tracking-tight">
+              {latestRelease.headline}
+            </span>
+            <span className="text-[10px] text-slate-500 font-mono">
+              {new Date(latestRelease.date).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </span>
+          </div>
+          <p className="text-xs text-slate-300 leading-relaxed">{latestRelease.tagline}</p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1.5">
+            {latestRelease.highlights.map((h) => (
+              <div key={h.title} className="flex items-start gap-2 p-2.5 bg-[#181b21]/70 rounded-lg border border-[#2d323f]">
+                <Sparkles className="w-3.5 h-3.5 text-teal-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-xs font-bold text-white leading-snug">{h.title}</div>
+                  <div className="text-[11px] text-slate-400 leading-snug mt-0.5">{h.description}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Earlier releases, collapsed by default */}
+        {showAllUpdates && (
+          <div className="space-y-2 pt-1 border-t border-[#2d323f] animate-in fade-in duration-150">
+            {olderReleases.map((r) => (
+              <div key={r.version} className="p-3 bg-[#121418] rounded-lg border border-[#2d323f]">
+                <div className="flex items-center justify-between flex-wrap gap-1">
+                  <span className="text-xs font-bold text-slate-200">
+                    {r.headline}{" "}
+                    <span className="text-slate-500 font-mono font-normal">v{r.version}</span>
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    {new Date(r.date).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1 leading-snug">{r.tagline}</p>
               </div>
             ))}
           </div>

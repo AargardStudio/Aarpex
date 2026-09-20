@@ -13,6 +13,16 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-09-20
+
+### Added
+
+- "What's New in AarPex" panel on the Dashboard home page: shows the
+  current version, the latest release's marketed highlights, and an
+  expandable history of earlier releases. Content lives in
+  `src/data/releaseNotes.ts`, updated alongside this file per the
+  convention in `CLAUDE.md`.
+
 ## [1.5.0] - 2026-09-20
 
 ### Changed
