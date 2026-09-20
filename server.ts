@@ -664,6 +664,8 @@ app.post("/api/ai/email-campaign", async (req, res) => {
       frequencyDays, // resolved cadence in days
       senderName,
       senderCompany,
+      productName, // optional: the specific product/service this campaign is pitching
+      productPitch, // optional: that product's marketing pitch, to seed the email copy
     } = req.body;
 
     const totalSteps = 1 + Math.max(0, Number(followUpCount) || 0);
@@ -678,10 +680,11 @@ app.post("/api/ai/email-campaign", async (req, res) => {
         .map((p: any) => `${p.firstName || "there"} @ ${p.company || "their company"} (${p.jobTitle || "unknown role"}, ${p.industry || "unspecified industry"})`)
         .join(" | ") || "No sample provided";
 
+    const offer = productName ? `${productName}` : `what ${senderCompany || "we"} do`;
     const OPENINGS: Record<string, string> = {
-      "Need-Based": `Hi {{firstName}},\n\nI wanted to reach out because teams like {{company}}'s often struggle with the exact operational gap ${senderCompany || "we"} was built to close. Given your role, I think there's a clear fit worth exploring.\n\nWould a quick 15-minute call this week make sense to see if it's relevant for {{company}}?\n\nBest regards,\n${senderName || "The Team"}\n${senderCompany || ""}`,
-      "Emotional": `Hi {{firstName}},\n\nMost teams at companies like {{company}} don't realize how much time and momentum they're losing until it's already cost them a quarter. I don't want that to be your story.\n\nCan we grab 15 minutes so I can show you what a better path looks like for {{company}}?\n\nWarmly,\n${senderName || "The Team"}\n${senderCompany || ""}`,
-      "Problem-Solution": `Hi {{firstName}},\n\nHere's the problem I keep seeing at companies like {{company}}: slow, manual processes quietly eating margin. Here's the fix: a system built to close exactly that gap, with measurable results in weeks, not quarters.\n\nOpen to a short call this week to walk through how it would apply to {{company}} specifically?\n\nBest,\n${senderName || "The Team"}\n${senderCompany || ""}`,
+      "Need-Based": `Hi {{firstName}},\n\nI wanted to reach out because teams like {{company}}'s often struggle with the exact operational gap ${offer} was built to close. Given your role, I think there's a clear fit worth exploring.\n\nWould a quick 15-minute call this week make sense to see if it's relevant for {{company}}?\n\nBest regards,\n${senderName || "The Team"}\n${senderCompany || ""}`,
+      "Emotional": `Hi {{firstName}},\n\nMost teams at companies like {{company}} don't realize how much time and momentum they're losing until it's already cost them a quarter. I don't want that to be your story${productName ? ` — that's exactly why we built ${productName}` : ""}.\n\nCan we grab 15 minutes so I can show you what a better path looks like for {{company}}?\n\nWarmly,\n${senderName || "The Team"}\n${senderCompany || ""}`,
+      "Problem-Solution": `Hi {{firstName}},\n\nHere's the problem I keep seeing at companies like {{company}}: slow, manual processes quietly eating margin. Here's the fix: ${offer}, with measurable results in weeks, not quarters.\n\nOpen to a short call this week to walk through how it would apply to {{company}} specifically?\n\nBest,\n${senderName || "The Team"}\n${senderCompany || ""}`,
     };
 
     const buildFallbackStep = (stepNumber: number, stepTechnique: string, delayDays: number) => {
@@ -699,10 +702,16 @@ app.post("/api/ai/email-campaign", async (req, res) => {
       buildFallbackStep(i + 1, resolveTechnique(i), i === 0 ? 0 : cadenceDays)
     );
 
+    const productLine = productName
+      ? `\n\nThis campaign is specifically pitching the following product/service — center every email around it rather than speaking generically: "${productName}"${
+          productPitch ? `. Its marketing pitch: "${productPitch}"` : ""
+        }. Weave its concrete value into the opening and the call-to-action.`
+      : "";
+
     const prompt = `You are a world-class B2B email marketing strategist writing an outbound email SEQUENCE for ${senderCompany || "a B2B company"}.
 
 Audience: ${audienceCount || (audienceSample || []).length || "several"} ${audienceType === "Contacts" ? "existing contacts" : "sales leads"}.
-Sample of who's in this audience: ${sampleLine}
+Sample of who's in this audience: ${sampleLine}${productLine}
 
 Write a sequence of exactly ${totalSteps} email(s): step 1 is the initial outreach, steps 2+ are follow-ups spaced ${cadenceDays} day(s) apart (cadence: ${frequency || "Weekly"}).
 
@@ -1162,7 +1171,7 @@ Return pure valid JSON only.`;
 // raw record dumps, to keep prompts small) and can suggest a screen to
 // navigate to, but never creates/edits/deletes anything itself.
 const VALID_NAV_VIEWS = [
-  "Dashboard", "Leads", "Contacts", "Companies", "Deals", "Pipelines",
+  "Dashboard", "Leads", "Contacts", "Companies", "Products", "Deals", "Pipelines",
   "Activities", "Invoices", "Payments", "Revenue", "Stripe", "Tasks",
   "AI Insights", "Email Marketing", "Inbox", "Reports", "Settings",
 ];
@@ -1176,7 +1185,7 @@ app.post("/api/ai/chat-assistant", async (req, res) => {
 
     const lowerMsg = message.toLowerCase();
     const navKeywordMap: Record<string, string> = {
-      lead: "Leads", contact: "Contacts", compan: "Companies", deal: "Deals",
+      lead: "Leads", contact: "Contacts", compan: "Companies", product: "Products", service: "Products", deal: "Deals",
       pipeline: "Pipelines", activit: "Activities", invoice: "Invoices",
       payment: "Payments", revenue: "Revenue", stripe: "Stripe", task: "Tasks",
       insight: "AI Insights", campaign: "Email Marketing", "email market": "Email Marketing",
@@ -1238,6 +1247,149 @@ Return pure JSON only: {"reply": string, "navigateTo": string | null}`;
       navigateTo: null,
       source: "fallback",
     });
+  }
+});
+
+// AI-assisted Products/Services setup: turns a plain-language description
+// of an offering (agency retainer, SaaS subscription, tour package, B2B
+// product, anything) into a structured draft -- name, pricing model, a
+// marketing pitch, and a target-audience fit profile (which industries,
+// company types, tags, lead sources it should be sold to) -- plus a set of
+// positioning insights (pitch angles, objection handling). Also used to
+// re-run just the AI insight for an already-saved product. Never persists
+// anything itself; the client always reviews/edits before saving.
+app.post("/api/ai/product-assist", async (req, res) => {
+  try {
+    const { rawDescription, existingIndustries, existingProduct } = req.body;
+    if (!rawDescription || typeof rawDescription !== "string") {
+      return res.status(400).json({ error: "rawDescription is required" });
+    }
+
+    const text = rawDescription.trim();
+    const words = text.split(/\s+/).filter(Boolean);
+    const fallbackName = existingProduct?.name || words.slice(0, 5).join(" ") || "New Offering";
+    const lowerText = text.toLowerCase();
+
+    let fallbackType = "Other";
+    if (/retainer|agency|consult/.test(lowerText)) fallbackType = "Agency Retainer";
+    else if (/saas|software|subscription|platform|app\b/.test(lowerText)) fallbackType = "SaaS Subscription";
+    else if (/tour|trip|travel|package|itinerary/.test(lowerText)) fallbackType = "Tour Package";
+    else if (/b2b|wholesale|bulk|supply|manufactur/.test(lowerText)) fallbackType = "B2B Product";
+    else if (/one-time|one time|project|installation/.test(lowerText)) fallbackType = "One-Time Service";
+
+    let fallbackPricingModel = "Custom Quote";
+    if (/month|\/mo\b|monthly/.test(lowerText)) fallbackPricingModel = "Monthly Recurring";
+    else if (/year|annual/.test(lowerText)) fallbackPricingModel = "Annual Recurring";
+    else if (/per project|per-project/.test(lowerText)) fallbackPricingModel = "Per-Project";
+    else if (/one-time|one time|flat fee/.test(lowerText)) fallbackPricingModel = "One-Time";
+
+    const priceMatch = lowerText.match(/\$?([\d,]+(?:\.\d+)?)\s*(k\b)?/);
+    let fallbackPrice = 0;
+    if (priceMatch) {
+      fallbackPrice = parseFloat(priceMatch[1].replace(/,/g, ""));
+      if (priceMatch[2]) fallbackPrice *= 1000;
+    }
+
+    const fallbackDescription = text;
+    const fallbackPitch = `${fallbackName} helps businesses get real results, fast -- built for teams who are done settling for "good enough."`;
+    const fallbackIndustries = (existingIndustries || []).slice(0, 3);
+
+    const prompt = `You are a product-marketing strategist inside AarPex, a Sales Intelligence System. A user described an offering they sell (an agency retainer, a SaaS subscription, a tour package, a B2B product, or any other product/service). Turn it into a structured catalog entry AND a "who should we sell this to" targeting profile.
+
+${existingProduct ? `This product already exists (regenerating just the AI insight): ${JSON.stringify(existingProduct)}` : ""}
+
+User's description: "${text}"
+
+Industries already seen in this workspace's CRM data (ground your industry suggestions in these when they make sense, but you may suggest others): ${JSON.stringify(existingIndustries || [])}
+
+Return pure JSON only, matching this exact schema:
+{
+  "name": string,
+  "type": "Agency Retainer" | "SaaS Subscription" | "Tour Package" | "B2B Product" | "One-Time Service" | "Other",
+  "pricingModel": "One-Time" | "Monthly Recurring" | "Annual Recurring" | "Per-Project" | "Custom Quote",
+  "price": number,
+  "currency": string,
+  "description": string (1-2 factual sentences, no hype),
+  "pitch": string (2-3 punchy marketing sentences a salesperson could paste straight into an email -- confident, specific, benefit-led, no bland corporate-speak),
+  "tags": string[] (3-6 short tags),
+  "targetCriteria": {
+    "industries": string[] (which industries should buy this),
+    "companyStatuses": string[] (choose only from: "Prospect", "Qualified Prospect", "Active Customer", "High Value Customer", "At Risk", "Dormant", "Former Customer", "Lead"),
+    "countries": string[],
+    "tags": string[],
+    "leadSources": string[],
+    "idealCustomerNotes": string (1-2 sentences describing the ideal buyer)
+  },
+  "aiInsight": {
+    "suggestedTargetSummary": string (one sentence summarizing who to target and why),
+    "suggestedIndustries": string[],
+    "suggestedTags": string[],
+    "pitchAngles": string[] (3-4 short, punchy hooks/angles a rep could open with),
+    "objectionHandling": string[] (3-4 "Objection: ... Response: ..." style one-liners)
+  }
+}
+
+IMPORTANT: Return pure valid JSON only, without markdown fences or additional commentary.`;
+
+    const rawAiText = await callGeminiSafe(prompt);
+    if (rawAiText) {
+      try {
+        const parsed = JSON.parse(rawAiText);
+        return res.json({
+          name: parsed.name || fallbackName,
+          type: parsed.type || fallbackType,
+          pricingModel: parsed.pricingModel || fallbackPricingModel,
+          price: typeof parsed.price === "number" ? parsed.price : fallbackPrice,
+          currency: parsed.currency || "USD",
+          description: parsed.description || fallbackDescription,
+          pitch: parsed.pitch || fallbackPitch,
+          tags: parsed.tags || [],
+          targetCriteria: parsed.targetCriteria || {
+            industries: fallbackIndustries,
+            companyStatuses: [],
+            countries: [],
+            tags: [],
+            leadSources: [],
+            idealCustomerNotes: "",
+          },
+          aiInsight: parsed.aiInsight || null,
+          source: "gemini",
+        });
+      } catch {
+        // Fall through to heuristic response below
+      }
+    }
+
+    return res.json({
+      name: fallbackName,
+      type: fallbackType,
+      pricingModel: fallbackPricingModel,
+      price: fallbackPrice,
+      currency: "USD",
+      description: fallbackDescription,
+      pitch: fallbackPitch,
+      tags: [],
+      targetCriteria: {
+        industries: fallbackIndustries,
+        companyStatuses: [],
+        countries: [],
+        tags: [],
+        leadSources: [],
+        idealCustomerNotes: "",
+      },
+      aiInsight: {
+        suggestedTargetSummary: fallbackIndustries.length > 0
+          ? `Likely best fit: businesses in ${fallbackIndustries.join(", ")}.`
+          : "Add a few companies or leads first so AarPex can suggest a target industry.",
+        suggestedIndustries: fallbackIndustries,
+        suggestedTags: [],
+        pitchAngles: [`${fallbackName} is built to deliver results fast, without the usual overhead.`],
+        objectionHandling: ["Objection: \"We're not sure it's worth it.\" Response: Offer a scoped pilot or trial period to prove value before a full commitment."],
+      },
+      source: "heuristic",
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to generate product draft", details: err?.message });
   }
 });
 

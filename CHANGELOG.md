@@ -13,6 +13,26 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-09-20
+
+### Added
+
+- New **Products / Services** page: define anything you sell — agency
+  retainers, SaaS subscriptions, tour packages, one-off B2B products —
+  manually or with AI assistance (describe it in plain language and AI
+  drafts the structured fields).
+- Each product carries tag-based **target criteria** (industries, company
+  status, countries, lead sources, tags) plus an AI-generated **target
+  audience insight** (positioning, pitch angles, ideal customer profile).
+- Every product shows a **live, auto-updating match list** of which
+  existing companies, leads, and contacts currently fit its targeting.
+- **Email Marketing integration**: pick a product when building a
+  campaign to auto-suggest its matching audience and seed the AI-written
+  email copy with that product's pitch.
+- New `products` table (`supabase/migrations/0005_products.sql`) and a
+  `product_id` link on `email_campaigns` — **run this migration before
+  using the feature**.
+
 ## [1.6.0] - 2026-09-20
 
 ### Added

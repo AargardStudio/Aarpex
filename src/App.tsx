@@ -17,6 +17,7 @@ import { RevenueView } from "./components/views/RevenueView";
 import { StripeView } from "./components/views/StripeView";
 import { AiInsightsView } from "./components/views/AiInsightsView";
 import { EmailMarketingView } from "./components/views/EmailMarketingView";
+import { ProductsView } from "./components/views/ProductsView";
 import { InboxView } from "./components/views/InboxView";
 import { ReportsView } from "./components/views/ReportsView";
 import { SettingsView } from "./components/views/SettingsView";
@@ -112,6 +113,8 @@ const CRMMainContent: React.FC = () => {
         return <AiInsightsView />;
       case "emailmarketing":
         return <EmailMarketingView />;
+      case "products":
+        return <ProductsView />;
       case "inbox":
         return <InboxView />;
       case "reports":

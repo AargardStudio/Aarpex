@@ -27,6 +27,7 @@ import {
   LogOut,
   Landmark,
   Inbox as InboxIcon,
+  Package,
   X,
 } from "lucide-react";
 import { ROLE_LABELS, UserRole } from "../../types";
@@ -56,6 +57,7 @@ export const Sidebar: React.FC = () => {
     activeTenant,
     activeTenantId,
     switchTenant,
+    products,
     setCreateTenantModalOpen,
     setAuthPageOpen,
     setAuthPageMode,
@@ -82,6 +84,7 @@ export const Sidebar: React.FC = () => {
     { name: "Deals", icon: Briefcase, badge: openDealsCount, category: "Sales" },
     { name: "Pipelines", icon: GitBranch, category: "Sales" },
     { name: "Activities", icon: CalendarCheck, category: "Sales" },
+    { name: "Products", icon: Package, badge: products?.length || undefined, category: "Sales" },
 
     {
       name: "Invoices",

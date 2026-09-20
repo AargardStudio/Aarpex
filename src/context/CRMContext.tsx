@@ -28,6 +28,8 @@ import {
   EmailCampaign,
   CallLogEntry,
   CompanyAIAnalysis,
+  Product,
+  ProductAIInsight,
 } from "../types";
 import { isSupabaseAuthConfigured, getSupabaseAuthClient } from "../config/supabaseAuthClient";
 import {
@@ -77,6 +79,7 @@ export type NavView =
   | "Leads"
   | "Contacts"
   | "Companies"
+  | "Products"
   | "Deals"
   | "Pipelines"
   | "Activities"
@@ -182,6 +185,7 @@ interface CRMContextType {
   tasks: Task[];
   comments: Comment[];
   emailCampaigns: EmailCampaign[];
+  products: Product[];
 
   // Data Actions
   addCompany: (company: Omit<Company, "id" | "createdAt">) => Company;
@@ -232,6 +236,14 @@ interface CRMContextType {
   updateEmailCampaign: (id: string, updates: Partial<EmailCampaign>) => void;
   deleteEmailCampaign: (id: string) => void;
   checkCampaignReplies: (campaignId: string) => Promise<void>;
+
+  // Products / Services -- the versatile catalog (retainers, subscriptions,
+  // packages, B2B products), settable up manually or drafted by AI.
+  addProduct: (product: Omit<Product, "id" | "createdAt">) => Product;
+  updateProduct: (id: string, updates: Partial<Product>) => void;
+  deleteProduct: (id: string) => void;
+  generateProductDraft: (rawDescription: string) => Promise<Partial<Product>>;
+  runProductAIInsight: (productId: string) => Promise<void>;
 
   // Business Profile: AI analysis + manual call log riding on a Company record.
   runCompanyAIAnalysis: (companyId: string) => Promise<void>;
@@ -430,6 +442,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadTenantEntity("emailCampaigns", [] as EmailCampaign[])
   );
 
+  const [products, setProducts] = useState<Product[]>(() =>
+    loadTenantEntity("products", [] as Product[])
+  );
+
   // Every real tenant with Supabase configured mirrors its data to the
   // tenants' Postgres tables on every change. Guarded by !isBootstrapping so
   // the empty local state present before the initial fetch (below) resolves
@@ -498,6 +514,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (shouldSyncToSupabase) syncTenantTable("email_campaigns", activeTenantId, emailCampaigns);
   }, [emailCampaigns, activeTenantId]);
 
+  useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_products`, JSON.stringify(products));
+    if (shouldSyncToSupabase) syncTenantTable("products", activeTenantId, products);
+  }, [products, activeTenantId]);
+
   // Whenever the active tenant changes (including the very first time it's
   // set, by the session-bootstrap effect below), re-hydrate its records
   // from the database instead of trusting whatever's cached in localStorage
@@ -520,6 +541,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         tasksRes,
         commentsRes,
         emailCampaignsRes,
+        productsRes,
       ] = await Promise.all([
         fetchTenantTable<Company>("companies", activeTenantId),
         fetchTenantTable<Contact>("contacts", activeTenantId),
@@ -532,6 +554,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetchTenantTable<Task>("tasks", activeTenantId),
         fetchTenantTable<Comment>("comments", activeTenantId),
         fetchTenantTable<EmailCampaign>("email_campaigns", activeTenantId),
+        fetchTenantTable<Product>("products", activeTenantId),
       ]);
       if (cancelled) return;
       if (companiesRes) setRawCompanies(companiesRes);
@@ -545,6 +568,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (tasksRes) setTasks(tasksRes);
       if (commentsRes) setComments(commentsRes);
       if (emailCampaignsRes) setEmailCampaigns(emailCampaignsRes);
+      if (productsRes) setProducts(productsRes);
     })();
     return () => {
       cancelled = true;
@@ -568,6 +592,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(`crm_tenant_${activeTenantId}_tasks`, JSON.stringify(tasks));
     localStorage.setItem(`crm_tenant_${activeTenantId}_comments`, JSON.stringify(comments));
     localStorage.setItem(`crm_tenant_${activeTenantId}_emailCampaigns`, JSON.stringify(emailCampaigns));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_products`, JSON.stringify(products));
 
     // Every workspace starts genuinely empty except "pipelines" (a
     // structural default, not sample data) — see loadTenantEntity above.
@@ -594,6 +619,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTasks(loadTarget("tasks", initialTasks));
     setComments(loadTarget("comments", initialComments));
     setEmailCampaigns(loadTarget("emailCampaigns", [] as EmailCampaign[]));
+    setProducts(loadTarget("products", [] as Product[]));
     setSelectedCompanyId(null);
     setSelectedDealId(null);
   };
@@ -2034,6 +2060,113 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Products / Services -------------------------------------------------
+  const addProduct = (productData: Omit<Product, "id" | "createdAt">): Product => {
+    const newId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `prod_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const newProduct: Product = {
+      ...productData,
+      id: newId,
+      createdAt: new Date().toISOString().split("T")[0],
+      tags: productData.tags || [],
+    };
+    setProducts((prev) => [newProduct, ...prev]);
+    return newProduct;
+  };
+
+  const updateProduct = (id: string, updates: Partial<Product>) => {
+    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+  };
+
+  const deleteProduct = (id: string) => {
+    setProducts((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  // AI-assisted setup: turns a plain-language description into a structured
+  // draft the user reviews and edits before saving -- this never saves a
+  // product on its own, it only returns fields for the create/edit form to
+  // prefill. Falls back to a sensible heuristic draft if the AI call fails,
+  // so "set up by AI" never just breaks.
+  const generateProductDraft = async (rawDescription: string): Promise<Partial<Product>> => {
+    const existingIndustries = Array.from(
+      new Set([...rawCompanies.map((c) => c.industry), ...leads.map((l) => l.industry)].filter(Boolean))
+    );
+    try {
+      const res = await apiFetch("/api/ai/product-assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawDescription, existingIndustries }),
+      });
+      const data = await res.json();
+      return {
+        name: data.name || "",
+        type: data.type || "Other",
+        pricingModel: data.pricingModel || "Custom Quote",
+        price: typeof data.price === "number" ? data.price : 0,
+        currency: data.currency || activeTenant?.currency || "USD",
+        description: data.description || rawDescription,
+        pitch: data.pitch || "",
+        tags: data.tags || [],
+        targetCriteria: {
+          industries: data.targetCriteria?.industries || [],
+          companyStatuses: data.targetCriteria?.companyStatuses || [],
+          countries: data.targetCriteria?.countries || [],
+          tags: data.targetCriteria?.tags || [],
+          leadSources: data.targetCriteria?.leadSources || [],
+          idealCustomerNotes: data.targetCriteria?.idealCustomerNotes || "",
+        },
+        aiInsight: data.aiInsight
+          ? {
+              suggestedTargetSummary: data.aiInsight.suggestedTargetSummary || "",
+              suggestedIndustries: data.aiInsight.suggestedIndustries || [],
+              suggestedTags: data.aiInsight.suggestedTags || [],
+              pitchAngles: data.aiInsight.pitchAngles || [],
+              objectionHandling: data.aiInsight.objectionHandling || [],
+              generatedAt: new Date().toISOString(),
+              source: data.source === "gemini" ? "gemini" : "heuristic",
+            }
+          : undefined,
+      };
+    } catch (err) {
+      console.error("[CRMContext] generateProductDraft failed:", err);
+      return { description: rawDescription };
+    }
+  };
+
+  // Re-runs (or runs for the first time) the AI targeting/positioning
+  // insight for an already-saved product -- used when the user tweaks a
+  // product's description/criteria and wants fresh pitch angles without
+  // rebuilding the whole record.
+  const runProductAIInsight = async (productId: string): Promise<void> => {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return;
+    try {
+      const res = await apiFetch("/api/ai/product-assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rawDescription: `${product.name}: ${product.description}`,
+          existingProduct: product,
+        }),
+      });
+      const data = await res.json();
+      const insight: ProductAIInsight = {
+        suggestedTargetSummary: data.aiInsight?.suggestedTargetSummary || "",
+        suggestedIndustries: data.aiInsight?.suggestedIndustries || [],
+        suggestedTags: data.aiInsight?.suggestedTags || [],
+        pitchAngles: data.aiInsight?.pitchAngles || [],
+        objectionHandling: data.aiInsight?.objectionHandling || [],
+        generatedAt: new Date().toISOString(),
+        source: data.source === "gemini" ? "gemini" : "heuristic",
+      };
+      updateProduct(productId, { aiInsight: insight });
+    } catch (err) {
+      console.error("[CRMContext] runProductAIInsight failed:", err);
+    }
+  };
+
   const clearAllData = () => {
     setRawCompanies([]);
     setContacts([]);
@@ -2195,6 +2328,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         tasks,
         comments,
         emailCampaigns,
+        products,
 
         addCompany,
         updateCompany,
@@ -2244,6 +2378,12 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateEmailCampaign,
         deleteEmailCampaign,
         checkCampaignReplies,
+
+        addProduct,
+        updateProduct,
+        deleteProduct,
+        generateProductDraft,
+        runProductAIInsight,
 
         runCompanyAIAnalysis,
         addCallLogEntry,

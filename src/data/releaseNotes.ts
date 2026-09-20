@@ -23,6 +23,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.7.0",
+    date: "2026-09-20",
+    headline: "Sell The Right Thing To The Right People",
+    tagline: "Define what you offer once, let AI target it, and watch the matching audience build itself.",
+    highlights: [
+      {
+        title: "A home for everything you sell",
+        description: "Agency retainers, SaaS plans, tour packages, one-off B2B products -- the new Products page handles all of it, set up by hand or drafted by AI from a plain-language description.",
+      },
+      {
+        title: "AI knows who wants it",
+        description: "Every product gets an AI-generated read on its ideal customer, plus pitch angles ready to drop straight into outreach.",
+      },
+      {
+        title: "Your audience, always current",
+        description: "Set tag-based targeting once and see a live count of exactly which companies, leads, and contacts match -- no manual list-building.",
+      },
+      {
+        title: "Campaigns that already know the pitch",
+        description: "Pick a product when building an email campaign and AarPex pre-selects the matching audience and writes the copy around that product's pitch.",
+      },
+    ],
+  },
+  {
     version: "1.6.0",
     date: "2026-09-20",
     headline: "Never Miss What's New",

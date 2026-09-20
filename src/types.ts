@@ -293,6 +293,69 @@ export interface Lead {
 }
 
 // ----------------------------------------------------------------------------
+// Products / Services — the versatile catalog: agency retainers, SaaS
+// subscriptions, tour packages, one-off B2B products, anything sellable.
+// Each one can be set up manually or drafted by AI from a plain-language
+// description, and carries a "who this is for" fit profile used to surface
+// matching companies/leads/contacts and to seed Email Marketing campaigns.
+// ----------------------------------------------------------------------------
+export type ProductType =
+  | "Agency Retainer"
+  | "SaaS Subscription"
+  | "Tour Package"
+  | "B2B Product"
+  | "One-Time Service"
+  | "Other";
+
+export type ProductPricingModel =
+  | "One-Time"
+  | "Monthly Recurring"
+  | "Annual Recurring"
+  | "Per-Project"
+  | "Custom Quote";
+
+export type ProductStatus = "Active" | "Draft" | "Archived";
+
+// The "who this should be sold to" fit profile. Every field is optional and
+// additive (an empty array/undefined means "no constraint on this field") --
+// a product with no criteria at all simply matches everyone.
+export interface ProductTargetCriteria {
+  industries: string[]; // matches Company.industry / Lead.industry
+  companyStatuses: CustomerStatus[]; // e.g. "Prospect", "Active Customer"
+  countries: string[];
+  tags: string[]; // matches Company.tags / Lead.tags / Contact.tags
+  leadSources: string[]; // matches Lead.source
+  idealCustomerNotes: string; // free-text description of the ideal buyer
+}
+
+export interface ProductAIInsight {
+  suggestedTargetSummary: string;
+  suggestedIndustries: string[];
+  suggestedTags: string[];
+  pitchAngles: string[]; // short marketing hooks / angles
+  objectionHandling: string[]; // common objections + how to answer them
+  generatedAt: string;
+  source: "gemini" | "heuristic";
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  type: ProductType;
+  pricingModel: ProductPricingModel;
+  price: number;
+  currency?: string;
+  status: ProductStatus;
+  description: string; // short, factual description of the offering
+  pitch: string; // marketing pitch / positioning copy (AI-drafted or manual)
+  targetCriteria: ProductTargetCriteria;
+  aiInsight?: ProductAIInsight;
+  createdBy: string;
+  createdAt: string;
+  tags: string[];
+}
+
+// ----------------------------------------------------------------------------
 // Email Marketing — AI-generated outbound sequences targeting leads/contacts.
 // ----------------------------------------------------------------------------
 export type SalesTechnique = "Need-Based" | "Emotional" | "Problem-Solution";
@@ -318,6 +381,10 @@ export interface EmailStep {
 export interface EmailCampaign {
   id: string;
   name: string;
+  // Optional link to the Product/Service this campaign is promoting --
+  // when set, the audience picker can pre-select this product's matches
+  // and its pitch seeds the AI-generated email copy.
+  productId?: string;
   audienceType: "Leads" | "Contacts";
   audienceIds: string[];
   frequency: EmailFrequency;

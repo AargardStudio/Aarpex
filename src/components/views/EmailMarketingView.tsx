@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { useCRM } from "../../context/CRMContext";
 import { EmailCampaign, EmailFrequency, EmailCampaignTechnique, EmailStep, SalesTechnique } from "../../types";
 import { apiFetch } from "../../lib/apiClient";
+import { computeProductMatches } from "../../lib/productMatching";
 import {
   Mail,
   Plus,
@@ -23,6 +24,8 @@ import {
   Target,
   Wrench,
   Shuffle,
+  Package,
+  Wand2,
 } from "lucide-react";
 
 // ----------------------------------------------------------------------------
@@ -248,13 +251,33 @@ const CampaignCard: React.FC<{
 // New Campaign Wizard
 // ----------------------------------------------------------------------------
 const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const { leads, contacts, companies, activeTenant, currentUser, addEmailCampaign, addActivity } = useCRM();
+  const { leads, contacts, companies, products, activeTenant, currentUser, addEmailCampaign, addActivity } = useCRM();
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [name, setName] = useState("");
   const [audienceType, setAudienceType] = useState<"Leads" | "Contacts">("Leads");
   const [audienceSearch, setAudienceSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState<string>("");
+
+  const selectedProduct = products.find((p) => p.id === selectedProductId) || null;
+
+  const productMatches = useMemo(() => {
+    if (!selectedProduct) return null;
+    return computeProductMatches(selectedProduct, { companies, leads, contacts });
+  }, [selectedProduct, companies, leads, contacts]);
+
+  const handleApplyProductAudience = () => {
+    if (!productMatches) return;
+    const matchIds =
+      audienceType === "Leads"
+        ? productMatches.leads.map((l) => l.id)
+        : productMatches.contacts.map((c) => c.id);
+    setSelectedIds(matchIds);
+    if (!name.trim() && selectedProduct) {
+      setName(`${selectedProduct.name} — Outreach`);
+    }
+  };
   const [frequency, setFrequency] = useState<EmailFrequency>("Weekly");
   const [customDays, setCustomDays] = useState(10);
   const [followUpCount, setFollowUpCount] = useState(2);
@@ -346,6 +369,8 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           frequencyDays,
           senderName: currentUser?.name,
           senderCompany: activeTenant?.companyName || activeTenant?.name,
+          productName: selectedProduct?.name,
+          productPitch: selectedProduct?.pitch,
         }),
       });
       const data = await res.json();
@@ -423,6 +448,7 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
 
       addEmailCampaign({
         name: name.trim() || `${audienceType} Campaign`,
+        productId: selectedProductId || undefined,
         audienceType,
         audienceIds: selectedIds,
         frequency,
@@ -482,6 +508,44 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                   className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
                 />
               </div>
+
+              {products.length > 0 && (
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1.5 flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5 text-teal-400" />
+                    Product / Service <span className="text-slate-500 font-normal">(optional)</span>
+                  </label>
+                  <select
+                    value={selectedProductId}
+                    onChange={(e) => setSelectedProductId(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+                  >
+                    <option value="">None — general outreach</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.type})
+                      </option>
+                    ))}
+                  </select>
+                  {selectedProduct && (
+                    <div className="mt-2 p-2.5 rounded-lg bg-[#121418] border border-[#2d323f] flex items-start justify-between gap-2">
+                      <p className="text-[11px] text-slate-400 line-clamp-2">
+                        {selectedProduct.pitch || selectedProduct.description || "No pitch written for this product yet."}
+                      </p>
+                      <button
+                        onClick={handleApplyProductAudience}
+                        className="shrink-0 px-2.5 py-1.5 bg-teal-600/20 hover:bg-teal-600/30 border border-teal-500/40 text-teal-300 rounded-lg text-[10px] font-bold flex items-center gap-1 whitespace-nowrap"
+                        title={`Select every ${audienceType.toLowerCase()} that matches this product's target criteria`}
+                      >
+                        <Wand2 className="w-3 h-3" />
+                        Use matching {audienceType.toLowerCase()} (
+                        {audienceType === "Leads" ? productMatches?.leads.length ?? 0 : productMatches?.contacts.length ?? 0}
+                        )
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="block text-slate-300 font-semibold mb-1.5">Audience</label>
