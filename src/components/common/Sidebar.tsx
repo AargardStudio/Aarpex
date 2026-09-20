@@ -27,6 +27,7 @@ import {
   LogOut,
   Landmark,
   Inbox as InboxIcon,
+  X,
 } from "lucide-react";
 import { ROLE_LABELS, UserRole } from "../../types";
 
@@ -59,6 +60,8 @@ export const Sidebar: React.FC = () => {
     setAuthPageOpen,
     setAuthPageMode,
     openEmailComposer,
+    isMobileSidebarOpen,
+    setMobileSidebarOpen,
   } = useCRM();
 
   const [isWorkspaceDropdownOpen, setWorkspaceDropdownOpen] = React.useState(false);
@@ -124,36 +127,57 @@ export const Sidebar: React.FC = () => {
   ];
 
   return (
-    <aside
-      id="crm-sidebar"
-      className="w-64 bg-[#121418] border-r border-[#282d39] flex flex-col h-screen shrink-0 select-none text-slate-300"
-    >
-      {/* AarPex Brand Header */}
-      <div className="px-4 py-3 border-b border-[#282d39] bg-[#14171d]">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <img
-              src={`${import.meta.env.BASE_URL}assets/aarpex-logo-192.png`}
-              alt="AarPex"
-              className="w-8 h-8 rounded-lg border border-teal-500/40 shadow-sm shrink-0 object-cover"
-            />
-            <div className="min-w-0">
-              <div className="font-extrabold text-white text-sm tracking-tight leading-none flex items-center gap-1.5">
-                <span>AarPex</span>
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal-950/60 border border-teal-500/30 text-teal-300">
-                  CRM
-                </span>
-              </div>
-              <div className="text-[10px] text-teal-400 font-medium truncate mt-0.5">
-                by Aargard Business Solutions
+    <>
+      {/* Mobile/tablet backdrop -- tapping it closes the drawer. Irrelevant
+          at `lg` and above, where the sidebar is always docked in place. */}
+      {isMobileSidebarOpen && (
+        <div
+          onClick={() => setMobileSidebarOpen(false)}
+          className="fixed inset-0 bg-slate-950/60 backdrop-blur-2xs z-40 lg:hidden animate-in fade-in duration-150"
+        />
+      )}
+
+      <aside
+        id="crm-sidebar"
+        className={`w-64 bg-[#121418] border-r border-[#282d39] flex flex-col h-screen shrink-0 select-none text-slate-300 fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-in-out lg:static lg:z-auto lg:translate-x-0 ${
+          isMobileSidebarOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
+        }`}
+      >
+        {/* AarPex Brand Header */}
+        <div className="px-4 py-3 border-b border-[#282d39] bg-[#14171d]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <img
+                src={`${import.meta.env.BASE_URL}assets/aarpex-logo-192.png`}
+                alt="AarPex"
+                className="w-8 h-8 rounded-lg border border-teal-500/40 shadow-sm shrink-0 object-cover"
+              />
+              <div className="min-w-0">
+                <div className="font-extrabold text-white text-sm tracking-tight leading-none flex items-center gap-1.5">
+                  <span>AarPex</span>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal-950/60 border border-teal-500/30 text-teal-300">
+                    CRM
+                  </span>
+                </div>
+                <div className="text-[10px] text-teal-400 font-medium truncate mt-0.5">
+                  by Aargard Business Solutions
+                </div>
               </div>
             </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="hidden sm:inline text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-[#222630] text-slate-400 border border-[#3d4455]">
+                Multi-Tenant
+              </span>
+              <button
+                onClick={() => setMobileSidebarOpen(false)}
+                className="lg:hidden p-1 rounded-md text-slate-400 hover:text-white hover:bg-[#222630] transition-colors"
+                title="Close menu"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-          <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-[#222630] text-slate-400 border border-[#3d4455] shrink-0">
-            Multi-Tenant
-          </span>
         </div>
-      </div>
 
       {/* Multi-Tenant Workspace Header with Switcher Dropdown */}
       <div className="h-14 px-4 border-b border-[#282d39] flex items-center justify-between relative bg-[#121418]">
@@ -251,7 +275,10 @@ export const Sidebar: React.FC = () => {
       <div className="p-3 border-b border-[#282d39]">
         <button
           id="btn-quick-create-sidebar"
-          onClick={() => setQuickCreateOpen(true)}
+          onClick={() => {
+            setQuickCreateOpen(true);
+            setMobileSidebarOpen(false);
+          }}
           className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-[#252a36] hover:bg-[#2f3544] text-white text-xs font-semibold rounded-lg shadow-sm border border-[#3d4455] transition-all duration-150 group"
         >
           <Plus className="w-4 h-4 transition-transform group-hover:rotate-90 duration-200 text-teal-400" />
@@ -281,6 +308,7 @@ export const Sidebar: React.FC = () => {
                     onClick={() => {
                       setActiveNav(item.name);
                       setSelectedCompanyId(null);
+                      setMobileSidebarOpen(false);
                     }}
                     className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-colors group ${
                       isActive
@@ -436,6 +464,7 @@ export const Sidebar: React.FC = () => {
           </div>
         )}
       </div>
-    </aside>
+      </aside>
+    </>
   );
 };

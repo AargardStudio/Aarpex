@@ -121,6 +121,13 @@ interface CRMContextType {
   setAccessControlOpen: (open: boolean) => void;
   importLeadsFromSpreadsheet: (importedLeads: Array<Omit<Lead, "id" | "createdDate">>) => number;
 
+  // Off-canvas sidebar drawer on mobile/tablet (screens below the `lg`
+  // breakpoint) -- the sidebar is always in the DOM, this just controls
+  // whether it's slid into view. Irrelevant at desktop widths, where the
+  // sidebar is always visible regardless of this flag.
+  isMobileSidebarOpen: boolean;
+  setMobileSidebarOpen: (open: boolean) => void;
+
   // Multi-Tenancy & Workspaces
   tenants: Tenant[];
   activeTenantId: string;
@@ -322,6 +329,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const [isAccessControlOpen, setAccessControlOpen] = useState(false);
+  const [isMobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem("crm_users_v2", JSON.stringify(users));
@@ -2149,6 +2157,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAuthPageMode,
         isAccessControlOpen,
         setAccessControlOpen,
+        isMobileSidebarOpen,
+        setMobileSidebarOpen,
         importLeadsFromSpreadsheet,
 
         tenants,

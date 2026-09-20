@@ -21,6 +21,7 @@ import {
   UserCheck,
   Mail,
   LogIn,
+  Menu,
 } from "lucide-react";
 import { DateFilterRange, ROLE_LABELS, UserRole } from "../../types";
 import { apiFetch } from "../../lib/apiClient";
@@ -46,12 +47,14 @@ export const Header: React.FC = () => {
     openEmailComposer,
     activeTenant,
     setSettingsDeepLinkTab,
+    setMobileSidebarOpen,
   } = useCRM();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
 
   // AI Smart query execution state
   const [aiAnswer, setAiAnswer] = useState<string | null>(null);
@@ -118,13 +121,24 @@ export const Header: React.FC = () => {
   ];
 
   return (
+    <>
     <header
       id="crm-header"
-      className="h-16 bg-[#121418] border-b border-[#282d39] px-6 flex items-center justify-between z-20 shrink-0 sticky top-0 text-white"
+      className="h-14 sm:h-16 bg-[#121418] border-b border-[#282d39] px-3 sm:px-6 flex items-center justify-between gap-2 z-20 shrink-0 sticky top-0 text-white"
     >
+      {/* Hamburger -- opens the off-canvas sidebar on mobile/tablet (below `lg`) */}
+      <button
+        id="btn-mobile-menu"
+        onClick={() => setMobileSidebarOpen(true)}
+        className="lg:hidden p-1.5 -ml-1 rounded-lg text-slate-300 hover:text-white hover:bg-[#1f232c] transition-colors shrink-0"
+        title="Open menu"
+      >
+        <Menu className="w-5 h-5" />
+      </button>
+
       {/* Current Section Title */}
-      <div className="flex items-center gap-3">
-        <h1 className="text-xl font-bold text-white tracking-tight">
+      <div className="flex items-center gap-3 min-w-0">
+        <h1 className="text-base sm:text-xl font-bold text-white tracking-tight truncate">
           {activeNav}
         </h1>
         <span className="text-xs text-teal-400 font-medium hidden sm:inline-block">
@@ -132,8 +146,10 @@ export const Header: React.FC = () => {
         </span>
       </div>
 
-      {/* Center Search Bar with Smart AI Integration */}
-      <div className="flex-1 max-w-md mx-6 relative">
+      {/* Center Search Bar with Smart AI Integration -- hidden on phone/tablet,
+          replaced there by the icon button below that reveals a full-width
+          search row under the header instead. */}
+      <div className="flex-1 max-w-md mx-6 relative hidden md:block">
         <div className="relative">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -260,28 +276,39 @@ export const Header: React.FC = () => {
       </div>
 
       {/* Right side controls */}
-      <div className="flex items-center gap-3">
-        {/* Controlled Access / Roles Button */}
+      <div className="flex items-center gap-1.5 sm:gap-3">
+        {/* Mobile-only search trigger -- expands the full-width search row
+            rendered below the header on phone/tablet. */}
+        <button
+          onClick={() => setIsMobileSearchOpen((v) => !v)}
+          className="md:hidden p-2 rounded-lg bg-[#181b21] hover:bg-[#222630] border border-[#2d323f] text-slate-300 hover:text-white transition-colors"
+          title="Search"
+        >
+          <Search className="w-4 h-4" />
+        </button>
+
+        {/* Controlled Access / Roles Button -- secondary action, tucked away below `lg` */}
         <button
           id="btn-access-roles"
           onClick={() => setAccessControlOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#181b21] hover:bg-[#222630] border border-[#2d323f] text-slate-200 hover:text-white rounded-lg text-xs font-semibold transition-colors"
+          className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-[#181b21] hover:bg-[#222630] border border-[#2d323f] text-slate-200 hover:text-white rounded-lg text-xs font-semibold transition-colors"
           title="Manage Controlled User Access & Roles"
         >
           <Shield className="w-3.5 h-3.5 text-teal-400" />
-          <span className="hidden md:inline">Access & Roles</span>
+          <span className="hidden xl:inline">Access & Roles</span>
         </button>
 
         {/* Billing Shortcut — always available, including mid-trial, so an
             owner can add/change a card or open the Stripe portal without
-            waiting for the trial to end. */}
+            waiting for the trial to end. Reachable on mobile via Settings
+            when this shortcut is hidden below `sm`. */}
         <button
           id="btn-header-billing"
           onClick={() => {
             setSettingsDeepLinkTab("subscription");
             setActiveNav("Settings");
           }}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#181b21] hover:bg-[#222630] border border-[#2d323f] text-slate-200 hover:text-white rounded-lg text-xs font-semibold transition-colors"
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-[#181b21] hover:bg-[#222630] border border-[#2d323f] text-slate-200 hover:text-white rounded-lg text-xs font-semibold transition-colors"
           title={
             activeTenant?.subscriptionStatus === "trialing"
               ? "Manage billing & payment method (you're still on your free trial)"
@@ -303,7 +330,7 @@ export const Header: React.FC = () => {
           onClick={() => {
             if (confirm("Sign out of AarPex?")) signOut();
           }}
-          className="flex items-center gap-2 px-2.5 py-1 bg-[#181b21] hover:bg-[#222630] border border-[#2d323f] rounded-lg text-left transition-colors group"
+          className="flex items-center gap-2 px-1.5 sm:px-2.5 py-1 bg-[#181b21] hover:bg-[#222630] border border-[#2d323f] rounded-lg text-left transition-colors group"
           title="Sign out"
         >
           <div className="w-6 h-6 rounded-full bg-[#252a36] border border-[#3d4455] text-teal-300 flex items-center justify-center text-[10px] font-bold shrink-0">
@@ -320,11 +347,11 @@ export const Header: React.FC = () => {
               {ROLE_LABELS[(currentUser.role as UserRole) || "viewer"]?.title.split(" ")[0] || currentUser.role}
             </div>
           </div>
-          <LogIn className="w-3.5 h-3.5 text-slate-400 group-hover:text-rose-400 rotate-180" />
+          <LogIn className="hidden sm:block w-3.5 h-3.5 text-slate-400 group-hover:text-rose-400 rotate-180" />
         </button>
 
         {/* Global Date Filter Pill */}
-        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-[#181b21] border border-[#2d323f] rounded-lg text-xs text-slate-300">
+        <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 bg-[#181b21] border border-[#2d323f] rounded-lg text-xs text-slate-300">
           <Calendar className="w-3.5 h-3.5 text-teal-400" />
           <select
             value={dateRange}
@@ -434,7 +461,7 @@ export const Header: React.FC = () => {
         <button
           id="btn-header-compose-mail"
           onClick={() => openEmailComposer()}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/40 text-teal-300 rounded-lg text-xs font-bold shadow-sm transition-all"
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/40 text-teal-300 rounded-lg text-xs font-bold shadow-sm transition-all"
           title="Compose Email with Multiple Attachments"
         >
           <Mail className="w-3.5 h-3.5 text-teal-400" />
@@ -512,5 +539,86 @@ export const Header: React.FC = () => {
         </button>
       </div>
     </header>
+
+    {/* Mobile/tablet search row -- revealed by the search icon button above.
+        Reuses the same AI-search behavior as the desktop bar. */}
+    {isMobileSearchOpen && (
+      <div className="md:hidden bg-[#121418] border-b border-[#282d39] px-3 py-2.5 sticky top-14 z-20">
+        <div className="relative">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            autoFocus
+            placeholder="Search or ask AI..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setIsSearchOpen(true);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleAskAI();
+            }}
+            className="w-full pl-9 pr-16 py-2 bg-[#181b21] border border-[#2d323f] focus:border-teal-400 rounded-lg text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all"
+          />
+          <button
+            onClick={() => handleAskAI()}
+            disabled={isAiSearching}
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2 py-1 rounded text-[11px] font-semibold bg-[#252a36] text-teal-300 hover:bg-[#2f3544] flex items-center gap-1 border border-[#3d4455] transition-colors"
+          >
+            <Sparkles className="w-3 h-3 text-teal-300" />
+            <span>AI</span>
+          </button>
+        </div>
+
+        {(searchQuery.length > 0 || aiAnswer) && (
+          <div className="mt-2 bg-[#181b21] border border-[#2d323f] rounded-xl shadow-2xl overflow-hidden text-white animate-in fade-in duration-150">
+            {isAiSearching && (
+              <div className="p-3 flex items-center gap-2 text-xs text-teal-200">
+                <Sparkles className="w-4 h-4 animate-spin text-teal-400" />
+                <span>Gemini is analyzing CRM records...</span>
+              </div>
+            )}
+            {aiAnswer && (
+              <div className="p-3 bg-[#1f232c] border-b border-[#2d323f] text-xs text-slate-100">
+                <p className="leading-relaxed whitespace-pre-wrap">{aiAnswer}</p>
+              </div>
+            )}
+            <div className="max-h-56 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+              {matchedCompanies.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => {
+                    setSelectedCompanyId(c.id);
+                    setIsMobileSearchOpen(false);
+                  }}
+                  className="w-full flex items-center justify-between p-2 hover:bg-[#222630] rounded-lg text-left text-xs text-slate-200"
+                >
+                  <span className="flex items-center gap-2">
+                    <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="font-medium text-white">{c.name}</span>
+                  </span>
+                </button>
+              ))}
+              {matchedDeals.map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => {
+                    setActiveNav("Deals");
+                    setIsMobileSearchOpen(false);
+                  }}
+                  className="w-full flex items-center justify-between p-2 hover:bg-[#222630] rounded-lg text-left text-xs text-slate-200"
+                >
+                  <span className="flex items-center gap-2">
+                    <Briefcase className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="font-medium text-white">{d.name}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )}
+    </>
   );
 };

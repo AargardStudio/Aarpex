@@ -159,7 +159,7 @@ export const DashboardView: React.FC = () => {
   }, []);
 
   return (
-    <div id="dashboard-view" className="space-y-6 animate-in fade-in duration-200 text-slate-100">
+    <div id="dashboard-view" className="space-y-4 sm:space-y-6 animate-in fade-in duration-200 text-slate-100">
       {/* Empty-state banner: offer sample data for brand-new, unpopulated workspaces */}
       {companies.length === 0 && (
         <div className="bg-teal-950/40 border border-teal-800/50 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -193,10 +193,10 @@ export const DashboardView: React.FC = () => {
       )}
 
       {/* Top Banner with AI Daily Briefing (Graphite & Slate Grey) */}
-      <div className="bg-[#181b21] rounded-2xl p-6 text-white border border-[#2d323f] shadow-xl relative overflow-hidden">
+      <div className="bg-[#181b21] rounded-2xl p-4 sm:p-6 text-white border border-[#2d323f] shadow-xl relative overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-1.5 z-10">
-            <div className="flex items-center gap-2">
+          <div className="space-y-1.5 z-10 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-full bg-[#252a36] text-teal-300 border border-[#3d4455] text-[11px] font-bold flex items-center gap-1.5 shadow-sm">
                 <Sparkles className="w-3.5 h-3.5 text-teal-400" />
                 Executive Sales Intelligence
@@ -205,7 +205,7 @@ export const DashboardView: React.FC = () => {
                 Live Briefing • 8:00 AM
               </span>
             </div>
-            <h2 className="text-xl font-extrabold tracking-tight text-white flex items-center gap-2">
+            <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-white flex flex-wrap items-center gap-2">
               Good morning, <span className="text-teal-300">{currentUser.name}</span>.
             </h2>
             <p className="text-slate-300 text-xs max-w-2xl leading-relaxed">
@@ -214,18 +214,18 @@ export const DashboardView: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-3 z-10 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 z-10 shrink-0">
             <button
               onClick={fetchDailyBriefing}
               disabled={isBriefingLoading}
-              className="px-3.5 py-2 bg-[#252a36] hover:bg-[#2f3544] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-md border border-[#3d4455] transition-all"
+              className="px-3 sm:px-3.5 py-2 bg-[#252a36] hover:bg-[#2f3544] text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-md border border-[#3d4455] transition-all"
             >
-              <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+              <Sparkles className="w-3.5 h-3.5 text-teal-400 shrink-0" />
               <span>{isBriefingLoading ? "Refreshing..." : "Generate Fresh Briefing"}</span>
             </button>
             <button
               onClick={() => setActiveNav("AI Insights")}
-              className="px-3.5 py-2 bg-[#1f232c] hover:bg-[#282d39] text-slate-200 border border-[#2d323f] rounded-xl text-xs font-semibold transition-colors"
+              className="px-3 sm:px-3.5 py-2 bg-[#1f232c] hover:bg-[#282d39] text-slate-200 border border-[#2d323f] rounded-xl text-xs font-semibold transition-colors"
             >
               View Full Insights
             </button>
@@ -250,14 +250,14 @@ export const DashboardView: React.FC = () => {
       </div>
 
       {/* 8 Essential Executive KPIs in Sleek Graphite */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         {/* KPI 1: Pipeline Value */}
-        <div className="bg-[#181b21] p-4 rounded-xl border border-[#2d323f] hover:border-teal-400/50 shadow-md text-white transition-all">
+        <div className="bg-[#181b21] p-3 sm:p-4 rounded-xl border border-[#2d323f] hover:border-teal-400/50 shadow-md text-white transition-all">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
             <span>Pipeline Value</span>
             <Briefcase className="w-4 h-4 text-teal-400" />
           </div>
-          <div className="text-2xl font-black text-white font-mono mt-2">
+          <div className="text-xl sm:text-2xl font-black text-white font-mono mt-2">
             ${pipelineValue.toLocaleString()}
           </div>
           <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
@@ -269,12 +269,12 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* KPI 2: Weighted Pipeline */}
-        <div className="bg-[#181b21] p-4 rounded-xl border border-[#2d323f] hover:border-teal-400/50 shadow-md text-white transition-all">
+        <div className="bg-[#181b21] p-3 sm:p-4 rounded-xl border border-[#2d323f] hover:border-teal-400/50 shadow-md text-white transition-all">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
             <span>Weighted Pipeline</span>
             <TrendingUp className="w-4 h-4 text-teal-400" />
           </div>
-          <div className="text-2xl font-black text-teal-300 font-mono mt-2">
+          <div className="text-xl sm:text-2xl font-black text-teal-300 font-mono mt-2">
             ${weightedPipelineValue.toLocaleString()}
           </div>
           <div className="text-[11px] text-slate-400 mt-1">
@@ -283,12 +283,12 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* KPI 3: Closed Won Revenue */}
-        <div className="bg-[#181b21] p-4 rounded-xl border border-[#2d323f] hover:border-teal-400/50 shadow-md text-white transition-all">
+        <div className="bg-[#181b21] p-3 sm:p-4 rounded-xl border border-[#2d323f] hover:border-teal-400/50 shadow-md text-white transition-all">
           <div className="flex items-center justify-between text-slate-300 text-xs font-semibold">
             <span>Closed Won Revenue</span>
             <CheckCircle2 className="w-4 h-4 text-teal-400" />
           </div>
-          <div className="text-2xl font-black text-white font-mono mt-2">
+          <div className="text-xl sm:text-2xl font-black text-white font-mono mt-2">
             ${wonRevenue.toLocaleString()}
           </div>
           <div className="text-[11px] text-slate-300 mt-1 flex items-center gap-1">
@@ -298,12 +298,12 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* KPI 4: Total Cash Collected */}
-        <div className="bg-[#181b21] p-4 rounded-xl border border-[#2d323f] hover:border-teal-400/50 shadow-md text-white transition-all">
+        <div className="bg-[#181b21] p-3 sm:p-4 rounded-xl border border-[#2d323f] hover:border-teal-400/50 shadow-md text-white transition-all">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
             <span>Cash Collected</span>
             <CreditCard className="w-4 h-4 text-teal-400" />
           </div>
-          <div className="text-2xl font-black text-white font-mono mt-2">
+          <div className="text-xl sm:text-2xl font-black text-white font-mono mt-2">
             ${totalCollected.toLocaleString()}
           </div>
           <div className="text-[11px] text-teal-400 mt-1">
@@ -312,12 +312,12 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* KPI 5: Total Invoiced */}
-        <div className="bg-[#181b21] p-4 rounded-xl border border-[#2d323f] shadow-md text-white transition-all">
+        <div className="bg-[#181b21] p-3 sm:p-4 rounded-xl border border-[#2d323f] shadow-md text-white transition-all">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
             <span>Total Invoiced</span>
             <Receipt className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="text-2xl font-black text-white font-mono mt-2">
+          <div className="text-xl sm:text-2xl font-black text-white font-mono mt-2">
             ${totalInvoiced.toLocaleString()}
           </div>
           <div className="text-[11px] text-slate-400 mt-1">
@@ -326,12 +326,12 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* KPI 6: Outstanding Receivables */}
-        <div className="bg-[#181b21] p-4 rounded-xl border border-[#2d323f] shadow-md text-white transition-all">
+        <div className="bg-[#181b21] p-3 sm:p-4 rounded-xl border border-[#2d323f] shadow-md text-white transition-all">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
             <span>Outstanding Balance</span>
             <Clock className="w-4 h-4 text-amber-400" />
           </div>
-          <div className="text-2xl font-black text-amber-400 font-mono mt-2">
+          <div className="text-xl sm:text-2xl font-black text-amber-400 font-mono mt-2">
             ${outstandingBalance.toLocaleString()}
           </div>
           <div className="text-[11px] text-slate-400 mt-1">
@@ -340,12 +340,12 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* KPI 7: Overdue Invoices */}
-        <div className="bg-[#181b21] p-4 rounded-xl border border-rose-900/40 shadow-md text-white transition-all">
+        <div className="bg-[#181b21] p-3 sm:p-4 rounded-xl border border-rose-900/40 shadow-md text-white transition-all">
           <div className="flex items-center justify-between text-rose-300 text-xs font-medium">
             <span>Overdue Balance</span>
             <AlertCircle className="w-4 h-4 text-rose-400" />
           </div>
-          <div className="text-2xl font-black text-rose-400 font-mono mt-2">
+          <div className="text-xl sm:text-2xl font-black text-rose-400 font-mono mt-2">
             ${overdueBalance.toLocaleString()}
           </div>
           <div className="text-[11px] text-rose-300 font-semibold mt-1">
@@ -354,12 +354,12 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* KPI 8: Active Accounts */}
-        <div className="bg-[#181b21] p-4 rounded-xl border border-[#2d323f] shadow-md text-white transition-all">
+        <div className="bg-[#181b21] p-3 sm:p-4 rounded-xl border border-[#2d323f] shadow-md text-white transition-all">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
             <span>Customer Base</span>
             <Users className="w-4 h-4 text-teal-400" />
           </div>
-          <div className="text-2xl font-black text-white font-mono mt-2">
+          <div className="text-xl sm:text-2xl font-black text-white font-mono mt-2">
             {companies.length}
           </div>
           <div className="text-[11px] text-teal-400 mt-1">
@@ -371,7 +371,7 @@ export const DashboardView: React.FC = () => {
       {/* Main Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Revenue & Cash Flow Trend (2 Cols) */}
-        <div className="bg-[#181b21] p-5 rounded-2xl border border-[#2d323f] shadow-lg lg:col-span-2 space-y-4 text-white">
+        <div className="bg-[#181b21] p-4 sm:p-5 rounded-2xl border border-[#2d323f] shadow-lg lg:col-span-2 space-y-4 text-white">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -403,7 +403,7 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* Pipeline Stage Funnel (1 Col) */}
-        <div className="bg-[#181b21] p-5 rounded-2xl border border-[#2d323f] shadow-lg space-y-4 text-white">
+        <div className="bg-[#181b21] p-4 sm:p-5 rounded-2xl border border-[#2d323f] shadow-lg space-y-4 text-white">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-bold text-white">
@@ -453,7 +453,7 @@ export const DashboardView: React.FC = () => {
       {/* Actionable Operations Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Overdue Invoices Alert List */}
-        <div className="bg-[#181b21] p-5 rounded-2xl border border-[#2d323f] shadow-lg space-y-3 text-white">
+        <div className="bg-[#181b21] p-4 sm:p-5 rounded-2xl border border-[#2d323f] shadow-lg space-y-3 text-white">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-rose-500" />
@@ -512,7 +512,7 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* Priority Tasks & Follow-ups */}
-        <div className="bg-[#181b21] p-5 rounded-2xl border border-[#2d323f] shadow-lg space-y-3 text-white">
+        <div className="bg-[#181b21] p-4 sm:p-5 rounded-2xl border border-[#2d323f] shadow-lg space-y-3 text-white">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-white">
               Urgent Follow-ups & Tasks
@@ -558,7 +558,7 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* Sales Team Leaderboard */}
-        <div className="bg-[#181b21] p-5 rounded-2xl border border-[#2d323f] shadow-lg space-y-3 text-white">
+        <div className="bg-[#181b21] p-4 sm:p-5 rounded-2xl border border-[#2d323f] shadow-lg space-y-3 text-white">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-white">
               Sales Rep Performance
