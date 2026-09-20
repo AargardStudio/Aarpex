@@ -16,6 +16,7 @@ import {
   Trash2,
   FileSpreadsheet,
   Sparkles,
+  Users2,
 } from "lucide-react";
 import { LeadConvertModal } from "../modals/LeadConvertModal";
 import { LeadImportModal } from "../leads/LeadImportModal";
@@ -37,6 +38,7 @@ export const LeadsView: React.FC = () => {
     deleteLead,
     setQuickCreateOpen,
     setQuickCreateType,
+    syncAllLeadsToCompaniesAndContacts,
   } = useCRM();
 
   const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
@@ -46,6 +48,28 @@ export const LeadsView: React.FC = () => {
   const [ratingFilter, setRatingFilter] = useState<string>("All");
   const [convertingLead, setConvertingLead] = useState<Lead | null>(null);
   const [analyzingLead, setAnalyzingLead] = useState<Lead | null>(null);
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const [syncResultMsg, setSyncResultMsg] = useState<string | null>(null);
+
+  const handleSyncAllLeads = () => {
+    setIsSyncingAll(true);
+    try {
+      const { companiesCreated, contactsCreated, companiesLinked } = syncAllLeadsToCompaniesAndContacts();
+      const total = companiesCreated + companiesLinked;
+      setSyncResultMsg(
+        total === 0
+          ? "No leads with a company name found to sync."
+          : `Synced ${total} lead${total === 1 ? "" : "s"}: ${companiesCreated} new compan${
+              companiesCreated === 1 ? "y" : "ies"
+            } created (${companiesLinked} matched existing), ${contactsCreated} new contact${
+              contactsCreated === 1 ? "" : "s"
+            } created.`
+      );
+    } finally {
+      setIsSyncingAll(false);
+      setTimeout(() => setSyncResultMsg(null), 8000);
+    }
+  };
 
   const statuses: Array<Lead["status"]> = [
     "New",
@@ -74,6 +98,12 @@ export const LeadsView: React.FC = () => {
 
   return (
     <div id="leads-view" className="space-y-5 animate-in fade-in duration-200">
+      {syncResultMsg && (
+        <div className="p-3 bg-teal-50 border border-teal-200 text-teal-800 rounded-xl text-xs font-medium animate-in fade-in duration-200">
+          {syncResultMsg}
+        </div>
+      )}
+
       {/* Action Header & Filter Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
         <div className="flex flex-wrap items-center gap-3">
@@ -142,6 +172,18 @@ export const LeadsView: React.FC = () => {
               <TableIcon className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          {/* Bulk-link every existing lead to a matching (or new) Company + Contact */}
+          <button
+            id="btn-sync-all-leads"
+            onClick={handleSyncAllLeads}
+            disabled={isSyncingAll || leads.length === 0}
+            className="px-3.5 py-1.5 bg-[#252a36] hover:bg-[#2f3544] disabled:opacity-50 border border-[#3d4455] text-slate-200 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+            title="Create or link a Company and Contact for every lead that doesn't have one yet"
+          >
+            <Users2 className="w-3.5 h-3.5 text-teal-400" />
+            <span>{isSyncingAll ? "Syncing..." : "Sync All to Companies/Contacts"}</span>
+          </button>
 
           {/* Import Leads (Excel / Google Sheets) */}
           <button

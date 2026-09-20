@@ -230,6 +230,7 @@ interface CRMContextType {
   runCompanyAIAnalysis: (companyId: string) => Promise<void>;
   addCallLogEntry: (companyId: string, entry: Omit<CallLogEntry, "id" | "createdAt" | "loggedBy">) => void;
   deleteCallLogEntry: (companyId: string, entryId: string) => void;
+  syncAllLeadsToCompaniesAndContacts: () => { companiesCreated: number; contactsCreated: number; companiesLinked: number };
 
   clearAllData: () => void;
 
@@ -1310,6 +1311,99 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newLead;
   };
 
+  // Bulk version of the auto-create-on-add logic above, for leads that
+  // already existed before Business Profiles shipped (or were imported)
+  // and never got a linked Company/Contact. Builds the updated
+  // companies/contacts arrays locally first -- rather than calling
+  // addCompany/addContact per lead -- so that two leads sharing the same
+  // new company in this same batch correctly reuse one record instead of
+  // each creating their own (state updates from addCompany/addContact
+  // wouldn't be visible to the next iteration until a re-render).
+  const syncAllLeadsToCompaniesAndContacts = (): {
+    companiesCreated: number;
+    contactsCreated: number;
+    companiesLinked: number;
+  } => {
+    const localCompanies = [...rawCompanies];
+    const localContacts = [...contacts];
+    const newlyCreatedCompanyIds: string[] = [];
+    let companiesCreated = 0;
+    let contactsCreated = 0;
+    let companiesLinked = 0;
+    const today = new Date().toISOString().split("T")[0];
+
+    leads.forEach((lead) => {
+      if (!lead.company || !lead.company.trim()) return;
+
+      let company = localCompanies.find(
+        (c) => c.name.trim().toLowerCase() === lead.company.trim().toLowerCase()
+      );
+      if (!company) {
+        company = {
+          id: `comp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          name: lead.company,
+          industry: lead.industry || "General Industry",
+          website: lead.website || "",
+          country: lead.country || "",
+          city: lead.city || "",
+          address: "",
+          phone: lead.phone || "",
+          email: lead.email || "",
+          salesperson: lead.salesperson || currentUser.name,
+          status: "Lead",
+          customerValue: 0,
+          notes: `Auto-created from Lead ${lead.id} via bulk sync.`,
+          tags: ["Auto-Created", "From Lead"],
+          sourceLeadId: lead.id,
+          createdAt: today,
+        };
+        localCompanies.push(company);
+        newlyCreatedCompanyIds.push(company.id);
+        companiesCreated++;
+      } else {
+        companiesLinked++;
+      }
+
+      if (lead.email && lead.email.trim()) {
+        const existingContact = localContacts.find(
+          (c) => c.email.trim().toLowerCase() === lead.email.trim().toLowerCase()
+        );
+        if (!existingContact) {
+          const nameParts = lead.name.trim().split(" ");
+          localContacts.push({
+            id: `cnt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            firstName: nameParts[0] || lead.name || "Lead",
+            lastName: nameParts.slice(1).join(" ") || "",
+            position: lead.jobTitle || "",
+            companyId: company.id,
+            email: lead.email,
+            phone: lead.phone || "",
+            whatsapp: lead.whatsapp,
+            country: lead.country || "",
+            city: lead.city || "",
+            status: "Active",
+            leadSource: lead.source || "Lead Form",
+            salesperson: lead.salesperson || currentUser.name,
+            notes: `Auto-created from Lead ${lead.id} via bulk sync. ${lead.notes || ""}`.trim(),
+            tags: ["Auto-Created", "From Lead"],
+            createdAt: today,
+          });
+          contactsCreated++;
+        }
+      }
+    });
+
+    setRawCompanies(localCompanies);
+    setContacts(localContacts);
+
+    // Kick off AI analysis in the background, only for companies this sync
+    // actually created -- companies that already existed likely already
+    // have (or intentionally lack) an analysis.
+    newlyCreatedCompanyIds.forEach((id) => void runCompanyAIAnalysis(id));
+
+    return { companiesCreated, contactsCreated, companiesLinked };
+  };
+
   const updateLead = (id: string, updates: Partial<Lead>) => {
     setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, ...updates } : l)));
   };
@@ -2144,6 +2238,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         runCompanyAIAnalysis,
         addCallLogEntry,
         deleteCallLogEntry,
+        syncAllLeadsToCompaniesAndContacts,
 
         clearAllData,
 
