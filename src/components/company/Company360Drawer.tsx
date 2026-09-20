@@ -27,6 +27,8 @@ import {
   IdCard,
   PhoneCall,
   Trash2,
+  UserPlus,
+  Link2,
 } from "lucide-react";
 import { CustomerStatus, CallLogEntry } from "../../types";
 import { apiFetch } from "../../lib/apiClient";
@@ -62,6 +64,9 @@ export const Company360Drawer: React.FC = () => {
     runCompanyAIAnalysis,
     addCallLogEntry,
     deleteCallLogEntry,
+    leads,
+    addLead,
+    updateLead,
   } = useCRM();
 
   const [activeTab, setActiveTab] = useState<
@@ -75,6 +80,16 @@ export const Company360Drawer: React.FC = () => {
   const [callOutcome, setCallOutcome] = useState<CallLogEntry["outcome"]>("Connected");
   const [callContactId, setCallContactId] = useState("");
   const [callSummary, setCallSummary] = useState("");
+
+  // Leads section (Business Profile tab) -- link an existing lead to this
+  // company, or create a brand-new one directly against it.
+  const [leadLinkMode, setLeadLinkMode] = useState<"existing" | "new">("existing");
+  const [selectedLeadToLink, setSelectedLeadToLink] = useState("");
+  const [newLeadName, setNewLeadName] = useState("");
+  const [newLeadJobTitle, setNewLeadJobTitle] = useState("");
+  const [newLeadEmail, setNewLeadEmail] = useState("");
+  const [newLeadPhone, setNewLeadPhone] = useState("");
+  const [newLeadSource, setNewLeadSource] = useState("Manual");
 
   // Inline activity logging state
   const [newActivityType, setNewActivityType] = useState<any>("Call");
@@ -99,6 +114,12 @@ export const Company360Drawer: React.FC = () => {
   if (!company) return null;
 
   const companyContacts = contacts.filter((c) => c.companyId === company.id);
+  const companyLeads = leads.filter(
+    (l) => l.company.trim().toLowerCase() === company.name.trim().toLowerCase()
+  );
+  const linkableLeads = leads.filter(
+    (l) => l.company.trim().toLowerCase() !== company.name.trim().toLowerCase()
+  );
   const companyDeals = deals.filter((d) => d.companyId === company.id);
   const companyInvoices = invoices.filter((i) => i.companyId === company.id);
   const companyPayments = payments.filter((p) => p.companyId === company.id);
@@ -217,6 +238,44 @@ export const Company360Drawer: React.FC = () => {
     setCallSummary("");
     setCallDuration(5);
     setCallOutcome("Connected");
+  };
+
+  const handleLinkExistingLead = () => {
+    if (!selectedLeadToLink) return;
+    updateLead(selectedLeadToLink, { company: company.name });
+    setSelectedLeadToLink("");
+  };
+
+  const handleAddNewLead = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newLeadName.trim()) return;
+    addLead({
+      name: newLeadName.trim(),
+      company: company.name,
+      jobTitle: newLeadJobTitle.trim(),
+      email: newLeadEmail.trim(),
+      phone: newLeadPhone.trim(),
+      website: company.website || "",
+      industry: company.industry || "General Industry",
+      country: company.country || "",
+      city: company.city || "",
+      source: newLeadSource.trim() || "Manual",
+      salesperson: currentUser.name,
+      leadScore: 50,
+      priority: "Medium",
+      status: "New",
+      estimatedValue: 0,
+      expectedCloseDate: "",
+      lastContact: "",
+      nextFollowUp: "",
+      tags: ["Manual", "From Company 360"],
+      notes: `Added manually from ${company.name}'s Business Profile.`,
+    });
+    setNewLeadName("");
+    setNewLeadJobTitle("");
+    setNewLeadEmail("");
+    setNewLeadPhone("");
+    setNewLeadSource("Manual");
   };
 
   const statusColors: Record<CustomerStatus, string> = {
@@ -445,15 +504,23 @@ export const Company360Drawer: React.FC = () => {
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                     Contacts ({companyContacts.length})
                   </h3>
-                  <button
-                    onClick={() => {
-                      setQuickCreateType("contact");
-                      setQuickCreateOpen(true);
-                    }}
-                    className="text-xs text-indigo-600 font-semibold hover:underline flex items-center gap-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Add Contact
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setActiveTab("profile")}
+                      className="text-xs text-indigo-600 font-semibold hover:underline flex items-center gap-1"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" /> Add Lead
+                    </button>
+                    <button
+                      onClick={() => {
+                        setQuickCreateType("contact");
+                        setQuickCreateOpen(true);
+                      }}
+                      className="text-xs text-indigo-600 font-semibold hover:underline flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Contact
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -931,6 +998,138 @@ export const Company360Drawer: React.FC = () => {
                     <p className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">{company.notes}</p>
                   </div>
                 )}
+              </div>
+
+              {/* Leads */}
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                    <UserPlus className="w-3.5 h-3.5 text-indigo-600" />
+                    Leads ({companyLeads.length})
+                  </h4>
+                  <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
+                    <button
+                      onClick={() => setLeadLinkMode("existing")}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors ${
+                        leadLinkMode === "existing" ? "bg-white shadow-2xs text-slate-800" : "text-slate-500"
+                      }`}
+                    >
+                      Link Existing
+                    </button>
+                    <button
+                      onClick={() => setLeadLinkMode("new")}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors ${
+                        leadLinkMode === "new" ? "bg-white shadow-2xs text-slate-800" : "text-slate-500"
+                      }`}
+                    >
+                      New Lead
+                    </button>
+                  </div>
+                </div>
+
+                {leadLinkMode === "existing" ? (
+                  <div className="flex gap-2 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                    <select
+                      value={selectedLeadToLink}
+                      onChange={(e) => setSelectedLeadToLink(e.target.value)}
+                      className="flex-1 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    >
+                      <option value="">Select a lead to link to {company.name}...</option>
+                      {linkableLeads.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name} — {l.company || "No company on file"}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={handleLinkExistingLead}
+                      disabled={!selectedLeadToLink}
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shrink-0"
+                    >
+                      <Link2 className="w-3.5 h-3.5" />
+                      Link
+                    </button>
+                    {linkableLeads.length === 0 && (
+                      <span className="sr-only">No other leads available to link.</span>
+                    )}
+                  </div>
+                ) : (
+                  <form
+                    onSubmit={handleAddNewLead}
+                    className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3.5 bg-slate-50 rounded-xl border border-slate-200"
+                  >
+                    <input
+                      type="text"
+                      required
+                      placeholder="Lead name *"
+                      value={newLeadName}
+                      onChange={(e) => setNewLeadName(e.target.value)}
+                      className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Job title"
+                      value={newLeadJobTitle}
+                      onChange={(e) => setNewLeadJobTitle(e.target.value)}
+                      className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                    <input
+                      type="email"
+                      placeholder="Email"
+                      value={newLeadEmail}
+                      onChange={(e) => setNewLeadEmail(e.target.value)}
+                      className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Phone"
+                      value={newLeadPhone}
+                      onChange={(e) => setNewLeadPhone(e.target.value)}
+                      className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Source (e.g. Referral, Website)"
+                      value={newLeadSource}
+                      onChange={(e) => setNewLeadSource(e.target.value)}
+                      className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs sm:col-span-2"
+                    />
+                    <div className="sm:col-span-2 flex justify-end">
+                      <button
+                        type="submit"
+                        disabled={!newLeadName.trim()}
+                        className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Lead to {company.name}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                <div className="space-y-2">
+                  {companyLeads.length === 0 && (
+                    <p className="text-xs text-slate-400 text-center py-2">
+                      No leads linked to this company yet.
+                    </p>
+                  )}
+                  {companyLeads.map((l) => (
+                    <div
+                      key={l.id}
+                      className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-3"
+                    >
+                      <div>
+                        <div className="text-xs font-bold text-slate-800">{l.name}</div>
+                        <div className="text-[11px] text-slate-500">
+                          {l.jobTitle || "—"} {l.email && `· ${l.email}`}
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
+                        {l.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* AI Analysis */}
