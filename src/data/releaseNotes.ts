@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.9.0",
+    date: "2026-09-21",
+    headline: "Your Story, In Your Own App",
+    tagline: "A running journal for the team that builds this with you -- write it yourself, or let AI help.",
+    highlights: [
+      {
+        title: "CEO Notes: a real journal, not a status report",
+        description: "Log reflections, milestones, and honest progress updates in a new dedicated section your team can read anytime.",
+      },
+      {
+        title: "AI polishes your rough notes",
+        description: "Jot a quick thought and AarPex turns it into a well-written entry in your own voice -- you review before it's ever published.",
+      },
+      {
+        title: "Built for connection, not corporate-speak",
+        description: "No dashboards, no metrics -- just your title, your words, and the date, the way a memoir should read.",
+      },
+    ],
+  },
+  {
     version: "1.8.0",
     date: "2026-09-21",
     headline: "Your Copilot Can Actually Do The Work Now",

@@ -30,6 +30,7 @@ import {
   CompanyAIAnalysis,
   Product,
   ProductAIInsight,
+  CeoNote,
 } from "../types";
 import { isSupabaseAuthConfigured, getSupabaseAuthClient } from "../config/supabaseAuthClient";
 import {
@@ -92,7 +93,8 @@ export type NavView =
   | "Email Marketing"
   | "Inbox"
   | "Reports"
-  | "Settings";
+  | "Settings"
+  | "CEO Notes";
 
 interface CRMContextType {
   // Navigation & Active selection
@@ -186,6 +188,7 @@ interface CRMContextType {
   comments: Comment[];
   emailCampaigns: EmailCampaign[];
   products: Product[];
+  ceoNotes: CeoNote[];
 
   // Data Actions
   addCompany: (company: Omit<Company, "id" | "createdAt">) => Company;
@@ -244,6 +247,13 @@ interface CRMContextType {
   deleteProduct: (id: string) => void;
   generateProductDraft: (rawDescription: string) => Promise<Partial<Product>>;
   runProductAIInsight: (productId: string) => Promise<void>;
+
+  // CEO Notes -- an internal memoir/journal for the founder/CEO to log
+  // reflections, activity, and progress updates for the team to read.
+  addCeoNote: (note: Omit<CeoNote, "id" | "createdAt">) => CeoNote;
+  updateCeoNote: (id: string, updates: Partial<CeoNote>) => void;
+  deleteCeoNote: (id: string) => void;
+  generateCeoNoteDraft: (roughNote: string, type: CeoNote["type"]) => Promise<{ title: string; content: string }>;
 
   // Business Profile: AI analysis + manual call log riding on a Company record.
   runCompanyAIAnalysis: (companyId: string) => Promise<void>;
@@ -446,6 +456,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadTenantEntity("products", [] as Product[])
   );
 
+  const [ceoNotes, setCeoNotes] = useState<CeoNote[]>(() =>
+    loadTenantEntity("ceoNotes", [] as CeoNote[])
+  );
+
   // Every real tenant with Supabase configured mirrors its data to the
   // tenants' Postgres tables on every change. Guarded by !isBootstrapping so
   // the empty local state present before the initial fetch (below) resolves
@@ -519,6 +533,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (shouldSyncToSupabase) syncTenantTable("products", activeTenantId, products);
   }, [products, activeTenantId]);
 
+  useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_ceoNotes`, JSON.stringify(ceoNotes));
+    if (shouldSyncToSupabase) syncTenantTable("ceo_notes", activeTenantId, ceoNotes);
+  }, [ceoNotes, activeTenantId]);
+
   // Whenever the active tenant changes (including the very first time it's
   // set, by the session-bootstrap effect below), re-hydrate its records
   // from the database instead of trusting whatever's cached in localStorage
@@ -542,6 +561,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         commentsRes,
         emailCampaignsRes,
         productsRes,
+        ceoNotesRes,
       ] = await Promise.all([
         fetchTenantTable<Company>("companies", activeTenantId),
         fetchTenantTable<Contact>("contacts", activeTenantId),
@@ -555,6 +575,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetchTenantTable<Comment>("comments", activeTenantId),
         fetchTenantTable<EmailCampaign>("email_campaigns", activeTenantId),
         fetchTenantTable<Product>("products", activeTenantId),
+        fetchTenantTable<CeoNote>("ceo_notes", activeTenantId),
       ]);
       if (cancelled) return;
       if (companiesRes) setRawCompanies(companiesRes);
@@ -569,6 +590,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (commentsRes) setComments(commentsRes);
       if (emailCampaignsRes) setEmailCampaigns(emailCampaignsRes);
       if (productsRes) setProducts(productsRes);
+      if (ceoNotesRes) setCeoNotes(ceoNotesRes);
     })();
     return () => {
       cancelled = true;
@@ -593,6 +615,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(`crm_tenant_${activeTenantId}_comments`, JSON.stringify(comments));
     localStorage.setItem(`crm_tenant_${activeTenantId}_emailCampaigns`, JSON.stringify(emailCampaigns));
     localStorage.setItem(`crm_tenant_${activeTenantId}_products`, JSON.stringify(products));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_ceoNotes`, JSON.stringify(ceoNotes));
 
     // Every workspace starts genuinely empty except "pipelines" (a
     // structural default, not sample data) — see loadTenantEntity above.
@@ -620,6 +643,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setComments(loadTarget("comments", initialComments));
     setEmailCampaigns(loadTarget("emailCampaigns", [] as EmailCampaign[]));
     setProducts(loadTarget("products", [] as Product[]));
+    setCeoNotes(loadTarget("ceoNotes", [] as CeoNote[]));
     setSelectedCompanyId(null);
     setSelectedDealId(null);
   };
@@ -2167,6 +2191,63 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // CEO Notes -- a lightweight internal journal, not a CRM record: no
+  // company/contact/deal linkage, just the founder's own running log.
+  const addCeoNote = (noteData: Omit<CeoNote, "id" | "createdAt">): CeoNote => {
+    const newId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `note_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const newNote: CeoNote = {
+      ...noteData,
+      id: newId,
+      createdAt: new Date().toISOString(),
+      tags: noteData.tags || [],
+    };
+    setCeoNotes((prev) => [newNote, ...prev]);
+    return newNote;
+  };
+
+  const updateCeoNote = (id: string, updates: Partial<CeoNote>) => {
+    setCeoNotes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, ...updates, updatedAt: new Date().toISOString() } : n))
+    );
+  };
+
+  const deleteCeoNote = (id: string) => {
+    setCeoNotes((prev) => prev.filter((n) => n.id !== id));
+  };
+
+  // Turns a rough, bullet-point-y note into a polished, reflective memoir
+  // entry in the CEO's voice -- purely a draft for the editor to review and
+  // edit before saving; never saves anything itself. Falls back to lightly
+  // formatting the rough note if the AI call fails.
+  const generateCeoNoteDraft = async (
+    roughNote: string,
+    type: CeoNote["type"]
+  ): Promise<{ title: string; content: string }> => {
+    try {
+      const res = await apiFetch("/api/ai/ceo-note-assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roughNote,
+          type,
+          authorName: currentUser.name,
+          companyName: activeTenant?.companyName || activeTenant?.name,
+        }),
+      });
+      const data = await res.json();
+      return {
+        title: data.title || "",
+        content: data.content || roughNote,
+      };
+    } catch (err) {
+      console.error("[CRMContext] generateCeoNoteDraft failed:", err);
+      return { title: "", content: roughNote };
+    }
+  };
+
   const clearAllData = () => {
     setRawCompanies([]);
     setContacts([]);
@@ -2329,6 +2410,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         comments,
         emailCampaigns,
         products,
+        ceoNotes,
 
         addCompany,
         updateCompany,
@@ -2384,6 +2466,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteProduct,
         generateProductDraft,
         runProductAIInsight,
+
+        addCeoNote,
+        updateCeoNote,
+        deleteCeoNote,
+        generateCeoNoteDraft,
 
         runCompanyAIAnalysis,
         addCallLogEntry,

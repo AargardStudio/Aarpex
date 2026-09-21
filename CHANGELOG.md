@@ -13,6 +13,22 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-09-21
+
+### Added
+
+- New **CEO Notes** section: an internal, workspace-visible journal for the
+  founder/CEO to log reflections, activity, milestones, and honest progress
+  updates for the team to read -- a memoir-style running log, separate from
+  CRM records.
+- Each entry has a title, a free-form story, a type (Note / Activity /
+  Milestone / Progress Update), a date, and tags.
+- **AI-assisted writing**: jot a rough note and AarPex turns it into a
+  polished, first-person entry in your voice -- you always review and edit
+  before publishing, nothing is saved automatically.
+- New `ceo_notes` table (`supabase/migrations/0006_ceo_notes.sql`) -- **run
+  this migration before using the feature**.
+
 ## [1.8.0] - 2026-09-21
 
 ### Added

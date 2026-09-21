@@ -567,6 +567,26 @@ export interface Comment {
   replies?: CommentReply[];
 }
 
+// ----------------------------------------------------------------------------
+// CEO Notes -- an internal, workspace-visible journal for the founder/CEO to
+// share reflections, activity, and progress updates with their team. A
+// memoir-style running log, not a CRM record; AI can help turn a rough note
+// into a polished entry, but every entry is manually reviewed/saved.
+// ----------------------------------------------------------------------------
+export type CeoNoteType = "Note" | "Activity" | "Milestone" | "Progress Update";
+
+export interface CeoNote {
+  id: string;
+  title: string;
+  content: string; // free-form story/memoir text, may contain line breaks
+  type: CeoNoteType;
+  date: string; // YYYY-MM-DD -- the date this entry is about
+  authorName: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface AICustomerAnalysis {
   healthScore: number;
   healthStatus: "Healthy" | "Stable" | "At Risk" | "Critical";

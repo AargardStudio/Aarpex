@@ -1173,7 +1173,7 @@ Return pure valid JSON only.`;
 const VALID_NAV_VIEWS = [
   "Dashboard", "Leads", "Contacts", "Companies", "Products", "Deals", "Pipelines",
   "Activities", "Invoices", "Payments", "Revenue", "Stripe", "Tasks",
-  "AI Insights", "Email Marketing", "Inbox", "Reports", "Settings",
+  "AI Insights", "Email Marketing", "Inbox", "Reports", "Settings", "CEO Notes",
 ];
 
 // ----------------------------------------------------------------------------
@@ -1235,7 +1235,7 @@ app.post("/api/ai/chat-assistant", async (req, res) => {
       payment: "Payments", revenue: "Revenue", stripe: "Stripe", task: "Tasks",
       insight: "AI Insights", campaign: "Email Marketing", "email market": "Email Marketing",
       inbox: "Inbox", repl: "Inbox", report: "Reports", setting: "Settings",
-      dashboard: "Dashboard",
+      dashboard: "Dashboard", "ceo note": "CEO Notes", journal: "CEO Notes", memoir: "CEO Notes",
     };
     let fallbackNav: string | null = null;
     if (/\b(show|open|go to|take me|navigate|view)\b/.test(lowerMsg)) {
@@ -1566,6 +1566,60 @@ IMPORTANT: Return pure valid JSON only, without markdown fences or additional co
     });
   } catch (err: any) {
     res.status(500).json({ error: "Failed to generate product draft", details: err?.message });
+  }
+});
+
+// AI-assisted CEO Notes: turns a rough, unpolished note (bullet points, a
+// stream-of-consciousness paragraph, whatever the CEO jots down) into a
+// polished, reflective memoir-style entry in their own voice -- a title plus
+// a short-to-medium narrative passage. Purely a draft: the client always
+// shows it in the editor for review/edits before it's saved as a CeoNote.
+app.post("/api/ai/ceo-note-assist", async (req, res) => {
+  try {
+    const { roughNote, type, authorName, companyName } = req.body;
+    if (!roughNote || typeof roughNote !== "string") {
+      return res.status(400).json({ error: "roughNote is required" });
+    }
+
+    const text = roughNote.trim();
+    const firstSentence = text.split(/(?<=[.!?])\s+/)[0] || text;
+    const fallbackTitle = firstSentence.length > 60 ? `${firstSentence.slice(0, 57)}...` : firstSentence;
+    const fallbackContent = text;
+
+    const typeGuidance: Record<string, string> = {
+      Note: "a personal reflection or thought -- candid, first-person, the kind of thing a founder jots down to remember how a moment felt",
+      Activity: "a log of something that happened -- a meeting, a trip, a conversation, a decision made",
+      Milestone: "a bigger moment worth marking -- a launch, a signed deal, a hire, an anniversary",
+      "Progress Update": "an honest look at where things stand -- what moved forward, what stalled, what's next",
+    };
+
+    const prompt = `You are helping ${authorName || "the CEO"} of ${companyName || "their company"} write an entry for their internal "CEO Notes" journal -- a running memoir shared with their own team to connect with them, not a press release or marketing copy. It should read as genuinely first-person and reflective, not corporate.
+
+Entry type: "${type || "Note"}" -- ${typeGuidance[type as string] || typeGuidance.Note}.
+
+The rough note from ${authorName || "the CEO"}: "${text}"
+
+Turn this into a polished journal entry:
+1. A short, human title (not clickbait, not a corporate headline -- something like a diary entry title).
+2. The entry itself, expanded and polished from the rough note into a well-written first-person passage (2-5 short paragraphs). Keep ${authorName || "the author"}'s actual meaning and facts intact -- do not invent events, numbers, or people that weren't in the rough note. Elevate the writing, don't fabricate the substance.
+
+Return pure JSON only, no markdown fences: {"title": string, "content": string}`;
+
+    const rawAiText = await callGeminiSafe(prompt);
+    if (rawAiText) {
+      try {
+        const parsed = JSON.parse(rawAiText);
+        if (parsed.title && parsed.content) {
+          return res.json({ title: parsed.title, content: parsed.content, source: "gemini" });
+        }
+      } catch {
+        // fall through to heuristic
+      }
+    }
+
+    return res.json({ title: fallbackTitle, content: fallbackContent, source: "heuristic" });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to generate CEO note draft", details: err?.message });
   }
 });
 
