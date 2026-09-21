@@ -1176,9 +1176,54 @@ const VALID_NAV_VIEWS = [
   "AI Insights", "Email Marketing", "Inbox", "Reports", "Settings",
 ];
 
+// ----------------------------------------------------------------------------
+// Chat-assistant action support -- lets the floating AI chat propose CRUD
+// actions (create/update/delete a Lead, Contact, Company, Deal, Task,
+// Activity, or Invoice) instead of only answering questions. The AI never
+// touches real IDs directly: it names records by plain text ("Acme Corp",
+// "Jane Doe's onboarding task") and this server resolves those names against
+// a compact lookup list the client sends along with the request. Anything
+// that can't be confidently resolved comes back with an `error` on that
+// action instead of a guessed ID, so the client can show why an action can't
+// be confirmed rather than silently acting on the wrong record. The client
+// always shows every action to the user for explicit confirmation before
+// calling the corresponding CRUD function -- this endpoint only proposes.
+// ----------------------------------------------------------------------------
+const ACTION_ENTITIES = ["lead", "contact", "company", "deal", "task", "activity", "invoice"] as const;
+type ActionEntity = (typeof ACTION_ENTITIES)[number];
+const ENTITY_ALLOWED_TYPES: Record<ActionEntity, Array<"create" | "update" | "delete">> = {
+  lead: ["create", "update", "delete"],
+  contact: ["create", "update", "delete"],
+  company: ["create", "update", "delete"],
+  deal: ["create", "update", "delete"],
+  task: ["create", "update", "delete"],
+  activity: ["create", "delete"],
+  invoice: ["create", "update", "delete"],
+};
+
+// Best-effort "find this record by what the user called it" -- exact
+// case-insensitive match wins, otherwise a unique substring match, otherwise
+// unresolved (never guess between multiple candidates).
+function resolveByName(
+  list: Array<{ id: string; name: string }> | undefined,
+  needle: string | null | undefined
+): { id: string | null; error?: string } {
+  if (!needle || !needle.trim()) return { id: null };
+  if (!list || list.length === 0) return { id: null, error: `No records available to match "${needle}" against.` };
+  const target = needle.trim().toLowerCase();
+  const exact = list.filter((r) => r.name.toLowerCase() === target);
+  if (exact.length === 1) return { id: exact[0].id };
+  const partial = list.filter((r) => r.name.toLowerCase().includes(target) || target.includes(r.name.toLowerCase()));
+  if (partial.length === 1) return { id: partial[0].id };
+  if (partial.length > 1) {
+    return { id: null, error: `"${needle}" matches ${partial.length} records (${partial.slice(0, 3).map((r) => r.name).join(", ")}${partial.length > 3 ? ", ..." : ""}) -- be more specific.` };
+  }
+  return { id: null, error: `Couldn't find a record matching "${needle}".` };
+}
+
 app.post("/api/ai/chat-assistant", async (req, res) => {
   try {
-    const { message, history, context } = req.body;
+    const { message, history, context, lookups } = req.body;
     if (!message || typeof message !== "string") {
       return res.status(400).json({ error: "message is required" });
     }
@@ -1203,32 +1248,161 @@ app.post("/api/ai/chat-assistant", async (req, res) => {
     }
 
     const ctx = context || {};
+    const lk = lookups || {};
+    const companies: Array<{ id: string; name: string }> = lk.companies || [];
+    const contacts: Array<{ id: string; name: string }> = lk.contacts || [];
+    const leads: Array<{ id: string; name: string }> = lk.leads || [];
+    const deals: Array<{ id: string; name: string }> = lk.deals || [];
+    const tasks: Array<{ id: string; name: string }> = lk.tasks || [];
+    const invoices: Array<{ id: string; name: string }> = lk.invoices || [];
+    const pipelines: Array<{ id: string; name: string; stages: Array<{ id: string; name: string }> }> = lk.pipelines || [];
+
     const fallbackReply = fallbackNav
       ? `Opening ${fallbackNav} for you now.`
       : `Here's a quick snapshot: ${ctx.leadsCount ?? 0} leads, ${ctx.openDealsCount ?? 0} open deals worth $${(ctx.openDealsValue ?? 0).toLocaleString()}, and ${ctx.overdueInvoicesCount ?? 0} overdue invoices. Ask me something more specific and I'll dig into it.`;
 
-    const prompt = `You are the AI assistant embedded in AarPex, a Sales Intelligence System built by Aargard Business Solutions. You live in a small floating chat bubble in the corner of the app.
+    const prompt = `You are the AI assistant embedded in AarPex, a Sales Intelligence System built by Aargard Business Solutions. You live in a small floating chat bubble in the corner of the app, and you can now DO things in the CRM, not just answer questions -- but every action you propose is only ever a PROPOSAL: the user must explicitly confirm it in the UI before anything actually changes. You never claim something has already happened.
 
 Here is a compact snapshot of the signed-in user's workspace data (use ONLY this to answer -- never invent numbers or records that aren't here):
 ${JSON.stringify(ctx, null, 2)}
+
+Existing records you can reference BY NAME (never invent an ID -- you don't have access to real IDs, only names):
+Companies: ${JSON.stringify(companies.map((c) => c.name)).slice(0, 4000)}
+Contacts: ${JSON.stringify(contacts.map((c) => c.name)).slice(0, 4000)}
+Leads: ${JSON.stringify(leads.map((l) => l.name)).slice(0, 4000)}
+Deals: ${JSON.stringify(deals.map((d) => d.name)).slice(0, 4000)}
+Tasks: ${JSON.stringify(tasks.map((t) => t.name)).slice(0, 2000)}
+Invoices: ${JSON.stringify(invoices.map((i) => i.name)).slice(0, 2000)}
+Pipelines: ${JSON.stringify(pipelines.map((p) => ({ name: p.name, stages: p.stages.map((s) => s.name) })))}
 
 Recent conversation (oldest first):
 ${JSON.stringify((history || []).slice(-8))}
 
 The user just said: "${message}"
 
-Reply conversationally and concisely (2-4 sentences, no bullet points) using the data above. If the user is asking to see, open, or navigate to a specific screen, also set "navigateTo" to the single best-matching value from this exact list: ${VALID_NAV_VIEWS.map((v) => `"${v}"`).join(", ")}. If no navigation is being requested, set "navigateTo" to null. You cannot create, edit, or delete any records -- if asked to do so, say so plainly and suggest where in the app they can do it themselves.
+Reply conversationally and concisely (2-4 sentences, no bullet points). If the user is asking to see, open, or navigate to a specific screen, also set "navigateTo" to the single best-matching value from this exact list: ${VALID_NAV_VIEWS.map((v) => `"${v}"`).join(", ")}. Otherwise set "navigateTo" to null.
 
-Return pure JSON only: {"reply": string, "navigateTo": string | null}`;
+If the user is asking you to CREATE, UPDATE, or DELETE something, populate "actions" (an array, empty if none). Each action:
+{
+  "type": "create" | "update" | "delete",
+  "entity": "lead" | "contact" | "company" | "deal" | "task" | "activity" | "invoice",
+  "summary": "short human-readable one-line description of exactly what this will do, written for a confirmation prompt",
+  "target": string | null,       // REQUIRED for update/delete: the name of the existing record being changed, exactly as it appears in the lists above. null for create.
+  "companyRef": string | null,   // for contact/deal/invoice/task/activity: the company name involved (existing, from the list above)
+  "contactRef": string | null,   // for deal/invoice/task/activity: the contact name involved, if any
+  "dealRef": string | null,      // for invoice/task/activity: the deal name involved, if any
+  "pipelineRef": string | null,  // for deal create/update: pipeline name, if specified
+  "stageRef": string | null,     // for deal create/update: stage name within that pipeline, if specified
+  "fields": { ... }              // entity-specific plain values the user actually specified or clearly implied -- do NOT invent unrelated data, leave anything unstated out of "fields" so the app can fill sane defaults
+}
+
+Field guidance per entity (only include what the user actually said or clearly implied):
+- lead: name, company (plain text, not a companyRef), jobTitle, email, phone, industry, country, city, source, estimatedValue (number), priority ("Low"|"Medium"|"High"|"Urgent"), status ("New"|"Contacted"|"Engaged"|"Qualified"|"Proposal"|"Negotiation"|"Converted"|"Lost"|"Nurture"), notes
+- contact: firstName, lastName, position, email, phone, country, city, notes (company via companyRef)
+- company: name, industry, website, country, city, phone, email, status ("Prospect"|"Qualified Prospect"|"Active Customer"|"High Value Customer"|"At Risk"|"Dormant"|"Former Customer"), notes
+- deal: name, dealValue (number), currency, priority ("Low"|"Medium"|"High"), expectedCloseDate (YYYY-MM-DD), productService, notes (company via companyRef, contact via contactRef, pipeline/stage via pipelineRef/stageRef)
+- task: title, dueDate (YYYY-MM-DD), priority ("Low"|"Medium"|"High"|"Urgent"), status ("To Do"|"In Progress"|"Completed"|"Cancelled"), notes (related company/contact/deal via companyRef/contactRef/dealRef)
+- activity: type ("Call"|"Meeting"|"Email"|"WhatsApp"|"Follow-up"|"Demo"|"Proposal"|"Note"), description, outcome, nextAction (related company/contact/deal via companyRef/contactRef/dealRef)
+- invoice: dueDate (YYYY-MM-DD), items (array of {description, quantity, unitPrice}), notes (company via companyRef required, contact/deal optional via contactRef/dealRef)
+
+For update actions, put ONLY the fields being changed inside "fields". Never propose an action against a record that isn't in the lists above -- if the user references something that doesn't exist, say so in your reply instead and don't fabricate an action for it.
+
+Return pure JSON only, no markdown fences: {"reply": string, "navigateTo": string | null, "actions": [...]}`;
 
     const rawAiText = await callGeminiSafe(prompt);
     if (rawAiText) {
       try {
         const parsed = JSON.parse(rawAiText);
         const navigateTo = VALID_NAV_VIEWS.includes(parsed.navigateTo) ? parsed.navigateTo : null;
+
+        const byName = (arr: Array<{ id: string; name: string }>) => arr;
+        const rawActions = Array.isArray(parsed.actions) ? parsed.actions : [];
+
+        const actions = rawActions
+          .filter((a: any) => ACTION_ENTITIES.includes(a?.entity) && ENTITY_ALLOWED_TYPES[a.entity as ActionEntity]?.includes(a?.type))
+          .slice(0, 5)
+          .map((a: any, idx: number) => {
+            const entity = a.entity as ActionEntity;
+            const fields = a.fields && typeof a.fields === "object" ? a.fields : {};
+            let error: string | undefined;
+            const params: Record<string, any> = { ...fields };
+
+            // Resolve the target record itself for update/delete.
+            let targetId: string | null = null;
+            if (a.type === "update" || a.type === "delete") {
+              const list = entity === "lead" ? byName(leads)
+                : entity === "contact" ? byName(contacts)
+                : entity === "company" ? byName(companies)
+                : entity === "deal" ? byName(deals)
+                : entity === "task" ? byName(tasks)
+                : entity === "invoice" ? byName(invoices)
+                : [];
+              const resolved = resolveByName(list, a.target);
+              if (!resolved.id) error = resolved.error || `Couldn't identify which ${entity} "${a.target}" refers to.`;
+              targetId = resolved.id;
+            }
+
+            // Resolve foreign-key references used by create/update.
+            if (!error && a.companyRef) {
+              const r = resolveByName(companies, a.companyRef);
+              if (r.id) params.companyId = r.id;
+              else if (["contact", "deal", "invoice"].includes(entity)) error = r.error || `Couldn't find company "${a.companyRef}".`;
+              else if (r.error) error = r.error;
+            }
+            if (!error && a.contactRef) {
+              const r = resolveByName(contacts, a.contactRef);
+              if (r.id) params.contactId = r.id;
+              else if (r.error) error = r.error;
+            }
+            if (!error && a.dealRef) {
+              const r = resolveByName(deals, a.dealRef);
+              if (r.id) params.dealId = r.id;
+              else if (r.error) error = r.error;
+            }
+            if (!error && entity === "deal" && a.pipelineRef) {
+              const pipe = pipelines.find((p) => p.name.toLowerCase() === String(a.pipelineRef).toLowerCase());
+              if (pipe) {
+                params.pipelineId = pipe.id;
+                if (a.stageRef) {
+                  const stage = pipe.stages.find((s) => s.name.toLowerCase() === String(a.stageRef).toLowerCase());
+                  if (stage) params.stageId = stage.id;
+                }
+              }
+            }
+            if (!error && entity === "company" && a.type === "create" && !fields.name) {
+              error = "No company name given.";
+            }
+            if (!error && entity === "contact" && a.type === "create" && !params.companyId) {
+              error = `A contact needs a company -- couldn't resolve "${a.companyRef || "unspecified"}".`;
+            }
+            if (!error && entity === "deal" && a.type === "create" && !params.companyId) {
+              error = `A deal needs a company -- couldn't resolve "${a.companyRef || "unspecified"}".`;
+            }
+            if (!error && entity === "invoice" && a.type === "create" && !params.companyId) {
+              error = `An invoice needs a company -- couldn't resolve "${a.companyRef || "unspecified"}".`;
+            }
+
+            const built: Record<string, any> =
+              a.type === "delete"
+                ? { id: targetId }
+                : a.type === "update"
+                ? { id: targetId, updates: params }
+                : params;
+
+            return {
+              id: `act_${Date.now()}_${idx}`,
+              type: a.type,
+              entity,
+              summary: a.summary || `${a.type} ${entity}`,
+              params: built,
+              ...(error ? { error } : {}),
+            };
+          });
+
         return res.json({
           reply: parsed.reply || fallbackReply,
           navigateTo,
+          actions,
           source: "gemini",
         });
       } catch {
@@ -1239,12 +1413,14 @@ Return pure JSON only: {"reply": string, "navigateTo": string | null}`;
     return res.json({
       reply: fallbackReply,
       navigateTo: fallbackNav,
+      actions: [],
       source: "heuristic",
     });
   } catch (err: any) {
     res.json({
       reply: "I ran into an issue reaching the AI service just now -- try again in a moment.",
       navigateTo: null,
+      actions: [],
       source: "fallback",
     });
   }

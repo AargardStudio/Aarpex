@@ -13,6 +13,25 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-09-21
+
+### Added
+
+- The floating **AI chat (Sales Intelligence Copilot)** can now propose real
+  CRUD actions — create, update, or delete Leads, Contacts, Companies,
+  Deals, Tasks, Activities, and Invoices — instead of only answering
+  questions. Every proposed action shows as a confirmation card (entity,
+  type, plain-English summary) and only runs after you click **Confirm**;
+  nothing is ever applied automatically.
+- The AI never invents record IDs: it refers to existing records by name,
+  and the server resolves those names against your actual workspace data.
+  If a reference is ambiguous or not found, the action shows a clear error
+  instead of guessing.
+- Missing optional fields on a proposed action are filled with the same
+  sane defaults used by the Quick Create form (salesperson, dates,
+  currency, etc.), so a short chat request like "create a lead for Sarah
+  at Acme, VP Ops" produces a complete, usable record.
+
 ## [1.7.0] - 2026-09-20
 
 ### Added

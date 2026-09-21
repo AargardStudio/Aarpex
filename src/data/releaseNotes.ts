@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.8.0",
+    date: "2026-09-21",
+    headline: "Your Copilot Can Actually Do The Work Now",
+    tagline: "Tell the AI chat what you need and confirm it -- leads, deals, invoices, and more, handled in seconds.",
+    highlights: [
+      {
+        title: "From Q&A to real action",
+        description: "Ask your Sales Intelligence Copilot to create a lead, log an invoice, or update a deal, and it builds the record for you.",
+      },
+      {
+        title: "You're always in control",
+        description: "Every action shows up as a confirmation card first -- nothing changes in your CRM until you click Confirm.",
+      },
+      {
+        title: "No guesswork, no wrong records",
+        description: "The AI only acts on companies, contacts, and deals that actually exist in your workspace -- ambiguous requests get flagged instead of guessed.",
+      },
+    ],
+  },
+  {
     version: "1.7.0",
     date: "2026-09-20",
     headline: "Sell The Right Thing To The Right People",
