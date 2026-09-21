@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.10.0",
+    date: "2026-09-21",
+    headline: "Straight From Aargard's CEO",
+    tagline: "CEO Notes is now a shared broadcast -- one voice, every workspace, published directly by Aargard.",
+    highlights: [
+      {
+        title: "One journal, every workspace",
+        description: "CEO Notes now shows the same entries to every AarPex user, everywhere -- Aargard's real running log, not a per-account journal.",
+      },
+      {
+        title: "Always authentic, never edited",
+        description: "Entries are published directly by Aargard -- no one else can create, edit, or delete a CEO Notes entry from inside AarPex.",
+      },
+    ],
+  },
+  {
     version: "1.9.1",
     date: "2026-09-21",
     headline: "Your Journal, Right On The Dashboard",

@@ -13,6 +13,22 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-09-21
+
+### Changed
+
+- **CEO Notes is now a global, read-only broadcast feed.** Entries are
+  published by Aargard directly, ship as static content with the app
+  (`src/data/ceoNotes.ts`), and are visible to every AarPex user across every
+  workspace -- no one, in any account, can create, edit, or delete an entry
+  from within the app anymore.
+- Removed the per-tenant CEO Notes database wiring (state, sync, and CRUD)
+  from `CRMContext.tsx`, the `ceo_notes` table from the tenant sync list, and
+  the now-unused `/api/ai/ceo-note-assist` endpoint. The `ceo_notes` Postgres
+  table itself is left in place, unused.
+- `CeoNotesView` and the Dashboard's CEO Notes widget now read directly from
+  the shipped `CEO_NOTES` list instead of a per-tenant database table.
+
 ## [1.9.1] - 2026-09-21
 
 ### Changed

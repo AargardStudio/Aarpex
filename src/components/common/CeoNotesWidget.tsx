@@ -1,12 +1,12 @@
-import React, { useState } from "react";
+import React from "react";
 import { useCRM } from "../../context/CRMContext";
-import { BookOpen, Plus, ChevronRight, NotebookPen, CalendarDays, Flag, TrendingUp } from "lucide-react";
+import { BookOpen, ChevronRight, NotebookPen, CalendarDays, Flag, TrendingUp } from "lucide-react";
 import { CeoNote, CeoNoteType } from "../../types";
-import { CeoNoteFormModal } from "../views/CeoNotesView";
+import { CEO_NOTES } from "../../data/ceoNotes";
 
 // Maroon / burgundy / teal / black -- deliberately its own palette, distinct
-// from the rest of the (teal/graphite) dashboard, so this reads as the
-// CEO's own personal corner rather than another CRM widget.
+// from the rest of the (teal/graphite) dashboard, so this reads as
+// Aargard's own personal corner rather than another CRM widget.
 const TYPE_META: Record<CeoNoteType, { icon: React.ElementType; className: string }> = {
   Note: { icon: NotebookPen, className: "bg-black/40 text-slate-300 border-[#4a1420]" },
   Activity: { icon: CalendarDays, className: "bg-teal-950/50 text-teal-300 border-teal-800/50" },
@@ -15,15 +15,14 @@ const TYPE_META: Record<CeoNoteType, { icon: React.ElementType; className: strin
 };
 
 // Compact "next to What's New" dashboard box -- shows the latest couple of
-// entries and lets the CEO jump straight into writing one. The full
-// timeline (browse/edit/delete everything) lives on the CEO Notes page,
-// reached here via "View all" -- there's deliberately no sidebar link to it
-// anymore, this box is the entry point.
+// entries from Aargard's CEO Notes broadcast feed. Read-only everywhere: the
+// content ships with the app (src/data/ceoNotes.ts), nobody in any workspace
+// can create, edit, or delete an entry here. "View all" jumps to the full
+// timeline; there's deliberately no sidebar link, this box is the entry point.
 export const CeoNotesWidget: React.FC = () => {
-  const { ceoNotes, setActiveNav } = useCRM();
-  const [isFormOpen, setFormOpen] = useState(false);
+  const { setActiveNav } = useCRM();
 
-  const recentNotes = ceoNotes
+  const recentNotes = CEO_NOTES
     .slice()
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (b.createdAt || "").localeCompare(a.createdAt || "")))
     .slice(0, 2);
@@ -40,23 +39,14 @@ export const CeoNotesWidget: React.FC = () => {
           </span>
           <div className="min-w-0">
             <h3 className="text-sm font-bold text-white leading-tight">CEO Notes</h3>
-            <p className="text-[10px] text-rose-200/70 leading-tight">A running journal, for the team</p>
+            <p className="text-[10px] text-rose-200/70 leading-tight">Straight from Aargard's CEO</p>
           </div>
         </div>
-        <button
-          onClick={() => setFormOpen(true)}
-          className="shrink-0 w-7 h-7 rounded-lg bg-teal-600/90 hover:bg-teal-500 text-white flex items-center justify-center shadow-sm"
-          title="New entry"
-        >
-          <Plus className="w-3.5 h-3.5" />
-        </button>
       </div>
 
       {recentNotes.length === 0 ? (
         <div className="p-3.5 bg-black/30 rounded-xl border border-[#4a1420] text-center">
-          <p className="text-[11px] text-slate-400">
-            No entries yet -- write your first note, or hand AI a rough thought to polish.
-          </p>
+          <p className="text-[11px] text-slate-400">No entries yet -- check back soon.</p>
         </div>
       ) : (
         <div className="space-y-2 relative">
@@ -93,8 +83,6 @@ export const CeoNotesWidget: React.FC = () => {
         View all entries
         <ChevronRight className="w-3 h-3" />
       </button>
-
-      {isFormOpen && <CeoNoteFormModal editing={null} onClose={() => setFormOpen(false)} />}
     </div>
   );
 };

@@ -568,10 +568,12 @@ export interface Comment {
 }
 
 // ----------------------------------------------------------------------------
-// CEO Notes -- an internal, workspace-visible journal for the founder/CEO to
-// share reflections, activity, and progress updates with their team. A
-// memoir-style running log, not a CRM record; AI can help turn a rough note
-// into a polished entry, but every entry is manually reviewed/saved.
+// CEO Notes -- a global, read-only broadcast feed from Aargard's CEO to
+// every AarPex user, across every workspace. A memoir-style running log,
+// not a CRM record and not user-editable: entries ship as static content
+// in src/data/ceoNotes.ts (see that file), the same way release notes do.
+// No user, in any tenant, can create, edit, or delete an entry from the
+// app -- publishing only happens by editing that file and pushing a build.
 // ----------------------------------------------------------------------------
 export type CeoNoteType = "Note" | "Activity" | "Milestone" | "Progress Update";
 
