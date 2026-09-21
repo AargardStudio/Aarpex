@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.9.1",
+    date: "2026-09-21",
+    headline: "Your Journal, Right On The Dashboard",
+    tagline: "CEO Notes now lives front and center, in its own maroon and teal corner of home.",
+    highlights: [
+      {
+        title: "No more digging through menus",
+        description: "CEO Notes now shows up right on the Dashboard, next to What's New, with your latest entries at a glance.",
+      },
+      {
+        title: "A look of its own",
+        description: "A maroon, burgundy, teal, and black palette sets it apart as your personal corner of AarPex.",
+      },
+    ],
+  },
+  {
     version: "1.9.0",
     date: "2026-09-21",
     headline: "Your Story, In Your Own App",

@@ -13,6 +13,15 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-09-21
+
+### Changed
+
+- Moved **CEO Notes** off the sidebar and onto the Dashboard home page as a
+  compact box next to "What's New in AarPex" -- its own maroon/burgundy/
+  teal/black theme, showing the latest entries with a quick "New Entry"
+  button and a link into the full journal.
+
 ## [1.9.0] - 2026-09-21
 
 ### Added

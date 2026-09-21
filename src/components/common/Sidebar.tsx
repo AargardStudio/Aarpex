@@ -28,7 +28,6 @@ import {
   Landmark,
   Inbox as InboxIcon,
   Package,
-  BookOpen,
   X,
 } from "lucide-react";
 import { ROLE_LABELS, UserRole } from "../../types";
@@ -38,7 +37,7 @@ interface NavItem {
   icon: React.ElementType;
   badge?: number | string;
   badgeColor?: string;
-  category: "Core" | "Sales" | "Finance" | "Productivity" | "Intelligence" | "Marketing" | "Executive" | "System";
+  category: "Core" | "Sales" | "Finance" | "Productivity" | "Intelligence" | "Marketing" | "System";
 }
 
 export const Sidebar: React.FC = () => {
@@ -116,8 +115,6 @@ export const Sidebar: React.FC = () => {
       category: "Marketing",
     },
 
-    { name: "CEO Notes", icon: BookOpen, category: "Executive" },
-
     { name: "Reports", icon: BarChart3, category: "System" },
     { name: "Settings", icon: Settings, category: "System" },
   ];
@@ -129,7 +126,6 @@ export const Sidebar: React.FC = () => {
     "Productivity",
     "Intelligence",
     "Marketing",
-    "Executive",
     "System",
   ];
 

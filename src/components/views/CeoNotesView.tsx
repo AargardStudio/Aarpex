@@ -45,7 +45,7 @@ const emptyDraft = (authorName: string): Omit<CeoNote, "id" | "createdAt"> => ({
 // polish it into a proper entry. AI never saves on its own: it only fills
 // the title/content fields for you to review and edit before saving.
 // ----------------------------------------------------------------------------
-const CeoNoteFormModal: React.FC<{ editing: CeoNote | null; onClose: () => void }> = ({ editing, onClose }) => {
+export const CeoNoteFormModal: React.FC<{ editing: CeoNote | null; onClose: () => void }> = ({ editing, onClose }) => {
   const { currentUser, addCeoNote, updateCeoNote, generateCeoNoteDraft } = useCRM();
 
   const [draft, setDraft] = useState<Omit<CeoNote, "id" | "createdAt">>(

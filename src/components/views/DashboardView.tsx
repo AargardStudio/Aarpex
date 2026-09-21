@@ -29,6 +29,7 @@ import {
 } from "recharts";
 import { apiFetch } from "../../lib/apiClient";
 import { RELEASE_NOTES } from "../../data/releaseNotes";
+import { CeoNotesWidget } from "../common/CeoNotesWidget";
 
 export const DashboardView: React.FC = () => {
   const {
@@ -255,8 +256,9 @@ export const DashboardView: React.FC = () => {
         )}
       </div>
 
-      {/* What's New in AarPex -- version banner + marketed release highlights */}
-      <div className="bg-[#181b21] rounded-2xl p-4 sm:p-5 border border-[#2d323f] shadow-lg text-white space-y-4">
+      {/* What's New in AarPex (log book) + CEO Notes, side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+      <div className="lg:col-span-2 bg-[#181b21] rounded-2xl p-4 sm:p-5 border border-[#2d323f] shadow-lg text-white space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2.5">
             <span className="w-7 h-7 rounded-lg bg-teal-500/15 border border-teal-500/30 flex items-center justify-center shrink-0">
@@ -332,6 +334,9 @@ export const DashboardView: React.FC = () => {
             ))}
           </div>
         )}
+      </div>
+
+      <CeoNotesWidget />
       </div>
 
       {/* 8 Essential Executive KPIs in Sleek Graphite */}
