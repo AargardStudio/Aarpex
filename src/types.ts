@@ -290,6 +290,11 @@ export interface Lead {
   notes: string;
   convertedCompanyId?: string;
   convertedDealId?: string;
+  // Set by "Sync All to Companies/Contacts" (or the per-lead equivalent) --
+  // marks that this lead has a matching Company/Contact record, without
+  // implying a full pipeline conversion the way convertedCompanyId does.
+  linkedCompanyId?: string;
+  linkedContactId?: string;
 }
 
 // ----------------------------------------------------------------------------
@@ -784,7 +789,7 @@ export interface Tenant {
   currency: string;
   createdAt: string;
   ownerEmail: string;
-  plan: "Starter" | "Growth" | "Enterprise" | "Free";
+  plan: "Starter" | "Growth" | "Pro" | "Enterprise" | "Free";
   subscriptionStatus?: "active" | "trialing" | "past_due" | "canceled";
   billingCycle?: "monthly" | "annually";
   subscriptionPrice?: number;

@@ -29,6 +29,8 @@ import {
   Trash2,
   UserPlus,
   Link2,
+  Pencil,
+  Check,
 } from "lucide-react";
 import { CustomerStatus, CallLogEntry } from "../../types";
 import { apiFetch } from "../../lib/apiClient";
@@ -75,6 +77,8 @@ export const Company360Drawer: React.FC = () => {
 
   // Business Profile tab state
   const [isProfileAnalyzing, setIsProfileAnalyzing] = useState(false);
+  const [isEditingPhone, setIsEditingPhone] = useState(false);
+  const [phoneDraft, setPhoneDraft] = useState("");
   const [callDate, setCallDate] = useState(new Date().toISOString().split("T")[0]);
   const [callDuration, setCallDuration] = useState(5);
   const [callOutcome, setCallOutcome] = useState<CallLogEntry["outcome"]>("Connected");
@@ -130,6 +134,16 @@ export const Company360Drawer: React.FC = () => {
 
   const handleStatusChange = (newStatus: CustomerStatus) => {
     updateCompany(company.id, { status: newStatus });
+  };
+
+  const handleStartEditPhone = () => {
+    setPhoneDraft(company.phone || "");
+    setIsEditingPhone(true);
+  };
+
+  const handleSavePhone = () => {
+    updateCompany(company.id, { phone: phoneDraft.trim() });
+    setIsEditingPhone(false);
   };
 
   const handleLogActivity = (e: React.FormEvent) => {
@@ -412,7 +426,7 @@ export const Company360Drawer: React.FC = () => {
             { id: "invoices", label: `Invoices & Ledger (${companyInvoices.length})`, icon: Receipt },
             { id: "timeline", label: `Activity (${companyActivities.length})`, icon: CalendarCheck },
             { id: "comments", label: `Notes (${companyComments.length})`, icon: MessageSquare },
-            { id: "ai", label: "AI Intelligence", icon: Sparkles, badge: "Gemini" },
+            { id: "ai", label: "AI Intelligence", icon: Sparkles, badge: "AI" },
           ].map((tab) => {
             const Icon = tab.icon;
             const isSelected = activeTab === tab.id;
@@ -451,7 +465,47 @@ export const Company360Drawer: React.FC = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   <div>
                     <span className="text-slate-400 block text-[11px]">Direct Phone</span>
-                    <span className="font-medium text-slate-800">{company.phone || "—"}</span>
+                    {isEditingPhone ? (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <input
+                          type="tel"
+                          autoFocus
+                          value={phoneDraft}
+                          onChange={(e) => setPhoneDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSavePhone();
+                            if (e.key === "Escape") setIsEditingPhone(false);
+                          }}
+                          placeholder="+1 555 000 0000"
+                          className="w-32 px-1.5 py-0.5 border border-indigo-300 rounded text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        />
+                        <button
+                          onClick={handleSavePhone}
+                          className="p-1 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                          title="Save"
+                        >
+                          <Check className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => setIsEditingPhone(false)}
+                          className="p-1 rounded bg-slate-100 text-slate-500 hover:bg-slate-200"
+                          title="Cancel"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="font-medium text-slate-800 flex items-center gap-1.5 group/phone">
+                        {company.phone || "—"}
+                        <button
+                          onClick={handleStartEditPhone}
+                          className="opacity-0 group-hover/phone:opacity-100 text-slate-400 hover:text-indigo-600 transition-opacity"
+                          title="Edit phone number"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[11px]">Primary Email</span>
@@ -1334,7 +1388,7 @@ export const Company360Drawer: React.FC = () => {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 font-bold text-sm text-teal-300">
                     <Sparkles className="w-4 h-4 text-teal-400 animate-pulse" />
-                    Gemini 3.7 Customer Intelligence
+                    AarPex AI Customer Intelligence
                   </div>
                   <p className="text-xs text-slate-300 max-w-lg">
                     Synthesize {company.name}&apos;s billing history, deals pipeline, and activity

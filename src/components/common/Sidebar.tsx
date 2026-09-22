@@ -98,7 +98,7 @@ export const Sidebar: React.FC = () => {
     { name: "Stripe", icon: Landmark, category: "Finance" },
 
     { name: "Tasks", icon: CheckSquare, badge: pendingTasksCount, category: "Productivity" },
-    { name: "AI Insights", icon: Sparkles, badge: "Gemini", badgeColor: "bg-[#252a36] text-teal-300 border border-[#3d4455] font-semibold", category: "Intelligence" },
+    { name: "AI Insights", icon: Sparkles, badge: "AI", badgeColor: "bg-[#252a36] text-teal-300 border border-[#3d4455] font-semibold", category: "Intelligence" },
 
     {
       name: "Email Marketing",

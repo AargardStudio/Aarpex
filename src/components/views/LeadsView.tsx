@@ -17,6 +17,7 @@ import {
   FileSpreadsheet,
   Sparkles,
   Users2,
+  Link2,
 } from "lucide-react";
 import { LeadConvertModal } from "../modals/LeadConvertModal";
 import { LeadImportModal } from "../leads/LeadImportModal";
@@ -252,6 +253,15 @@ export const LeadsView: React.FC = () => {
                             <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
                               <Building2 className="w-3 h-3 text-slate-400" />
                               <span className="font-medium">{lead.company}</span>
+                              {(lead.linkedCompanyId || lead.convertedCompanyId) && (
+                                <span
+                                  className="inline-flex items-center gap-0.5 text-[9px] font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded px-1 py-px"
+                                  title="Linked to a Company/Contact record"
+                                >
+                                  <Link2 className="w-2 h-2" />
+                                  Linked
+                                </span>
+                              )}
                             </div>
                             {lead.phone && (
                               <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
@@ -360,7 +370,18 @@ export const LeadsView: React.FC = () => {
                 <tr key={lead.id} className="hover:bg-slate-50/60 transition-colors">
                   <td className="p-3">
                     <div className="font-bold text-slate-900">{lead.name}</div>
-                    <div className="text-slate-500 text-[11px]">{lead.company} • {lead.jobTitle}</div>
+                    <div className="text-slate-500 text-[11px] flex items-center gap-1.5">
+                      <span>{lead.company} • {lead.jobTitle}</span>
+                      {(lead.linkedCompanyId || lead.convertedCompanyId) && (
+                        <span
+                          className="inline-flex items-center gap-0.5 text-[9px] font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded px-1 py-px"
+                          title="Linked to a Company/Contact record"
+                        >
+                          <Link2 className="w-2 h-2" />
+                          Linked
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="p-3 text-slate-600 space-y-0.5">
                     {lead.email && <div className="text-indigo-600">{lead.email}</div>}

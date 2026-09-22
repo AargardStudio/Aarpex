@@ -653,7 +653,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // a Stripe checkout. Every other workspace is only ever provisioned
     // (see AuthPage's sign-up flow) after that account's owner has completed
     // a real, live Stripe Checkout with a card on file — so it starts on the
-    // normal 7-day trial that auto-charges once the trial ends.
+    // normal 14-day trial that auto-charges once the trial ends.
     const ownerEmail = (tenantData.ownerEmail || currentUser.email || "").trim().toLowerCase();
     const isFounderAccount = ownerEmail === FOUNDER_EMAIL.toLowerCase();
 
@@ -670,7 +670,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       companyName: tenantData.companyName || tenantData.name || "New Enterprise Corp",
       taxId: tenantData.taxId || "",
       commissionRate: tenantData.commissionRate ?? 10,
-      // Every new workspace starts on a 7-day free trial of the flat-rate
+      // Every new workspace starts on a 14-day free trial of the flat-rate
       // platform plan; nextBillingDate doubles as "trial ends / first charge
       // date" since there's only ever one plan. The founder account is kept
       // permanently active instead, with no trial/billing clock running.
@@ -1366,6 +1366,12 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let contactsCreated = 0;
     let companiesLinked = 0;
     const today = new Date().toISOString().split("T")[0];
+    // Tracks, per lead, which Company/Contact it ended up matched or linked
+    // to this pass -- written back onto the leads themselves at the end so
+    // the sync actually persists (setRawCompanies/setContacts alone only
+    // save the Company/Contact records, not the fact that each Lead is now
+    // linked to one).
+    const leadLinkage = new Map<string, { companyId: string; contactId?: string }>();
 
     leads.forEach((lead) => {
       if (!lead.company || !lead.company.trim()) return;
@@ -1399,14 +1405,18 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         companiesLinked++;
       }
 
+      let contactId: string | undefined;
       if (lead.email && lead.email.trim()) {
         const existingContact = localContacts.find(
           (c) => c.email.trim().toLowerCase() === lead.email.trim().toLowerCase()
         );
-        if (!existingContact) {
+        if (existingContact) {
+          contactId = existingContact.id;
+        } else {
           const nameParts = lead.name.trim().split(" ");
+          const newContactId = `cnt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
           localContacts.push({
-            id: `cnt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            id: newContactId,
             firstName: nameParts[0] || lead.name || "Lead",
             lastName: nameParts.slice(1).join(" ") || "",
             position: lead.jobTitle || "",
@@ -1423,13 +1433,31 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             tags: ["Auto-Created", "From Lead"],
             createdAt: today,
           });
+          contactId = newContactId;
           contactsCreated++;
         }
       }
+
+      leadLinkage.set(lead.id, { companyId: company.id, contactId });
     });
 
     setRawCompanies(localCompanies);
     setContacts(localContacts);
+
+    // Write the match/link back onto the leads themselves -- without this,
+    // nothing about the sync survives a reload: Company/Contact records
+    // persist fine, but the Lead objects (and anything reading them, like
+    // the "Linked" badge in the Leads view) never change, so it looks like
+    // the sync silently didn't save.
+    if (leadLinkage.size > 0) {
+      setLeads((prev) =>
+        prev.map((l) => {
+          const link = leadLinkage.get(l.id);
+          if (!link) return l;
+          return { ...l, linkedCompanyId: link.companyId, linkedContactId: link.contactId };
+        })
+      );
+    }
 
     // Kick off AI analysis in the background, only for companies this sync
     // actually created -- companies that already existed likely already

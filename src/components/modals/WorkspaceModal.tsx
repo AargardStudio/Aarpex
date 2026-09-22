@@ -19,7 +19,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({ mandatory = fals
   const [industry, setIndustry] = useState("Enterprise SaaS");
   const [currency, setCurrency] = useState("USD");
   // AarPex is a flat-rate product — every new workspace is provisioned on the single platform plan.
-  const plan: "Starter" | "Growth" | "Enterprise" = PLATFORM_PLAN.id;
+  const plan: "Starter" | "Growth" | "Pro" | "Enterprise" = PLATFORM_PLAN.id;
   const [companyName, setCompanyName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
@@ -34,8 +34,8 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({ mandatory = fals
     setCheckoutError("");
 
     // Every workspace — founder account or not — is provisioned immediately
-    // on the platform's 7-day free trial (createTenant already sets
-    // subscriptionStatus: "trialing" and a nextBillingDate 7 days out for
+    // on the platform's 14-day free trial (createTenant already sets
+    // subscriptionStatus: "trialing" and a nextBillingDate 14 days out for
     // non-founder accounts, and "active" with no trial clock for the
     // founder). No Stripe redirect happens at creation time.
     setIsSubmitting(true);

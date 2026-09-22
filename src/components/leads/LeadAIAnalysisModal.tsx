@@ -219,7 +219,7 @@ export const LeadAIAnalysisModal: React.FC<{ lead: Lead; onClose: () => void }> 
 
               {result.source && (
                 <p className="text-[9px] text-slate-300 text-right">
-                  {result.source === "gemini" ? "Generated live by Gemini" : "Generated via heuristic fallback"}
+                  {result.source === "gemini" ? "Generated live by AarPex AI" : "Generated via heuristic fallback"}
                 </p>
               )}
             </>

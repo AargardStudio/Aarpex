@@ -23,6 +23,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.11.0",
+    date: "2026-09-22",
+    headline: "A New Pro Tier, A Longer Trial, A Fixed Sync",
+    tagline: "More room to try AarPex, a Pro plan for growing teams, and a lead-sync bug squashed.",
+    highlights: [
+      {
+        title: "14 days to explore, not 7",
+        description: "Every new workspace now gets a full two weeks on the free trial before anything is charged.",
+      },
+      {
+        title: "Introducing the Pro plan",
+        description: "$99/mo unlocks multiple sending mailboxes and more -- see the upgrade picker in Settings for the full list.",
+      },
+      {
+        title: "Sync All to Companies/Contacts now sticks",
+        description: "Bulk-linking leads to Company and Contact records used to silently not save -- fixed, with a \"Linked\" badge so you can see it worked.",
+      },
+      {
+        title: "Edit a company's phone number in place",
+        description: "No more deleting and re-adding a company just to fix a typo'd phone number -- edit it right from the Company 360 view.",
+      },
+    ],
+  },
+  {
     version: "1.10.0",
     date: "2026-09-21",
     headline: "Straight From Aargard's CEO",

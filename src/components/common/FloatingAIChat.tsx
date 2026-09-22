@@ -433,7 +433,7 @@ export const FloatingAIChat: React.FC = () => {
               </div>
               <div>
                 <div className="text-xs font-bold text-white">Sales Intelligence Copilot</div>
-                <div className="text-[10px] text-teal-400">Gemini &middot; Q&A + actions</div>
+                <div className="text-[10px] text-teal-400">AarPex AI &middot; Q&A + actions</div>
               </div>
             </div>
             <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-white">

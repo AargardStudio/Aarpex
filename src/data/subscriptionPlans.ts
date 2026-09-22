@@ -1,5 +1,5 @@
 export interface SubscriptionPlan {
-  id: "Starter" | "Growth" | "Enterprise";
+  id: "Starter" | "Growth" | "Pro" | "Enterprise";
   name: string;
   tagline: string;
   monthlyPrice: number;
@@ -15,25 +15,27 @@ export interface SubscriptionPlan {
 }
 
 /**
- * AarPex is currently sold as a single flat-rate subscription: $29/month
- * (with a 7-day free trial for new subscriptions), no tiers, no annual
- * discount. The Starter/Growth/Enterprise tier model below is kept intact
- * (id, seats, feature lists) so it can be reactivated later without a data
- * migration — but every plan picker in the app should read from
- * PLATFORM_PLAN / VISIBLE_SUBSCRIPTION_PLANS instead of the full
- * SUBSCRIPTION_PLANS array while this is true.
+ * AarPex is sold as two visible tiers -- Growth ($29/mo, the default every
+ * new workspace is provisioned on) and Pro ($99/mo, adds multiple sending
+ * mailboxes and the rest of the Pro feature set below) -- both with a
+ * 14-day free trial and no annual discount. Starter and Enterprise are kept
+ * in the data model (id, seats, feature lists) so they can be reactivated
+ * later without a data migration, but stay hidden from every plan picker.
+ * Every plan picker in the app should read from VISIBLE_SUBSCRIPTION_PLANS
+ * (or PLATFORM_PLAN for the default) rather than the full SUBSCRIPTION_PLANS
+ * array, so a plan only has to be un-hidden here to go live everywhere.
  */
-export const PRICING_LOCKED = true;
+export const PRICING_LOCKED = false;
 
 /** Free trial length offered on the platform subscription. */
-export const PLATFORM_TRIAL_DAYS = 7;
+export const PLATFORM_TRIAL_DAYS = 14;
 
 /**
  * The single exempt founder account — always kept active regardless of
  * billing status, and the only account that ever provisions a workspace
  * without going through live Stripe Checkout first. Every other new
  * account must add a real card and go through the platform's live $29/mo
- * Stripe subscription (with its 7-day trial) before its workspace exists.
+ * Stripe subscription (with its 14-day trial) before its workspace exists.
  */
 export const FOUNDER_EMAIL = "aargardglobal@gmail.com";
 
@@ -105,20 +107,40 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
     id: "Growth",
     name: "Growth",
-    tagline: "The complete AarPex CRM — one flat price, everything included",
+    tagline: "The complete AarPex CRM at one low starting price",
     monthlyPrice: 29,
     annualPrice: 29,
     seats: 5,
-    isPopular: true,
     features: [
       "Up to 5 team members",
       "Unlimited leads, deals, contacts & companies",
-      "Gemini AI Sales Intelligence & Copilot",
+      "AarPex AI Sales Intelligence & Copilot",
+      "WhatsApp Business API messaging",
       "Connect your own Stripe account for client billing",
       "Create subscription & one-time pricing for your customers",
       "Multi-currency billing (USD, EUR, GBP)",
       "Hostinger Webmail & SMTP integration",
       "Priority customer support",
+    ],
+  },
+  {
+    id: "Pro",
+    name: "Pro",
+    tagline: "For teams running multiple inboxes and heavier AI workflows",
+    monthlyPrice: 99,
+    annualPrice: 99,
+    seats: 10,
+    isPopular: true,
+    features: [
+      "Everything in Growth, plus:",
+      "Connect multiple sending mailboxes",
+      "Choose which mailbox sends each campaign",
+      "WhatsApp Business API messaging",
+      "AI Prompt Manager — customize the prompts behind every AI feature",
+      "Analysis Manager — a searchable history of every AI analysis you've run",
+      "Workspace Knowledge Base to ground AI answers in your own material",
+      "Higher AI usage credit limits",
+      "Up to 10 team members",
     ],
   },
   {
@@ -144,6 +166,15 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
 /** Plans that should actually appear in plan pickers / pricing pages. */
 export const VISIBLE_SUBSCRIPTION_PLANS: SubscriptionPlan[] = SUBSCRIPTION_PLANS.filter((p) => !p.hidden);
 
-/** The single flat-rate plan every new workspace is provisioned on. */
+/** The default plan every new workspace is provisioned on (Pro is an upgrade). */
 export const PLATFORM_PLAN: SubscriptionPlan =
   SUBSCRIPTION_PLANS.find((p) => p.id === "Growth") || SUBSCRIPTION_PLANS[0];
+
+/** Plan ids that unlock Pro-only functionality (multi-mailbox, Prompt
+ * Manager, Analysis Manager, Knowledge Base, higher AI credit limits). */
+export const PRO_TIER_PLAN_IDS: ReadonlyArray<SubscriptionPlan["id"]> = ["Pro", "Enterprise"];
+
+/** Whether a given workspace plan has Pro-tier functionality unlocked. */
+export function isProTierPlan(plan: string | undefined | null): boolean {
+  return !!plan && (PRO_TIER_PLAN_IDS as readonly string[]).includes(plan);
+}

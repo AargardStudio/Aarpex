@@ -156,7 +156,7 @@ export const AiInsightsView: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 text-indigo-400 font-bold text-xs">
             <Sparkles className="w-4 h-4 animate-spin" />
-            <span>Google Gemini 3.7 Intelligence Engine</span>
+            <span>AarPex AI Intelligence Engine</span>
           </div>
           <h2 className="text-xl font-black mt-1">
             CRM AI Sales & Revenue Intelligence
@@ -172,7 +172,7 @@ export const AiInsightsView: React.FC = () => {
             { id: "briefing", label: "Executive Briefing" },
             { id: "account", label: "Account Deep Dive" },
             { id: "pitch", label: "Pitch Studio" },
-            { id: "query", label: "Ask Gemini" },
+            { id: "query", label: "Ask AI" },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -406,7 +406,7 @@ export const AiInsightsView: React.FC = () => {
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>{isPitchLoading ? "Drafting with Gemini..." : "Generate Tailored Outreach"}</span>
+              <span>{isPitchLoading ? "Drafting with AarPex AI..." : "Generate Tailored Outreach"}</span>
             </button>
           </div>
 
@@ -490,7 +490,7 @@ export const AiInsightsView: React.FC = () => {
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-2xs space-y-3 animate-in fade-in duration-150">
               <div className="flex items-center gap-2 text-indigo-700 font-bold text-xs">
                 <Sparkles className="w-4 h-4" />
-                <span>Gemini CRM Answer</span>
+                <span>AarPex AI CRM Answer</span>
               </div>
               <p className="text-xs text-slate-800 leading-relaxed whitespace-pre-wrap">
                 {queryResponse}

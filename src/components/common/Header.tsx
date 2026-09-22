@@ -202,7 +202,7 @@ export const Header: React.FC = () => {
             {isAiSearching && (
               <div className="p-4 flex items-center gap-3 text-xs text-teal-200 bg-[#121418]">
                 <Sparkles className="w-4 h-4 animate-spin text-teal-400" />
-                <span>Gemini is analyzing CRM records...</span>
+                <span>AarPex AI is analyzing CRM records...</span>
               </div>
             )}
 
@@ -575,7 +575,7 @@ export const Header: React.FC = () => {
             {isAiSearching && (
               <div className="p-3 flex items-center gap-2 text-xs text-teal-200">
                 <Sparkles className="w-4 h-4 animate-spin text-teal-400" />
-                <span>Gemini is analyzing CRM records...</span>
+                <span>AarPex AI is analyzing CRM records...</span>
               </div>
             )}
             {aiAnswer && (

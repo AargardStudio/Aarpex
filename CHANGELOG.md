@@ -13,6 +13,40 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-09-22
+
+### Added
+
+- **New Pro plan ($99/mo, 14-day trial like every tier)** — sits above
+  Growth in the subscription picker. Pro's feature set (multiple sending
+  mailboxes, AI Prompt Manager, Analysis Manager, workspace Knowledge Base,
+  higher AI credit limits) is defined in `src/data/subscriptionPlans.ts`;
+  the underlying functionality for those Pro-only features ships in
+  follow-up releases — this release adds the plan itself and checkout at
+  the correct price.
+- Direct Phone on the Company 360 drawer's Overview tab is now editable
+  in place (hover to reveal a pencil icon, edit, save).
+
+### Changed
+
+- Free trial extended from 7 days to 14 days, platform-wide (signup,
+  workspace creation, subscription checkout — both client-side display and
+  the Stripe Checkout `trial_period_days` on the server).
+- Removed "Gemini" branding from every user-facing screen (AI Insights,
+  Company 360, Leads AI analysis, the floating AI chat, sidebar badges,
+  header search) — everything now reads "AarPex AI". No change to which AI
+  provider actually powers these features.
+
+### Fixed
+
+- **"Sync All to Companies/Contacts" on the Leads page now actually
+  persists.** It correctly created/matched Company and Contact records
+  before, but never wrote the match back onto the Lead itself — so nothing
+  about the sync survived a reload and it looked like it silently failed.
+  Leads now carry `linkedCompanyId`/`linkedContactId` after a sync, shown
+  as a "Linked" badge next to the lead's company name in both the Kanban
+  and table views.
+
 ## [1.10.0] - 2026-09-21
 
 ### Changed

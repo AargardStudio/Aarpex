@@ -84,7 +84,7 @@ export const SettingsView: React.FC = () => {
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Subscription & Tier Management State
-  const [selectedTierId, setSelectedTierId] = useState<"Starter" | "Growth" | "Enterprise">(
+  const [selectedTierId, setSelectedTierId] = useState<"Starter" | "Growth" | "Pro" | "Enterprise">(
     (activeTenant?.plan as any) || "Growth"
   );
   const [tierBillingCycle, setTierBillingCycle] = useState<"monthly" | "annually">(
@@ -335,7 +335,7 @@ export const SettingsView: React.FC = () => {
   };
 
   // Handle Subscription Plan Modification
-  const handleUpdateSubscriptionTier = async (newPlan: "Starter" | "Growth" | "Enterprise", newCycle: "monthly" | "annually") => {
+  const handleUpdateSubscriptionTier = async (newPlan: "Starter" | "Growth" | "Pro" | "Enterprise", newCycle: "monthly" | "annually") => {
     setIsUpdatingTier(true);
     setTierNotice(null);
     try {

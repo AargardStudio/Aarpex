@@ -2149,19 +2149,25 @@ app.post("/api/stripe/quick-payment-link", async (req, res) => {
 });
 
 // SaaS Multi-Tenant Subscription & Checkout Endpoint
-// AarPex's own platform subscription — a flat $29/month charge for using the
-// CRM itself, with a 7-day free trial on signup. This ALWAYS bills through
-// Aargard's own master Stripe account (STRIPE_SECRET_KEY from the server
-// environment) and never accepts a caller-supplied key: tenant/custom Stripe
-// keys are only ever used for a tenant's own downstream customer billing
-// (see /api/stripe/products/*).
+// AarPex's platform subscription — Growth at $29/month (the default every
+// workspace is provisioned on) or Pro at $99/month (adds multi-mailbox
+// sending and the rest of the Pro feature set — see
+// src/data/subscriptionPlans.ts), both with a 14-day free trial on signup.
+// This ALWAYS bills through Aargard's own master Stripe account
+// (STRIPE_SECRET_KEY from the server environment) and never accepts a
+// caller-supplied key: tenant/custom Stripe keys are only ever used for a
+// tenant's own downstream customer billing (see /api/stripe/products/*).
 const AARPEX_PLATFORM_MONTHLY_PRICE_USD = 29;
-const AARPEX_PLATFORM_TRIAL_DAYS = 7;
+const AARPEX_PLATFORM_PRO_MONTHLY_PRICE_USD = 99;
+const AARPEX_PLATFORM_TRIAL_DAYS = 14;
 // The real Stripe Product record ("AarPex CRM — Standard Plan") in Aargard's
 // master Stripe account — checkout references this product id directly
 // (via price_data.product) instead of creating a throwaway product_data
 // object on every checkout session, so all subscriptions roll up under one
-// product in Stripe's dashboard/reporting. Overridable via env for a
+// product in Stripe's dashboard/reporting. Both Growth and Pro currently
+// bill under this same product with a different price_data.unit_amount --
+// swap in a dedicated AARPEX_PLATFORM_PRO_STRIPE_PRODUCT_ID env var here if
+// Pro should get its own Stripe Product later. Overridable via env for a
 // different Stripe mode/account without a code change.
 const AARPEX_PLATFORM_STRIPE_PRODUCT_ID =
   process.env.AARPEX_PLATFORM_STRIPE_PRODUCT_ID || "prod_VH0Cjb9lnxq6UN";
@@ -2176,11 +2182,12 @@ app.post("/api/subscriptions/checkout", async (req, res) => {
       });
     }
 
-    // Flat-rate platform pricing: every plan/billing cycle resolves to $29/mo,
-    // starting with a 7-day free trial — nothing is charged today.
-    const pricePerMonth = AARPEX_PLATFORM_MONTHLY_PRICE_USD;
-    const totalCharge = 0;
+    // Platform pricing by tier -- Growth ($29/mo) or Pro ($99/mo), both with
+    // a free trial and nothing charged today.
     const resolvedPlan = plan || "Growth";
+    const pricePerMonth =
+      resolvedPlan === "Pro" ? AARPEX_PLATFORM_PRO_MONTHLY_PRICE_USD : AARPEX_PLATFORM_MONTHLY_PRICE_USD;
+    const totalCharge = 0;
 
     // Always the platform's own master key — never a per-request override.
     const stripe = getStripe();
@@ -2196,15 +2203,15 @@ app.post("/api/subscriptions/checkout", async (req, res) => {
           // client-side) must have a live, chargeable card on file before its
           // workspace goes live — this forces Stripe Checkout to collect a
           // card even though the trial itself is $0 due today, so the
-          // platform can actually charge $29/mo automatically the moment the
-          // 7-day trial ends instead of relying on a manual follow-up.
+          // platform can actually charge automatically the moment the trial
+          // ends instead of relying on a manual follow-up.
           payment_method_collection: "always",
           line_items: [
             {
               price_data: {
                 currency: "usd",
                 product: AARPEX_PLATFORM_STRIPE_PRODUCT_ID,
-                unit_amount: AARPEX_PLATFORM_MONTHLY_PRICE_USD * 100,
+                unit_amount: pricePerMonth * 100,
                 recurring: { interval: "month" },
               },
               quantity: 1,
@@ -2229,7 +2236,7 @@ app.post("/api/subscriptions/checkout", async (req, res) => {
           pricePerMonth,
           trialDays: AARPEX_PLATFORM_TRIAL_DAYS,
           currency: "USD",
-          message: `Redirecting to Stripe Checkout for the AarPex Standard plan ($${AARPEX_PLATFORM_MONTHLY_PRICE_USD}/mo after a ${AARPEX_PLATFORM_TRIAL_DAYS}-day free trial).`,
+          message: `Redirecting to Stripe Checkout for the AarPex ${resolvedPlan} plan ($${pricePerMonth}/mo after a ${AARPEX_PLATFORM_TRIAL_DAYS}-day free trial).`,
         });
       } catch (stripeErr: any) {
         // A live Stripe key IS configured, so this is a real misconfiguration
@@ -2271,7 +2278,7 @@ app.post("/api/subscriptions/checkout", async (req, res) => {
       cardLast4: last4,
       cardBrand: brand,
       receiptUrl: `https://billing.aarpex.com/receipts/rcpt_${Date.now().toString(36)}`,
-      message: `Card saved. Your ${AARPEX_PLATFORM_TRIAL_DAYS}-day free trial has started for ${organizationName} — first charge of $${AARPEX_PLATFORM_MONTHLY_PRICE_USD}/mo on ${trialEnds}. (Simulated — connect a platform Stripe key to charge real cards.)`,
+      message: `Card saved. Your ${AARPEX_PLATFORM_TRIAL_DAYS}-day free trial has started for ${organizationName} — first charge of $${pricePerMonth}/mo on ${trialEnds}. (Simulated — connect a platform Stripe key to charge real cards.)`,
     });
   } catch (err: any) {
     console.error("Error in /api/subscriptions/checkout:", err);

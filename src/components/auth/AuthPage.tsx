@@ -76,7 +76,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [newOrgName, setNewOrgName] = useState("");
   const [newOrgIndustry, setNewOrgIndustry] = useState("Technology & Software");
   const [newOrgCurrency, setNewOrgCurrency] = useState("USD ($)");
-  const [newOrgPlan] = useState<"Free" | "Growth" | "Enterprise">("Growth"); // AarPex Standard — flat $29/mo plan, 7-day free trial
+  const [newOrgPlan] = useState<"Free" | "Growth" | "Enterprise">("Growth"); // AarPex Standard — flat $29/mo plan, 14-day free trial
   const [userRole] = useState<UserRole>("admin"); // account creator always owns their new workspace
   const [agreedTerms, setAgreedTerms] = useState(true);
 
@@ -305,7 +305,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       }
 
       // Every new account — founder or not — is provisioned immediately on
-      // AarPex's platform plan with its 7-day free trial. provisionWorkspace
+      // AarPex's platform plan with its 14-day free trial. provisionWorkspace
       // (via createTenant) already sets subscriptionStatus: "trialing" and a
       // nextBillingDate PLATFORM_TRIAL_DAYS days out for non-founder
       // accounts, and "active" with no trial clock for the founder account.

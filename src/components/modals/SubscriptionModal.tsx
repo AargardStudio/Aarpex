@@ -24,7 +24,7 @@ interface SubscriptionModalProps {
 
 export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, onClose }) => {
   const { activeTenant, updateTenant, users } = useCRM();
-  const [selectedPlanId, setSelectedPlanId] = useState<"Starter" | "Growth" | "Enterprise">(
+  const [selectedPlanId, setSelectedPlanId] = useState<"Starter" | "Growth" | "Pro" | "Enterprise">(
     (activeTenant?.plan as any) || "Growth"
   );
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annually">(
