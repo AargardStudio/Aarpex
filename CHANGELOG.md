@@ -13,6 +13,19 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-09-22
+
+### Added
+
+- Phone number field when creating a new Company (Quick Create) — it was
+  already saved and editable after the fact, but the create form itself
+  had no input for it. Lead and Contact quick-create already had one.
+- Wired in the real Stripe Payment Link for the Pro ($99/mo) plan. Both
+  the subscription upgrade picker and the "Manage Payment Method" fallback
+  now send a workspace to the correct plan's real Payment Link (Growth or
+  Pro) when it doesn't have a Stripe customer on file yet, instead of
+  always defaulting to the Growth link.
+
 ## [1.11.0] - 2026-09-22
 
 ### Added

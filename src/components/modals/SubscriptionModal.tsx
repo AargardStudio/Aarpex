@@ -14,7 +14,12 @@ import {
   Building,
   RefreshCw,
 } from "lucide-react";
-import { VISIBLE_SUBSCRIPTION_PLANS, SubscriptionPlan, PLATFORM_TRIAL_DAYS } from "../../data/subscriptionPlans";
+import {
+  VISIBLE_SUBSCRIPTION_PLANS,
+  SubscriptionPlan,
+  PLATFORM_TRIAL_DAYS,
+  buildPlatformPaymentLinkUrl,
+} from "../../data/subscriptionPlans";
 import { apiFetch } from "../../lib/apiClient";
 
 interface SubscriptionModalProps {
@@ -47,6 +52,21 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, on
 
     try {
       const price = billingCycle === "annually" ? targetPlan.annualPrice : targetPlan.monthlyPrice;
+
+      // A workspace with no Stripe customer on file yet hasn't paid through
+      // the API-driven Checkout Session flow before -- it's either still on
+      // the free trial or came in through a Payment Link originally. Sending
+      // it to the real Payment Link for the *target* plan (Growth or Pro,
+      // whichever it's switching to) collects a real card the same way
+      // sign-up does, rather than faking activation locally.
+      if (!activeTenant?.stripeCustomerId) {
+        window.location.href = buildPlatformPaymentLinkUrl(
+          activeTenant?.ownerEmail || "billing@aarpex.com",
+          activeTenant?.id || `tenant_${Date.now()}`,
+          targetPlan.id
+        );
+        return;
+      }
 
       // Call backend API endpoint to register subscription checkout (against
       // Aargard's own platform Stripe account, configured server-side only).

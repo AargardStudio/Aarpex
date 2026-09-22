@@ -32,7 +32,7 @@ import {
   Clock,
 } from "lucide-react";
 import { ROLE_LABELS, UserRole } from "../../types";
-import { VISIBLE_SUBSCRIPTION_PLANS, PLATFORM_PLAN, PLATFORM_PAYMENT_LINK_URL } from "../../data/subscriptionPlans";
+import { VISIBLE_SUBSCRIPTION_PLANS, PLATFORM_PLAN, getPaymentLinkUrlForPlan } from "../../data/subscriptionPlans";
 import { apiFetch } from "../../lib/apiClient";
 
 type SettingsTab = "workspaces" | "subscription" | "stripe" | "webmail" | "company" | "security" | "database";
@@ -376,7 +376,7 @@ export const SettingsView: React.FC = () => {
   const handleManagePaymentMethod = async () => {
     setBillingPortalError(null);
     if (!activeTenant?.stripeCustomerId) {
-      window.location.href = PLATFORM_PAYMENT_LINK_URL;
+      window.location.href = getPaymentLinkUrlForPlan(activeTenant?.plan);
       return;
     }
 

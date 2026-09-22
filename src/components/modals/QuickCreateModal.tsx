@@ -638,6 +638,19 @@ export const QuickCreateModal: React.FC = () => {
                   />
                 </div>
               </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-medium text-slate-700 mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    value={compPhone}
+                    onChange={(e) => setCompPhone(e.target.value)}
+                    placeholder="+1 555 000 0000"
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"
+                  />
+                </div>
+              </div>
             </>
           )}
 

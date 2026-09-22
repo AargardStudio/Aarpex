@@ -63,18 +63,43 @@ export const FOUNDER_EMAIL = "aargardglobal@gmail.com";
 export const PLATFORM_PAYMENT_LINK_URL = "https://buy.stripe.com/8x200j30d3EbdgS84f8Ra07";
 
 /**
+ * Stripe-hosted Payment Link for the $99/mo Pro plan — the same
+ * no-STRIPE_SECRET_KEY-required mechanism as PLATFORM_PAYMENT_LINK_URL
+ * above, just for the Pro tier. Needs the same one-time Stripe Dashboard
+ * "After payment" redirect setup pointed back at
+ * https://aarpex.aarbook.com/app/?subscription=success&session_id={CHECKOUT_SESSION_ID}
+ * for the round-trip back into the app to work.
+ */
+export const PRO_PAYMENT_LINK_URL = "https://buy.stripe.com/14AeVd8kxeiPfp05W78Ra08";
+
+/** Every visible plan's real Stripe Payment Link, keyed by plan id. Plans
+ * without a live link yet (Starter, Enterprise -- both hidden anyway) are
+ * simply absent, since nothing should ever redirect to them. */
+export const PLAN_PAYMENT_LINKS: Partial<Record<SubscriptionPlan["id"], string>> = {
+  Growth: PLATFORM_PAYMENT_LINK_URL,
+  Pro: PRO_PAYMENT_LINK_URL,
+};
+
+/** Resolves the right Payment Link for a given plan id, falling back to the
+ * default Growth link for a plan that doesn't have its own yet. */
+export function getPaymentLinkUrlForPlan(planId: string | undefined | null): string {
+  return (planId && PLAN_PAYMENT_LINKS[planId as SubscriptionPlan["id"]]) || PLATFORM_PAYMENT_LINK_URL;
+}
+
+/**
  * Builds the Payment Link URL for one specific sign-up/workspace attempt —
  * pre-fills the email on Stripe's hosted page and stamps a
  * `client_reference_id` so the payment can be matched back to this pending
  * record by hand in the Stripe Dashboard (Payments -> a given charge) while
  * no secret key is configured for automatic server-side verification.
+ * `planId` picks which plan's Payment Link to use (defaults to Growth).
  */
-export function buildPlatformPaymentLinkUrl(email: string, referenceId: string): string {
+export function buildPlatformPaymentLinkUrl(email: string, referenceId: string, planId?: string): string {
   const params = new URLSearchParams({
     prefilled_email: email,
     client_reference_id: referenceId,
   });
-  return `${PLATFORM_PAYMENT_LINK_URL}?${params.toString()}`;
+  return `${getPaymentLinkUrlForPlan(planId)}?${params.toString()}`;
 }
 
 /** Generates a short, locally-unique id to correlate a pending signup or

@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.12.0",
+    date: "2026-09-22",
+    headline: "Pro Plan Checkout, Phone Field Fix",
+    tagline: "The Pro upgrade now collects real payment, and Company creation finally has a phone field.",
+    highlights: [
+      {
+        title: "Upgrade to Pro, for real",
+        description: "Choosing Pro in the subscription picker now sends you to Pro's own Stripe payment page instead of the Growth one.",
+      },
+      {
+        title: "Phone number when adding a Company",
+        description: "The Quick Create form for a new Company now has a phone field, matching Leads and Contacts.",
+      },
+    ],
+  },
+  {
     version: "1.11.0",
     date: "2026-09-22",
     headline: "A New Pro Tier, A Longer Trial, A Fixed Sync",
