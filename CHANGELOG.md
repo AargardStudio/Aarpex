@@ -13,6 +13,17 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.12.1] - 2026-09-22
+
+### Fixed
+
+- **Lead import from Google Sheets (and Excel upload) only ever read the
+  first tab of a multi-tab spreadsheet.** The Google Sheets link import
+  used a CSV export, which can only return one tab at a time; switched to
+  an XLSX export so the whole workbook comes back, and both the Sheets-link
+  and file-upload import paths now flatten every tab's rows together
+  instead of reading `workbook.SheetNames[0]` only.
+
 ## [1.12.0] - 2026-09-22
 
 ### Added

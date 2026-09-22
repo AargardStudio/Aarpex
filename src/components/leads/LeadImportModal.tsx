@@ -50,6 +50,28 @@ export const LeadImportModal: React.FC<LeadImportModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Flattens every sheet/tab in a workbook into one row list, instead of
+  // only reading workbook.SheetNames[0] -- a multi-tab spreadsheet (e.g.
+  // one tab per month, or per source) used to silently lose every row
+  // outside the first tab. Headers are the union of every column seen
+  // across every sheet, since different tabs can use slightly different
+  // column names/orders; XLSX.utils.sheet_to_json already fills a row's
+  // missing columns with "" via defval, so a merged row list stays
+  // rectangular for the column-mapping step below.
+  const readAllSheets = (workbook: XLSX.WorkBook): { rows: any[]; headers: string[] } => {
+    const rows: any[] = [];
+    const headerSet = new Set<string>();
+    workbook.SheetNames.forEach((sheetName) => {
+      const worksheet = workbook.Sheets[sheetName];
+      const sheetRows: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+      sheetRows.forEach((row) => {
+        Object.keys(row).forEach((k) => headerSet.add(k));
+        rows.push(row);
+      });
+    });
+    return { rows, headers: Array.from(headerSet) };
+  };
+
   const autoMapHeaders = (detectedHeaders: string[]) => {
     const map: Record<string, string> = {};
     detectedHeaders.forEach((h) => {
@@ -93,9 +115,7 @@ export const LeadImportModal: React.FC<LeadImportModalProps> = ({
       try {
         const buffer = e.target?.result;
         const workbook = XLSX.read(buffer, { type: "binary" });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const json: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+        const { rows: json, headers: detectedHeaders } = readAllSheets(workbook);
 
         if (!json || json.length === 0) {
           setParseError("The uploaded spreadsheet does not contain any data rows.");
@@ -103,7 +123,6 @@ export const LeadImportModal: React.FC<LeadImportModalProps> = ({
           return;
         }
 
-        const detectedHeaders = Object.keys(json[0] || {});
         setHeaders(detectedHeaders);
         setParsedRows(json);
         autoMapHeaders(detectedHeaders);
@@ -131,26 +150,29 @@ export const LeadImportModal: React.FC<LeadImportModalProps> = ({
 
     try {
       let fetchUrl = googleSheetsUrl.trim();
-      // Extract Google Sheet ID if standard edit URL provided
+      // Extract Google Sheet ID if standard edit URL provided. Exporting as
+      // CSV only ever returns ONE tab (whichever the URL's gid points at,
+      // or the first tab with none) -- that's why data from every tab past
+      // the first used to silently disappear. Exporting the whole workbook
+      // as XLSX instead returns every tab in one file, which readAllSheets
+      // then flattens together.
       const match = googleSheetsUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
       if (match && match[1]) {
-        fetchUrl = `https://docs.google.com/spreadsheets/d/${match[1]}/export?format=csv`;
+        fetchUrl = `https://docs.google.com/spreadsheets/d/${match[1]}/export?format=xlsx`;
       }
 
       const response = await fetch(fetchUrl);
       if (!response.ok) {
         throw new Error(`Google Sheets responded with HTTP ${response.status}. Please make sure the sheet is shared as "Anyone with link can view".`);
       }
-      const csvText = await response.text();
-      const workbook = XLSX.read(csvText, { type: "string" });
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const json: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+      const arrayBuffer = await response.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: "array" });
+      const { rows: json, headers: detectedHeaders } = readAllSheets(workbook);
 
       if (!json || json.length === 0) {
         throw new Error("No data found in the connected Google Sheet.");
       }
 
-      const detectedHeaders = Object.keys(json[0] || {});
       setHeaders(detectedHeaders);
       setParsedRows(json);
       autoMapHeaders(detectedHeaders);
