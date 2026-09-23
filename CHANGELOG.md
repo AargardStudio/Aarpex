@@ -13,6 +13,27 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.13.5] - 2026-09-23
+### Fixed
+- **Syncing a large batch of companies (or contacts, leads, deals, etc.)
+  could silently leave some rows missing from Supabase after a sign-out/
+  sign-in.** The per-tenant cleanup step that removes locally-deleted rows
+  built one delete request with every kept row's id quoted and embedded
+  directly in the URL's query string; for a few hundred rows (e.g. the 210+
+  companies produced by syncing 625 leads) that filter can run to several KB,
+  which some proxies/CDNs won't reliably pass through. It's now computed
+  safely: fetch which ids actually exist in Supabase, diff that against what
+  should be kept, and delete only the genuine excess in small, explicit
+  batches -- no more unbounded filter strings.
+- Cleanup failures (if this delete step still can't reach Supabase for some
+  other reason) now also show up as a Settings > Audit Log entry with the
+  underlying error, instead of only a browser console.error.
+
+### Added
+- **Contacts now shows a totals strip** (like Companies already did): total
+  contact cards, how many are reachable by email, and how many distinct
+  companies are represented.
+
 ## [1.13.4] - 2026-09-23
 
 ### Fixed

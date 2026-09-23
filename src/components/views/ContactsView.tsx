@@ -16,8 +16,44 @@ export const ContactsView: React.FC = () => {
     return matchesSearch;
   });
 
+  const contactsWithEmail = contacts.filter((c) => c.email && c.email.trim().length > 0).length;
+  const contactsLinkedToCompany = contacts.filter((c) => c.companyId).length;
+
   return (
     <div id="contacts-view" className="space-y-5 animate-in fade-in duration-200">
+      {/* Top Aggregates Strip */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+          <span className="text-slate-500 text-xs font-medium">Contact Cards Total</span>
+          <div className="text-xl font-bold text-slate-900 font-mono mt-1">
+            {contacts.length} Contacts
+          </div>
+          <span className="text-[11px] text-slate-400">
+            {contactsLinkedToCompany} linked to a company
+          </span>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+          <span className="text-slate-500 text-xs font-medium">Reachable by Email</span>
+          <div className="text-xl font-bold text-slate-900 font-mono mt-1">
+            {contactsWithEmail}
+          </div>
+          <span className="text-[11px] text-slate-400">
+            {contacts.length > 0
+              ? `${Math.round((contactsWithEmail / contacts.length) * 100)}% of all contacts`
+              : "No contacts yet"}
+          </span>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+          <span className="text-slate-500 text-xs font-medium">Companies Represented</span>
+          <div className="text-xl font-bold text-slate-900 font-mono mt-1">
+            {new Set(contacts.map((c) => c.companyId).filter(Boolean)).size}
+          </div>
+          <span className="text-[11px] text-slate-400">Distinct companies with a contact</span>
+        </div>
+      </div>
+
       {/* Control Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
         <div className="relative w-72">

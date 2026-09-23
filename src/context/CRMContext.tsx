@@ -1145,11 +1145,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const unsubscribe = onSyncFailure((failure) => {
       if (failure.tenantId !== activeTenantId) return;
       const sampleText = failure.sample.map((s) => `${s.id}: ${s.error}`).join("; ");
-      addAuditLogEntry(
-        `${failure.failedCount} of ${failure.totalCount} ${failure.table} record(s) failed to save`,
-        sampleText || undefined,
-        "general"
-      );
+      const headline =
+        failure.kind === "delete"
+          ? `Cleanup of ${failure.table} could not remove some stale record(s) in Supabase (${failure.failedCount} of ${failure.totalCount} batch(es) failed) -- nothing new was lost, but old rows may briefly reappear`
+          : `${failure.failedCount} of ${failure.totalCount} ${failure.table} record(s) failed to save`;
+      addAuditLogEntry(headline, sampleText || undefined, "general");
     });
     return unsubscribe;
   }, [addAuditLogEntry, activeTenantId]);

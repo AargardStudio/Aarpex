@@ -182,6 +182,11 @@ export interface SyncFailure {
   failedCount: number;
   totalCount: number;
   sample: Array<{ id: any; error: string }>;
+  // "upsert" (default if omitted): failedCount/totalCount are row counts.
+  // "delete": this table's cleanup pass couldn't remove some already-stale
+  // rows -- nothing new was lost, but Supabase may show extra rows for a
+  // while. failedCount/totalCount there are CHUNK counts, not row counts.
+  kind?: "upsert" | "delete";
 }
 
 // Every sync failure used to go to console.error only -- invisible to
@@ -281,16 +286,16 @@ async function performSync(table: TenantTable, tenantId: string, rows: Array<Rec
     //
     // CRITICAL SAFETY NET: an empty `rows` array must NEVER translate into
     // "delete every row for this tenant in this table". This used to be
-    // exactly what happened -- when keepIds.length was 0, the `.not("id",
-    // "in", ...)` filter below was simply never added, leaving
-    // `delete().eq("tenant_id", tenantId)` with nothing else scoping it, so
-    // it wiped the ENTIRE table for that tenant. `rows` reflects whatever
-    // happens to be in React state at the moment this debounced call fires
-    // -- which is legitimately empty for a split second on every sign-in,
-    // tenant switch, or page load, before the Supabase fetch that hydrates
-    // it has resolved. That race is exactly how "sync, then sign out/in"
-    // (or even just re-opening the app) could silently mass-delete
-    // companies/contacts/leads that had synced fine moments earlier.
+    // exactly what happened -- when keepIds.length was 0, the delete filter
+    // below was simply never added, leaving `delete().eq("tenant_id",
+    // tenantId)` with nothing else scoping it, so it wiped the ENTIRE table
+    // for that tenant. `rows` reflects whatever happens to be in React
+    // state at the moment this debounced call fires -- which is legitimately
+    // empty for a split second on every sign-in, tenant switch, or page
+    // load, before the Supabase fetch that hydrates it has resolved. That
+    // race is exactly how "sync, then sign out/in" (or even just re-opening
+    // the app) could silently mass-delete companies/contacts/leads that had
+    // synced fine moments earlier.
     //
     // The trade-off accepted here: if a tenant's very last remaining row in
     // a table is deleted locally, that row is NOT cleaned up from Supabase
@@ -299,13 +304,64 @@ async function performSync(table: TenantTable, tenantId: string, rows: Array<Rec
     // That's a far smaller, recoverable issue than mass data loss.
     const keepIds = rows.map((r) => r.id).filter(Boolean);
     if (keepIds.length > 0) {
-      const { error: deleteError } = await supabase
+      // Previously this issued ONE delete with a `.not("id", "in", "(...)")`
+      // filter listing every kept id as a quoted literal embedded directly
+      // in the request URL's query string. That's fine for a handful of
+      // rows, but for a few hundred (exactly the bulk-import batches this
+      // app needs to handle -- e.g. 210+ companies from a 625-lead sync)
+      // that filter value runs to several KB once each id is quoted and
+      // URL-encoded, which can exceed what some proxies/CDNs will pass
+      // through untouched. When that happens the request can fail, or be
+      // silently mangled, in a way that isn't a clean Postgres error and
+      // can misbehave rather than just no-op -- a plausible cause of rows
+      // that synced fine moments earlier vanishing after a reload with
+      // nothing useful in the logs.
+      //
+      // Instead: fetch which ids actually exist in Supabase for this
+      // tenant/table right now, diff that against keepIds ourselves in JS,
+      // and only ever send explicit, bounded `.in("id", chunk)` deletes for
+      // the (usually few, sometimes zero) ids that are genuinely excess.
+      // This never builds an unbounded filter string, and each chunk is a
+      // normal, safely-encoded supabase-js call instead of a hand-built one.
+      const { data: existingIdRows, error: idsError } = await supabase
         .from(table)
-        .delete()
-        .eq("tenant_id", tenantId)
-        .not("id", "in", `(${keepIds.map((id) => `"${id}"`).join(",")})`);
-      if (deleteError) {
-        console.error(`[tenantDataSync] cleanup delete failed for ${table}:`, deleteError.message);
+        .select("id")
+        .eq("tenant_id", tenantId);
+
+      if (idsError) {
+        console.error(`[tenantDataSync] could not read existing ids for ${table}:`, idsError.message);
+      } else {
+        const keepIdSet = new Set(keepIds);
+        const idsToDelete = (existingIdRows || [])
+          .map((r) => r.id)
+          .filter((id) => id && !keepIdSet.has(id));
+
+        if (idsToDelete.length > 0) {
+          const DELETE_CHUNK_SIZE = 200;
+          const deleteFailures: Array<{ id: any; error: string }> = [];
+          for (let i = 0; i < idsToDelete.length; i += DELETE_CHUNK_SIZE) {
+            const chunk = idsToDelete.slice(i, i + DELETE_CHUNK_SIZE);
+            const { error: deleteError } = await supabase
+              .from(table)
+              .delete()
+              .eq("tenant_id", tenantId)
+              .in("id", chunk);
+            if (deleteError) {
+              console.error(`[tenantDataSync] cleanup delete failed for ${table}:`, deleteError.message);
+              deleteFailures.push({ id: `${chunk.length} row(s)`, error: deleteError.message });
+            }
+          }
+          if (deleteFailures.length > 0) {
+            notifySyncFailure({
+              table,
+              tenantId,
+              failedCount: deleteFailures.length,
+              totalCount: Math.ceil(idsToDelete.length / DELETE_CHUNK_SIZE),
+              sample: deleteFailures.slice(0, 3),
+              kind: "delete",
+            });
+          }
+        }
       }
     }
   } catch (err) {

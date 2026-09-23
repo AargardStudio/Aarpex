@@ -23,6 +23,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.13.5",
+    date: "2026-09-23",
+    headline: "Bulk Syncs Are Now Bulletproof",
+    tagline: "Large batches of leads, companies, and contacts now sync reliably from end to end -- and if anything ever can't save, you'll actually see it.",
+    highlights: [
+      {
+        title: "One bad row can no longer sink a whole sync",
+        description: "Syncing hundreds of records at once used to fail ALL of them if even a single row had a problem. Now records save in small batches with automatic retries, so a stray bad record only ever affects itself.",
+      },
+      {
+        title: "Fixed a large-batch cleanup bug that could quietly drop records",
+        description: "The background step that removes deleted records from the database could stumble on very large syncs (hundreds of companies or contacts at once), leaving some records missing after a sign-out/sign-in. That step is now built to handle any size safely.",
+      },
+      {
+        title: "Sync problems now show up in your Audit Log",
+        description: "If a record genuinely can't be saved, you'll see it in Settings > Audit Log with the specific reason, instead of it silently vanishing.",
+      },
+      {
+        title: "New totals on the Contacts page",
+        description: "See your total contact count, how many are reachable by email, and how many companies they represent, at a glance.",
+      },
+    ],
+  },
+  {
     version: "1.13.3",
     date: "2026-09-23",
     headline: "Your Data Now Actually Stays Saved",
