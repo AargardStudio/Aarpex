@@ -32,7 +32,13 @@ import {
   Clock,
 } from "lucide-react";
 import { ROLE_LABELS, UserRole } from "../../types";
-import { VISIBLE_SUBSCRIPTION_PLANS, PLATFORM_PLAN, getPaymentLinkUrlForPlan } from "../../data/subscriptionPlans";
+import {
+  VISIBLE_SUBSCRIPTION_PLANS,
+  PLATFORM_PLAN,
+  getPaymentLinkUrlForPlan,
+  getSelectablePlansForEmail,
+  isProTesterEmail,
+} from "../../data/subscriptionPlans";
 import { apiFetch } from "../../lib/apiClient";
 
 type SettingsTab = "workspaces" | "subscription" | "stripe" | "webmail" | "company" | "security" | "database";
@@ -336,6 +342,14 @@ export const SettingsView: React.FC = () => {
 
   // Handle Subscription Plan Modification
   const handleUpdateSubscriptionTier = async (newPlan: "Starter" | "Growth" | "Pro" | "Enterprise", newCycle: "monthly" | "annually") => {
+    // Pro is testing-only — block it here too, not just in the picker's
+    // rendered list, since this function is the one that actually writes
+    // the tenant's plan.
+    if (newPlan === "Pro" && !isProTesterEmail(activeTenant?.ownerEmail)) {
+      setTierNotice("Pro is currently limited to internal testing and isn't available on this workspace yet.");
+      setTimeout(() => setTierNotice(null), 3500);
+      return;
+    }
     setIsUpdatingTier(true);
     setTierNotice(null);
     try {
@@ -1269,7 +1283,7 @@ export const SettingsView: React.FC = () => {
 
             {/* Plans Comparison Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 max-w-2xl">
-              {VISIBLE_SUBSCRIPTION_PLANS.map((plan) => {
+              {getSelectablePlansForEmail(activeTenant?.ownerEmail).map((plan) => {
                 const isCurrent = (activeTenant?.plan || "Growth") === plan.name;
                 const price = tierBillingCycle === "annually" ? plan.annualPrice : plan.monthlyPrice;
 

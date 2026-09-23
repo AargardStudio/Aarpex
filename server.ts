@@ -2172,6 +2172,19 @@ const AARPEX_PLATFORM_TRIAL_DAYS = 14;
 const AARPEX_PLATFORM_STRIPE_PRODUCT_ID =
   process.env.AARPEX_PLATFORM_STRIPE_PRODUCT_ID || "prod_VH0Cjb9lnxq6UN";
 
+// Pro is testing-only right now -- keep this in sync with
+// src/data/subscriptionPlans.ts's PRO_TESTER_EMAILS. This is the real
+// enforcement boundary: the UI hides Pro from everyone else's plan picker,
+// but that's bypassable by calling this endpoint directly, so any request
+// for plan "Pro" from a caller whose email isn't on this list is clamped
+// down to Growth pricing before a Stripe Checkout session is ever created.
+const AARPEX_PRO_TESTER_EMAILS = ["ceo@aargard.com"];
+function isAarpexProTesterEmail(email: string | undefined | null): boolean {
+  if (!email) return false;
+  const normalized = String(email).trim().toLowerCase();
+  return AARPEX_PRO_TESTER_EMAILS.some((e) => e.toLowerCase() === normalized);
+}
+
 app.post("/api/subscriptions/checkout", async (req, res) => {
   try {
     const { plan, billingCycle, email, name, organizationName, cardNumber } = req.body;
@@ -2183,8 +2196,11 @@ app.post("/api/subscriptions/checkout", async (req, res) => {
     }
 
     // Platform pricing by tier -- Growth ($29/mo) or Pro ($99/mo), both with
-    // a free trial and nothing charged today.
-    const resolvedPlan = plan || "Growth";
+    // a free trial and nothing charged today. Pro is clamped to Growth for
+    // any caller not on the tester allowlist, regardless of what the
+    // request asked for.
+    const requestedPlan = plan || "Growth";
+    const resolvedPlan = requestedPlan === "Pro" && !isAarpexProTesterEmail(email) ? "Growth" : requestedPlan;
     const pricePerMonth =
       resolvedPlan === "Pro" ? AARPEX_PLATFORM_PRO_MONTHLY_PRICE_USD : AARPEX_PLATFORM_MONTHLY_PRICE_USD;
     const totalCharge = 0;

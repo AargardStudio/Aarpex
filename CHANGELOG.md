@@ -13,6 +13,20 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-09-23
+
+### Changed
+
+- **Pro tier is now testing-only, limited to `ceo@aargard.com`.** Every
+  other workspace's subscription picker (Settings and the Subscription
+  modal) now only ever shows Growth ($29/mo) — Pro is filtered out of the
+  list entirely rather than just disabled. This is enforced server-side
+  too: `/api/subscriptions/checkout` now clamps any `plan: "Pro"` request
+  down to Growth pricing unless the requester's email is on the allowlist,
+  so a direct API call can't bypass the UI restriction and get $99/mo
+  checkout. Purely a temporary testing gate — no change to Pro's feature
+  set or price once it's ready for everyone.
+
 ## [1.12.1] - 2026-09-22
 
 ### Fixed

@@ -19,6 +19,7 @@ import {
   SubscriptionPlan,
   PLATFORM_TRIAL_DAYS,
   buildPlatformPaymentLinkUrl,
+  getSelectablePlansForEmail,
 } from "../../data/subscriptionPlans";
 import { apiFetch } from "../../lib/apiClient";
 
@@ -42,9 +43,15 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, on
 
   if (!isOpen) return null;
 
+  // Pro is testing-only right now — only the allowlisted tester email(s)
+  // can see or select it here. Everyone else's picker only ever shows
+  // Growth. An existing Pro tenant that isn't on the allowlist (shouldn't
+  // happen, but just in case) still falls back through
+  // VISIBLE_SUBSCRIPTION_PLANS so its own "Current Plan" badge is correct.
+  const selectablePlans = getSelectablePlansForEmail(activeTenant?.ownerEmail);
   const currentPlan =
     VISIBLE_SUBSCRIPTION_PLANS.find((p) => p.id === activeTenant?.plan) || VISIBLE_SUBSCRIPTION_PLANS[0];
-  const targetPlan = VISIBLE_SUBSCRIPTION_PLANS.find((p) => p.id === selectedPlanId) || currentPlan;
+  const targetPlan = selectablePlans.find((p) => p.id === selectedPlanId) || currentPlan;
 
   const handleUpdateSubscription = async () => {
     setIsUpdating(true);
@@ -235,7 +242,7 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, on
 
           {/* Plan */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
-            {VISIBLE_SUBSCRIPTION_PLANS.map((plan) => {
+            {selectablePlans.map((plan) => {
               const isSelected = selectedPlanId === plan.id;
               const isCurrent = activeTenant?.plan === plan.id;
               const price = billingCycle === "annually" ? plan.annualPrice : plan.monthlyPrice;

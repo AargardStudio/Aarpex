@@ -40,6 +40,33 @@ export const PLATFORM_TRIAL_DAYS = 14;
 export const FOUNDER_EMAIL = "aargardglobal@gmail.com";
 
 /**
+ * While Pro is in testing, only these workspace owner emails may select or
+ * remain on the Pro tier — every other workspace can only subscribe to
+ * Growth. This is a temporary gate; remove it (and PRICING_LOCKED stays
+ * false) once Pro is ready for general availability. Enforced both in the
+ * UI plan pickers (getSelectablePlansForEmail below) and, critically,
+ * server-side in /api/subscriptions/checkout in server.ts, since a UI-only
+ * restriction can be bypassed by calling the API directly.
+ */
+export const PRO_TESTER_EMAILS: string[] = ["ceo@aargard.com"];
+
+/** Whether this email is allowed to select/stay on the Pro tier while it's
+ * still testing-only. Case-insensitive. */
+export function isProTesterEmail(email: string | undefined | null): boolean {
+  if (!email) return false;
+  const normalized = email.trim().toLowerCase();
+  return PRO_TESTER_EMAILS.some((e) => e.toLowerCase() === normalized);
+}
+
+/** The plans a given workspace owner email is allowed to see/select in any
+ * plan picker. Filters Pro out of VISIBLE_SUBSCRIPTION_PLANS unless the
+ * email is on the PRO_TESTER_EMAILS allowlist. */
+export function getSelectablePlansForEmail(email: string | undefined | null): SubscriptionPlan[] {
+  if (isProTesterEmail(email)) return VISIBLE_SUBSCRIPTION_PLANS;
+  return VISIBLE_SUBSCRIPTION_PLANS.filter((p) => p.id !== "Pro");
+}
+
+/**
  * Stripe-hosted Payment Link for the platform's own $29/mo AarPex
  * subscription — this is the permanent, primary way every non-founder
  * sign-up / new workspace pays and starts its trial. It is a deliberate,
