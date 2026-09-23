@@ -13,6 +13,28 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.13.4] - 2026-09-23
+
+### Fixed
+
+- **A single bad row in a bulk sync (e.g. one malformed record among 450
+  newly imported leads) used to silently fail the entire batch.** Supabase
+  rejects an upsert atomically if even one row violates a constraint, so
+  syncing 576 leads because one of the new ones had a problem would save
+  *none* of them -- not even the otherwise-fine ones -- which is exactly
+  why newly imported leads could vanish back to the old count after
+  signing out and back in. Syncing now happens in chunks, and a chunk that
+  fails is retried one row at a time so only the actually-bad row(s) are
+  skipped instead of losing the whole batch.
+
+### Added
+
+- **Sync failures are now visible in the app**, not just the browser
+  console. A failed save shows up as an audit log entry (Settings) naming
+  the table, how many records failed, and Supabase's own error message for
+  a few of them -- so a partial sync failure can actually be diagnosed
+  without opening devtools.
+
 ## [1.13.3] - 2026-09-23
 
 ### Fixed

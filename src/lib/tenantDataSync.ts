@@ -176,6 +176,71 @@ const SYNC_DEPENDENCIES: Partial<Record<TenantTable, TenantTable[]>> = {
   tasks: ["companies", "contacts"],
 };
 
+export interface SyncFailure {
+  table: TenantTable;
+  tenantId: string;
+  failedCount: number;
+  totalCount: number;
+  sample: Array<{ id: any; error: string }>;
+}
+
+// Every sync failure used to go to console.error only -- invisible to
+// anyone without devtools open, which is exactly why "some records didn't
+// save" reports kept requiring a screenshot-by-screenshot investigation.
+// CRMContext subscribes to this so failures show up as a real, visible
+// audit-log entry in the app instead.
+const syncFailureListeners: Array<(failure: SyncFailure) => void> = [];
+
+export function onSyncFailure(listener: (failure: SyncFailure) => void): () => void {
+  syncFailureListeners.push(listener);
+  return () => {
+    const idx = syncFailureListeners.indexOf(listener);
+    if (idx >= 0) syncFailureListeners.splice(idx, 1);
+  };
+}
+
+function notifySyncFailure(failure: SyncFailure): void {
+  for (const listener of syncFailureListeners) {
+    try {
+      listener(failure);
+    } catch {
+      // A listener throwing must never break the sync itself.
+    }
+  }
+}
+
+const UPSERT_CHUNK_SIZE = 200;
+
+/**
+ * Upserts rows in chunks rather than one giant call, so a single malformed
+ * row doesn't fail the entire batch atomically. If a chunk fails, it's
+ * retried one row at a time to isolate exactly which row(s) are bad --
+ * everything else in that chunk still gets saved. Returns the rows that
+ * genuinely could not be saved, with Postgres's own error message for each.
+ */
+async function upsertRowsResilient(
+  supabase: ReturnType<typeof getSupabaseAuthClient>,
+  table: TenantTable,
+  dbRows: Array<Record<string, any>>
+): Promise<Array<{ id: any; error: string }>> {
+  const failures: Array<{ id: any; error: string }> = [];
+  for (let i = 0; i < dbRows.length; i += UPSERT_CHUNK_SIZE) {
+    const chunk = dbRows.slice(i, i + UPSERT_CHUNK_SIZE);
+    const { error } = await supabase.from(table).upsert(chunk, { onConflict: "id" });
+    if (!error) continue;
+
+    // The whole chunk was rejected -- narrow down which row(s) actually
+    // caused it rather than dropping every row in the chunk.
+    for (const row of chunk) {
+      const { error: rowError } = await supabase.from(table).upsert([row], { onConflict: "id" });
+      if (rowError) {
+        failures.push({ id: row.id, error: rowError.message });
+      }
+    }
+  }
+  return failures;
+}
+
 async function performSync(table: TenantTable, tenantId: string, rows: Array<Record<string, any>>): Promise<void> {
   try {
     // Flush this table's dependencies out of turn first, so its sync always
@@ -197,10 +262,18 @@ async function performSync(table: TenantTable, tenantId: string, rows: Array<Rec
     const dbRows = rows.filter((r) => r && r.id).map((r) => toRow(table, tenantId, r));
 
     if (dbRows.length > 0) {
-      const { error: upsertError } = await supabase.from(table).upsert(dbRows, { onConflict: "id" });
-      if (upsertError) {
-        console.error(`[tenantDataSync] upsert failed for ${table}:`, upsertError.message);
-        return;
+      // A single bad row anywhere in the batch (a bulk import with one
+      // malformed record, say) used to fail the ENTIRE upsert atomically --
+      // e.g. syncing 576 leads because one of 450 newly-imported rows
+      // violated a constraint would silently save NONE of them, including
+      // ones that were otherwise perfectly fine. Upsert in chunks, and on a
+      // chunk failure retry it row-by-row so only the actually-bad row(s)
+      // are skipped instead of losing the whole batch.
+      const failures = await upsertRowsResilient(supabase, table, dbRows);
+      if (failures.length > 0) {
+        const summary = `${failures.length} of ${dbRows.length} ${table} record(s) failed to save`;
+        console.error(`[tenantDataSync] ${summary}:`, failures.slice(0, 5));
+        notifySyncFailure({ table, tenantId, failedCount: failures.length, totalCount: dbRows.length, sample: failures.slice(0, 3) });
       }
     }
 

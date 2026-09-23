@@ -43,6 +43,7 @@ import {
   hasPendingTenantCreations,
   flushPendingTenantCreations,
   flushAllPendingSyncs,
+  onSyncFailure,
 } from "../lib/tenantDataSync";
 import {
   initialCompanies,
@@ -1135,6 +1136,23 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
   };
+
+  // Surface Supabase sync failures as a real, visible audit-log entry
+  // instead of only a browser console.error -- these used to be invisible
+  // to anyone without devtools open, which is exactly why diagnosing
+  // "some records didn't save" kept requiring screenshots and guesswork.
+  useEffect(() => {
+    const unsubscribe = onSyncFailure((failure) => {
+      if (failure.tenantId !== activeTenantId) return;
+      const sampleText = failure.sample.map((s) => `${s.id}: ${s.error}`).join("; ");
+      addAuditLogEntry(
+        `${failure.failedCount} of ${failure.totalCount} ${failure.table} record(s) failed to save`,
+        sampleText || undefined,
+        "general"
+      );
+    });
+    return unsubscribe;
+  }, [addAuditLogEntry, activeTenantId]);
 
   // Derived Company calculations based on live financial and deal records
   const companies: Company[] = useMemo(() => {
