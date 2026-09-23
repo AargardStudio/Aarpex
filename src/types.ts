@@ -361,6 +361,28 @@ export interface Product {
 }
 
 // ----------------------------------------------------------------------------
+// Knowledge Base — free-text reference material the AI chat assistant is
+// grounded in, split into three categories so the right content shows up in
+// the right place instead of one undifferentiated pile:
+//   - "company": who your business is, mission, differentiators, tone/voice
+//   - "product": what you sell -- positioning, pricing rationale, FAQs
+//   - "operator": internal playbook for your own team -- SOPs, scripts,
+//     objection handling, policies (never shown to prospects/customers)
+// ----------------------------------------------------------------------------
+export type KnowledgeBaseCategory = "company" | "product" | "operator";
+
+export interface KnowledgeBaseEntry {
+  id: string;
+  category: KnowledgeBaseCategory;
+  title: string;
+  content: string;
+  tags: string[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ----------------------------------------------------------------------------
 // Email Marketing — AI-generated outbound sequences targeting leads/contacts.
 // ----------------------------------------------------------------------------
 export type SalesTechnique = "Need-Based" | "Emotional" | "Problem-Solution";

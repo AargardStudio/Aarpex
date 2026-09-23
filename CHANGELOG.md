@@ -13,6 +13,24 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-09-23
+### Added
+- **Knowledge Base**, a new section with three categories -- Company,
+  Product & Service, and Dashboard Operator Playbook (internal-only) --
+  where you write free-text reference entries (title + content + optional
+  tags). Full create/edit/delete/search UI, synced to Supabase like every
+  other entity table (new `knowledge_base` table, migration 0008).
+- The floating AI chat assistant is now grounded in this content: it
+  receives your most-recently-updated Company/Product/Operator entries
+  (bounded per request) alongside live CRM data, so it can answer questions
+  about your business, your offerings, and internal process using what you
+  actually wrote instead of generic assumptions. Operator Playbook content
+  is explicitly marked internal-only in the prompt so it's never echoed
+  back as customer-facing copy.
+- "Knowledge Base" is now a valid destination for the assistant's
+  navigate-to-screen behavior ("open the knowledge base", "show me the
+  playbook").
+
 ## [1.13.5] - 2026-09-23
 ### Fixed
 - **Syncing a large batch of companies (or contacts, leads, deals, etc.)

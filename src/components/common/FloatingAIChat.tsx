@@ -77,6 +77,7 @@ export const FloatingAIChat: React.FC = () => {
     addInvoice,
     updateInvoice,
     deleteInvoice,
+    knowledgeBase,
   } = useCRM();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -132,6 +133,30 @@ export const FloatingAIChat: React.FC = () => {
     pipelines: pipelines.map((p) => ({ id: p.id, name: p.name, stages: p.stages.map((s) => ({ id: s.id, name: s.name })) })),
   });
 
+  // Ground the assistant in the workspace's own Knowledge Base instead of
+  // only live CRM records. Kept deliberately small (most-recently-updated
+  // entries first, content truncated per entry, a hard cap per category) so
+  // a large KB never blows up the request -- this is a prompt-stuffing
+  // approach, not real retrieval, so it only ever sends a bounded slice.
+  const KB_MAX_ENTRIES_PER_CATEGORY = 12;
+  const KB_MAX_CONTENT_CHARS = 600;
+  const buildKnowledgeBase = () => {
+    const byCategory = (category: "company" | "product" | "operator") =>
+      knowledgeBase
+        .filter((e) => e.category === category)
+        .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""))
+        .slice(0, KB_MAX_ENTRIES_PER_CATEGORY)
+        .map((e) => ({
+          title: e.title,
+          content: e.content.length > KB_MAX_CONTENT_CHARS ? `${e.content.slice(0, KB_MAX_CONTENT_CHARS)}...` : e.content,
+        }));
+    return {
+      company: byCategory("company"),
+      product: byCategory("product"),
+      operator: byCategory("operator"),
+    };
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = input.trim();
@@ -151,6 +176,7 @@ export const FloatingAIChat: React.FC = () => {
           history: nextMessages.slice(-8).map((m) => ({ role: m.role, text: m.text })),
           context: buildContext(),
           lookups: buildLookups(),
+          knowledgeBase: buildKnowledgeBase(),
         }),
       });
       const data = await res.json();

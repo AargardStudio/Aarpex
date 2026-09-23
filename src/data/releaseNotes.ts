@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.14.0",
+    date: "2026-09-23",
+    headline: "Introducing the Knowledge Base",
+    tagline: "Teach the AI assistant who you are, what you sell, and how your team operates -- in your own words.",
+    highlights: [
+      {
+        title: "Three Knowledge Bases, one place",
+        description: "Company (who you are), Product & Service (what you sell), and a Dashboard Operator Playbook (internal SOPs and scripts, never shown to customers) -- write entries in plain text, organized and searchable.",
+      },
+      {
+        title: "Your AI assistant now knows your business",
+        description: "The floating chat assistant reads your Knowledge Base when answering questions or drafting things, so its answers reflect your actual positioning, offerings, and internal process -- not generic guesses.",
+      },
+      {
+        title: "Jump straight there",
+        description: "Ask the assistant to \"open the knowledge base\" or \"show me the playbook\" and it'll take you right there.",
+      },
+    ],
+  },
+  {
     version: "1.13.5",
     date: "2026-09-23",
     headline: "Bulk Syncs Are Now Bulletproof",

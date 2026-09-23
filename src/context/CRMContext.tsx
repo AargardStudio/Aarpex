@@ -30,6 +30,8 @@ import {
   CompanyAIAnalysis,
   Product,
   ProductAIInsight,
+  KnowledgeBaseEntry,
+  KnowledgeBaseCategory,
 } from "../types";
 import { isSupabaseAuthConfigured, getSupabaseAuthClient } from "../config/supabaseAuthClient";
 import {
@@ -95,7 +97,8 @@ export type NavView =
   | "Inbox"
   | "Reports"
   | "Settings"
-  | "CEO Notes";
+  | "CEO Notes"
+  | "Knowledge Base";
 
 interface CRMContextType {
   // Navigation & Active selection
@@ -247,6 +250,16 @@ interface CRMContextType {
   deleteProduct: (id: string) => void;
   generateProductDraft: (rawDescription: string) => Promise<Partial<Product>>;
   runProductAIInsight: (productId: string) => Promise<void>;
+
+  // Knowledge Base -- free-text reference entries (Company / Product &
+  // Service / Operator Playbook) that ground the floating AI chat
+  // assistant's answers instead of it only knowing live CRM records.
+  knowledgeBase: KnowledgeBaseEntry[];
+  addKnowledgeBaseEntry: (
+    entry: Omit<KnowledgeBaseEntry, "id" | "createdAt" | "updatedAt" | "createdBy">
+  ) => KnowledgeBaseEntry;
+  updateKnowledgeBaseEntry: (id: string, updates: Partial<KnowledgeBaseEntry>) => void;
+  deleteKnowledgeBaseEntry: (id: string) => void;
 
   // Business Profile: AI analysis + manual call log riding on a Company record.
   runCompanyAIAnalysis: (companyId: string) => Promise<void>;
@@ -460,6 +473,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadTenantEntity("products", [] as Product[])
   );
 
+  const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeBaseEntry[]>(() =>
+    loadTenantEntity("knowledgeBase", [] as KnowledgeBaseEntry[])
+  );
+
   // Every real tenant with Supabase configured mirrors its data to the
   // tenants' Postgres tables on every change. Guarded by !isBootstrapping
   // AND !isHydratingTenantData so the transient local state present before
@@ -538,6 +555,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (shouldSyncToSupabase) syncTenantTable("products", activeTenantId, products);
   }, [products, activeTenantId]);
 
+  useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_knowledgeBase`, JSON.stringify(knowledgeBase));
+    if (shouldSyncToSupabase) syncTenantTable("knowledge_base", activeTenantId, knowledgeBase);
+  }, [knowledgeBase, activeTenantId]);
+
   // Best-effort: flush any still-pending (debounced) Supabase table syncs
   // the moment the tab is hidden (switched away from, closed, or the
   // browser is closed) rather than only on an explicit "Sign out" click.
@@ -588,6 +610,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         commentsRes,
         emailCampaignsRes,
         productsRes,
+        knowledgeBaseRes,
       ] = await Promise.all([
         fetchTenantTable<Company>("companies", activeTenantId),
         fetchTenantTable<Contact>("contacts", activeTenantId),
@@ -601,6 +624,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetchTenantTable<Comment>("comments", activeTenantId),
         fetchTenantTable<EmailCampaign>("email_campaigns", activeTenantId),
         fetchTenantTable<Product>("products", activeTenantId),
+        fetchTenantTable<KnowledgeBaseEntry>("knowledge_base", activeTenantId),
       ]);
       if (cancelled) return;
       if (companiesRes) setRawCompanies(companiesRes);
@@ -615,6 +639,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (commentsRes) setComments(commentsRes);
       if (emailCampaignsRes) setEmailCampaigns(emailCampaignsRes);
       if (productsRes) setProducts(productsRes);
+      if (knowledgeBaseRes) setKnowledgeBase(knowledgeBaseRes);
       setIsHydratingTenantData(false);
     })();
     return () => {
@@ -640,6 +665,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(`crm_tenant_${activeTenantId}_comments`, JSON.stringify(comments));
     localStorage.setItem(`crm_tenant_${activeTenantId}_emailCampaigns`, JSON.stringify(emailCampaigns));
     localStorage.setItem(`crm_tenant_${activeTenantId}_products`, JSON.stringify(products));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_knowledgeBase`, JSON.stringify(knowledgeBase));
 
     // Every workspace starts genuinely empty except "pipelines" (a
     // structural default, not sample data) — see loadTenantEntity above.
@@ -667,6 +693,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setComments(loadTarget("comments", initialComments));
     setEmailCampaigns(loadTarget("emailCampaigns", [] as EmailCampaign[]));
     setProducts(loadTarget("products", [] as Product[]));
+    setKnowledgeBase(loadTarget("knowledgeBase", [] as KnowledgeBaseEntry[]));
     setSelectedCompanyId(null);
     setSelectedDealId(null);
   };
@@ -2176,6 +2203,38 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setProducts((prev) => prev.filter((p) => p.id !== id));
   };
 
+  const addKnowledgeBaseEntry = (
+    entryData: Omit<KnowledgeBaseEntry, "id" | "createdAt" | "updatedAt" | "createdBy">
+  ): KnowledgeBaseEntry => {
+    const newId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `kb_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const now = new Date().toISOString();
+    const newEntry: KnowledgeBaseEntry = {
+      ...entryData,
+      id: newId,
+      tags: entryData.tags || [],
+      createdBy: currentUser.name,
+      createdAt: now,
+      updatedAt: now,
+    };
+    setKnowledgeBase((prev) => [newEntry, ...prev]);
+    return newEntry;
+  };
+
+  const updateKnowledgeBaseEntry = (id: string, updates: Partial<KnowledgeBaseEntry>) => {
+    setKnowledgeBase((prev) =>
+      prev.map((entry) =>
+        entry.id === id ? { ...entry, ...updates, updatedAt: new Date().toISOString() } : entry
+      )
+    );
+  };
+
+  const deleteKnowledgeBaseEntry = (id: string) => {
+    setKnowledgeBase((prev) => prev.filter((entry) => entry.id !== id));
+  };
+
   // AI-assisted setup: turns a plain-language description into a structured
   // draft the user reviews and edits before saving -- this never saves a
   // product on its own, it only returns fields for the create/edit form to
@@ -2486,6 +2545,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteProduct,
         generateProductDraft,
         runProductAIInsight,
+
+        knowledgeBase,
+        addKnowledgeBaseEntry,
+        updateKnowledgeBaseEntry,
+        deleteKnowledgeBaseEntry,
 
         runCompanyAIAnalysis,
         addCallLogEntry,

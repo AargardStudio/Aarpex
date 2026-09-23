@@ -1174,6 +1174,7 @@ const VALID_NAV_VIEWS = [
   "Dashboard", "Leads", "Contacts", "Companies", "Products", "Deals", "Pipelines",
   "Activities", "Invoices", "Payments", "Revenue", "Stripe", "Tasks",
   "AI Insights", "Email Marketing", "Inbox", "Reports", "Settings", "CEO Notes",
+  "Knowledge Base",
 ];
 
 // ----------------------------------------------------------------------------
@@ -1223,7 +1224,7 @@ function resolveByName(
 
 app.post("/api/ai/chat-assistant", async (req, res) => {
   try {
-    const { message, history, context, lookups } = req.body;
+    const { message, history, context, lookups, knowledgeBase } = req.body;
     if (!message || typeof message !== "string") {
       return res.status(400).json({ error: "message is required" });
     }
@@ -1236,6 +1237,7 @@ app.post("/api/ai/chat-assistant", async (req, res) => {
       insight: "AI Insights", campaign: "Email Marketing", "email market": "Email Marketing",
       inbox: "Inbox", repl: "Inbox", report: "Reports", setting: "Settings",
       dashboard: "Dashboard", "ceo note": "CEO Notes", journal: "CEO Notes", memoir: "CEO Notes",
+      "knowledge base": "Knowledge Base", playbook: "Knowledge Base",
     };
     let fallbackNav: string | null = null;
     if (/\b(show|open|go to|take me|navigate|view)\b/.test(lowerMsg)) {
@@ -1261,10 +1263,36 @@ app.post("/api/ai/chat-assistant", async (req, res) => {
       ? `Opening ${fallbackNav} for you now.`
       : `Here's a quick snapshot: ${ctx.leadsCount ?? 0} leads, ${ctx.openDealsCount ?? 0} open deals worth $${(ctx.openDealsValue ?? 0).toLocaleString()}, and ${ctx.overdueInvoicesCount ?? 0} overdue invoices. Ask me something more specific and I'll dig into it.`;
 
+    // Knowledge Base grounding: the client sends whatever entries fit its
+    // own size budget (see FloatingAIChat's buildKnowledgeBase), already
+    // split by category. Format each category into its own labeled block so
+    // the model can tell "how we describe ourselves" (company) apart from
+    // "what we sell" (product) apart from "how our own team should operate"
+    // (operator) -- and so it knows operator content is internal-only and
+    // should never be quoted back as if it were customer-facing copy.
+    const kb = knowledgeBase && typeof knowledgeBase === "object" ? knowledgeBase : {};
+    const formatKbSection = (label: string, entries: any[] | undefined): string => {
+      if (!Array.isArray(entries) || entries.length === 0) return "";
+      return `\n### ${label}\n${entries
+        .map((e: any) => `- ${e.title}: ${e.content}`)
+        .join("\n")}`;
+    };
+    const kbBlock = [
+      formatKbSection("Company Knowledge Base (who this business is)", kb.company),
+      formatKbSection("Product & Service Knowledge Base (what they sell)", kb.product),
+      formatKbSection(
+        "Operator Playbook (INTERNAL ONLY -- for the team using this dashboard, never for prospects/customers)",
+        kb.operator
+      ),
+    ]
+      .filter(Boolean)
+      .join("\n");
+
     const prompt = `You are the AI assistant embedded in AarPex, a Sales Intelligence System built by Aargard Business Solutions. You live in a small floating chat bubble in the corner of the app, and you can now DO things in the CRM, not just answer questions -- but every action you propose is only ever a PROPOSAL: the user must explicitly confirm it in the UI before anything actually changes. You never claim something has already happened.
 
 Here is a compact snapshot of the signed-in user's workspace data (use ONLY this to answer -- never invent numbers or records that aren't here):
 ${JSON.stringify(ctx, null, 2)}
+${kbBlock ? `\nThe user's own Knowledge Base -- ground answers about the business, its offerings, or how the team should operate in this content when relevant. Prefer it over generic assumptions, and never invent facts about the business that aren't here:\n${kbBlock}\n` : ""}
 
 Existing records you can reference BY NAME (never invent an ID -- you don't have access to real IDs, only names):
 Companies: ${JSON.stringify(companies.map((c) => c.name)).slice(0, 4000)}

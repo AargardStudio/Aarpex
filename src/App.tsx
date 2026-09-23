@@ -22,6 +22,7 @@ import { CeoNotesView } from "./components/views/CeoNotesView";
 import { InboxView } from "./components/views/InboxView";
 import { ReportsView } from "./components/views/ReportsView";
 import { SettingsView } from "./components/views/SettingsView";
+import { KnowledgeBaseView } from "./components/views/KnowledgeBaseView";
 import { Company360Drawer } from "./components/company/Company360Drawer";
 import { QuickCreateModal } from "./components/modals/QuickCreateModal";
 import { UserAccessControlModal } from "./components/auth/UserAccessControlModal";
@@ -118,6 +119,8 @@ const CRMMainContent: React.FC = () => {
         return <ProductsView />;
       case "ceonotes":
         return <CeoNotesView />;
+      case "knowledgebase":
+        return <KnowledgeBaseView />;
       case "inbox":
         return <InboxView />;
       case "reports":

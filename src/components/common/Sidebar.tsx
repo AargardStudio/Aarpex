@@ -29,6 +29,7 @@ import {
   Inbox as InboxIcon,
   Package,
   X,
+  BookOpen,
 } from "lucide-react";
 import { ROLE_LABELS, UserRole } from "../../types";
 
@@ -58,6 +59,7 @@ export const Sidebar: React.FC = () => {
     activeTenantId,
     switchTenant,
     products,
+    knowledgeBase,
     setCreateTenantModalOpen,
     setAuthPageOpen,
     setAuthPageMode,
@@ -99,6 +101,7 @@ export const Sidebar: React.FC = () => {
 
     { name: "Tasks", icon: CheckSquare, badge: pendingTasksCount, category: "Productivity" },
     { name: "AI Insights", icon: Sparkles, badge: "AI", badgeColor: "bg-[#252a36] text-teal-300 border border-[#3d4455] font-semibold", category: "Intelligence" },
+    { name: "Knowledge Base", icon: BookOpen, badge: knowledgeBase?.length || undefined, category: "Intelligence" },
 
     {
       name: "Email Marketing",
