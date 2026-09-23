@@ -13,6 +13,33 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.13.3] - 2026-09-23
+
+### Fixed
+
+- **Found the actual catastrophic bug behind data disappearing on sign-in
+  ("flashes correct data for a second, then every section goes empty"),
+  including newly imported leads never saving.** The Supabase mirror sync's
+  cleanup step deletes any row in a table that's no longer in the current
+  local array — but when that local array was empty, the code that scopes
+  the delete to "not in this list of ids" was simply never applied, so it
+  ran `delete from <table> where tenant_id = ...` with nothing else
+  restricting it: it deleted **every row for that tenant in that table**.
+  A local array is legitimately empty for a moment on every sign-in,
+  sign-out-then-in, and tenant switch — right up until the Supabase fetch
+  that repopulates it finishes — and if a write-sync fired during that
+  window (which nothing was preventing outside of the very first page
+  load), it would wipe real, already-synced data. This is likely the root
+  mechanism behind every "data vanished after reload" report this session,
+  not just the lead-sync ones.
+  - The mirror sync itself no longer allows an empty local array to run
+    that delete step at all — it now only ever deletes rows when there's a
+    real, non-empty local list to diff against.
+  - Sync-to-Supabase is now also blocked for a tenant until that tenant's
+    initial data fetch has actually completed at least once per sign-in /
+    tenant switch (previously this was only guarded for the very first page
+    load, not later sign-outs/sign-ins or switching workspaces).
+
 ## [1.13.2] - 2026-09-23
 
 ### Fixed

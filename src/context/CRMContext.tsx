@@ -317,6 +317,17 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // avoid a flash of the (empty) dashboard before we know the answer.
   const [isAuthPageOpen, setAuthPageOpen] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+  // True from the moment activeTenantId is set/changed until the Supabase
+  // fetch that hydrates that tenant's CRM tables (see the effect below)
+  // actually resolves. isBootstrapping alone doesn't cover this: it only
+  // guards the very first page load, but activeTenantId changes again on
+  // every sign-out+sign-in and every tenant switch WITHOUT isBootstrapping
+  // going back to true -- so without this second flag, the write-sync
+  // effects could fire with whatever's momentarily in React state (often
+  // empty, before the fetch below repopulates it) and, combined with the
+  // mirror sync's delete-diff step, wipe real data in Supabase. See
+  // shouldSyncToSupabase below and CHANGELOG v1.13.3.
+  const [isHydratingTenantData, setIsHydratingTenantData] = useState(true);
   const [authPageMode, setAuthPageMode] = useState<"signin" | "signup">("signin");
   const [isEmailComposeOpen, setEmailComposeOpen] = useState(false);
   const [emailComposeProps, setEmailComposeProps] = useState<{
@@ -449,10 +460,15 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 
   // Every real tenant with Supabase configured mirrors its data to the
-  // tenants' Postgres tables on every change. Guarded by !isBootstrapping so
-  // the empty local state present before the initial fetch (below) resolves
-  // never overwrites what's already in the database.
-  const shouldSyncToSupabase = isSupabaseAuthConfigured() && Boolean(activeTenantId) && !isBootstrapping;
+  // tenants' Postgres tables on every change. Guarded by !isBootstrapping
+  // AND !isHydratingTenantData so the transient local state present before
+  // this tenant's Supabase fetch (below) resolves never overwrites --
+  // or, worse, via the mirror sync's delete-diff step, deletes -- what's
+  // already in the database. isBootstrapping alone only covers first page
+  // load; isHydratingTenantData covers every later sign-out+in and tenant
+  // switch too.
+  const shouldSyncToSupabase =
+    isSupabaseAuthConfigured() && Boolean(activeTenantId) && !isBootstrapping && !isHydratingTenantData;
 
   // The tenant row itself (plan, Stripe config, webmail config, etc.) mirrors
   // to Supabase the same way the CRM record tables do above.
@@ -545,7 +561,17 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // runs independently of isBootstrapping (unlike the write-sync effects
   // above) so it's exactly what populates state during bootstrap.
   useEffect(() => {
-    if (!isSupabaseAuthConfigured() || !activeTenantId) return;
+    if (!isSupabaseAuthConfigured() || !activeTenantId) {
+      // Nothing to hydrate (no backend configured, or no active tenant
+      // yet) -- don't leave shouldSyncToSupabase blocked forever on a
+      // fetch that will never run.
+      setIsHydratingTenantData(false);
+      return;
+    }
+    // Block the write-sync effects (shouldSyncToSupabase) until this
+    // tenant's real data has actually come back from Supabase -- see the
+    // comment on isHydratingTenantData's declaration for why this matters.
+    setIsHydratingTenantData(true);
     let cancelled = false;
     (async () => {
       const [
@@ -588,6 +614,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (commentsRes) setComments(commentsRes);
       if (emailCampaignsRes) setEmailCampaigns(emailCampaignsRes);
       if (productsRes) setProducts(productsRes);
+      setIsHydratingTenantData(false);
     })();
     return () => {
       cancelled = true;

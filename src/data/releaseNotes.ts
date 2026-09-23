@@ -23,6 +23,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.13.3",
+    date: "2026-09-23",
+    headline: "Your Data Now Actually Stays Saved",
+    tagline: "Found and fixed the real reason synced leads, companies, and contacts could vanish -- sometimes right after they'd just been added.",
+    highlights: [
+      {
+        title: "Fixed the data-loss bug behind the flash-then-empty screens",
+        description: "A background sync step could, in a narrow timing window around sign-in or switching workspaces, delete every record in a table instead of just the ones that were actually removed. That window is now closed for good.",
+      },
+      {
+        title: "Sign out no longer races your last save",
+        description: "Every change syncs to the database in the background; signing out right after now waits for that save to finish first, instead of risking it never landing at all.",
+      },
+      {
+        title: "Companies and contacts sync in the right order",
+        description: "Fixed a timing issue where a new lead's link to a company or contact could try to save before the company or contact itself had finished -- now it always waits its turn.",
+      },
+      {
+        title: "Pro tier limited to internal testing",
+        description: "Everyone else's subscription picker now only offers Growth ($29/mo) while Pro finishes testing.",
+      },
+    ],
+  },
+  {
     version: "1.12.0",
     date: "2026-09-22",
     headline: "Pro Plan Checkout, Phone Field Fix",

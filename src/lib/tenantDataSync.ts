@@ -205,14 +205,35 @@ async function performSync(table: TenantTable, tenantId: string, rows: Array<Rec
     }
 
     // Remove rows that no longer exist locally for this tenant.
+    //
+    // CRITICAL SAFETY NET: an empty `rows` array must NEVER translate into
+    // "delete every row for this tenant in this table". This used to be
+    // exactly what happened -- when keepIds.length was 0, the `.not("id",
+    // "in", ...)` filter below was simply never added, leaving
+    // `delete().eq("tenant_id", tenantId)` with nothing else scoping it, so
+    // it wiped the ENTIRE table for that tenant. `rows` reflects whatever
+    // happens to be in React state at the moment this debounced call fires
+    // -- which is legitimately empty for a split second on every sign-in,
+    // tenant switch, or page load, before the Supabase fetch that hydrates
+    // it has resolved. That race is exactly how "sync, then sign out/in"
+    // (or even just re-opening the app) could silently mass-delete
+    // companies/contacts/leads that had synced fine moments earlier.
+    //
+    // The trade-off accepted here: if a tenant's very last remaining row in
+    // a table is deleted locally, that row is NOT cleaned up from Supabase
+    // by this pass (it becomes a harmless "zombie" until another row is
+    // added and later removed, which re-triggers a normal non-empty diff).
+    // That's a far smaller, recoverable issue than mass data loss.
     const keepIds = rows.map((r) => r.id).filter(Boolean);
-    let deleteQuery = supabase.from(table).delete().eq("tenant_id", tenantId);
     if (keepIds.length > 0) {
-      deleteQuery = deleteQuery.not("id", "in", `(${keepIds.map((id) => `"${id}"`).join(",")})`);
-    }
-    const { error: deleteError } = await deleteQuery;
-    if (deleteError) {
-      console.error(`[tenantDataSync] cleanup delete failed for ${table}:`, deleteError.message);
+      const { error: deleteError } = await supabase
+        .from(table)
+        .delete()
+        .eq("tenant_id", tenantId)
+        .not("id", "in", `(${keepIds.map((id) => `"${id}"`).join(",")})`);
+      if (deleteError) {
+        console.error(`[tenantDataSync] cleanup delete failed for ${table}:`, deleteError.message);
+      }
     }
   } catch (err) {
     console.error(`[tenantDataSync] sync failed for ${table}:`, err);
