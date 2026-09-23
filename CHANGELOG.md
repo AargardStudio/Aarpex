@@ -13,6 +13,32 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.13.2] - 2026-09-23
+
+### Fixed
+
+- **Found the actual reason data disappeared after "Sync All to
+  Companies/Contacts" followed by a quick sign-out.** Every table sync to
+  Supabase (companies, contacts, leads, etc.) is debounced 800ms so rapid
+  edits collapse into one network call — but nothing flushed that queue
+  before `signOut()` invalidated the session. If a write was still pending
+  when sign-out fired, it went out a moment later with no valid session,
+  Supabase's row-level security silently rejected it, and that data was
+  never actually saved — even though it looked correct in the browser right
+  up until sign-out. `signOut()` now flushes every pending sync and waits
+  for it to land before ending the session; a `visibilitychange` listener
+  does the same best-effort flush when a tab is hidden/closed.
+- **A second, independent race**: companies and contacts each sync on
+  their own independent debounce timer, so under normal network timing a
+  dependent write (a contact's `company_id`, a lead's
+  `linked_company_id`/`linked_contact_id`, a deal/invoice/task's
+  company/contact reference) could reach Supabase *before* the company or
+  contact it points to had finished syncing — Postgres silently rejects
+  that as a foreign-key violation and the write is lost for good. Syncing
+  a dependent table now flushes its companies/contacts (and, for leads,
+  deals, etc.) dependency first, so the ordering is no longer left to
+  chance.
+
 ## [1.13.1] - 2026-09-23
 
 ### Fixed

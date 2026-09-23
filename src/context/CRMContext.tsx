@@ -42,6 +42,7 @@ import {
   clearPendingTenantCreation,
   hasPendingTenantCreations,
   flushPendingTenantCreations,
+  flushAllPendingSyncs,
 } from "../lib/tenantDataSync";
 import {
   initialCompanies,
@@ -519,6 +520,23 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(`crm_tenant_${activeTenantId}_products`, JSON.stringify(products));
     if (shouldSyncToSupabase) syncTenantTable("products", activeTenantId, products);
   }, [products, activeTenantId]);
+
+  // Best-effort: flush any still-pending (debounced) Supabase table syncs
+  // the moment the tab is hidden (switched away from, closed, or the
+  // browser is closed) rather than only on an explicit "Sign out" click.
+  // `visibilitychange` fires reliably earlier than `beforeunload` for this
+  // purpose. This can't be guaranteed to complete if the tab is actually
+  // torn down a moment later, but it closes most of the window where an
+  // action taken right before closing the tab would otherwise be lost.
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        void flushAllPendingSyncs();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
 
   // Whenever the active tenant changes (including the very first time it's
   // set, by the session-bootstrap effect below), re-hydrate its records
@@ -2253,9 +2271,19 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // onAuthStateChange listener picks up the SIGNED_OUT event and clears
   // tenants/users/currentUser and reopens AuthPage — no local-only identity
   // switching happens here anymore.
+  //
+  // Flushes any still-pending (debounced, not-yet-fired) table/tenant syncs
+  // FIRST and waits for them to land -- otherwise a change made moments
+  // earlier (e.g. "Sync All to Companies/Contacts" followed right away by
+  // "Sign out") races auth.signOut() invalidating the session token: the
+  // debounced write fires after the session is gone, RLS silently rejects
+  // it, and that data is never actually saved even though it looked correct
+  // in the browser right up until sign-out.
   const signOut = () => {
     if (isSupabaseAuthConfigured()) {
-      void getSupabaseAuthClient().auth.signOut();
+      void flushAllPendingSyncs().finally(() => {
+        void getSupabaseAuthClient().auth.signOut();
+      });
     } else {
       setCurrentUser(SIGNED_OUT_USER);
       setTenants([]);

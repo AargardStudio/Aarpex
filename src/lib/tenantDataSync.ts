@@ -110,26 +110,89 @@ function fromRow(table: TenantTable, row: Record<string, any>): Record<string, a
 // Debounce per (table, tenantId) so rapid successive state changes (e.g.
 // typing in a form that updates context on every keystroke) collapse into
 // one sync call instead of one network round-trip per keystroke.
-const pendingSyncs = new Map<string, ReturnType<typeof setTimeout>>();
+//
+// Each entry also keeps a `run` closure so a still-pending (not yet fired)
+// write can be flushed on demand -- see flushAllPendingSyncs below. This
+// matters because the 800ms debounce window is a real race against signing
+// out: Supabase's auth.signOut() invalidates the client's session token
+// immediately, so if the debounced write fires even slightly *after* that
+// (which it will, if a user syncs something and clicks "Sign out" a moment
+// later), the request goes out unauthenticated, RLS silently rejects it,
+// and the just-synced data never reaches Supabase at all -- it looks fine
+// in the browser (state + localStorage) but is gone the next time the user
+// signs back in, since Supabase is the source of truth on load.
+const pendingSyncs = new Map<string, { timeoutId: ReturnType<typeof setTimeout>; run: () => Promise<void> }>();
 
 export function syncTenantTable(table: TenantTable, tenantId: string, rows: Array<Record<string, any>>): void {
   if (!isSupabaseAuthConfigured() || !tenantId) return;
 
   const debounceKey = `${table}:${tenantId}`;
   const existing = pendingSyncs.get(debounceKey);
-  if (existing) clearTimeout(existing);
+  if (existing) clearTimeout(existing.timeoutId);
 
-  pendingSyncs.set(
-    debounceKey,
-    setTimeout(() => {
-      pendingSyncs.delete(debounceKey);
-      void performSync(table, tenantId, rows);
-    }, 800)
-  );
+  const run = async () => {
+    pendingSyncs.delete(debounceKey);
+    await performSync(table, tenantId, rows);
+  };
+
+  const timeoutId = setTimeout(() => {
+    void run();
+  }, 800);
+
+  pendingSyncs.set(debounceKey, { timeoutId, run });
 }
+
+/**
+ * Immediately runs every debounced table sync that hasn't fired yet, in
+ * parallel, and waits for all of them to finish. Call this BEFORE ending
+ * the Supabase auth session (sign-out) or navigating away, so a write
+ * queued moments earlier (e.g. "Sync All to Companies/Contacts" followed
+ * right away by "Sign out") actually lands instead of silently racing the
+ * session invalidation and getting rejected by RLS.
+ */
+export async function flushAllPendingSyncs(): Promise<void> {
+  const pending = [...pendingSyncs.values(), ...pendingTenantRowSyncs.values()];
+  for (const p of pending) clearTimeout(p.timeoutId);
+  await Promise.all(pending.map((p) => p.run()));
+}
+
+// Which other tables' pending syncs must be flushed first, keyed by table.
+// companies/contacts are synced on their own independent 800ms debounce
+// timers, same as every other table -- so under normal network jitter a
+// dependent table's write can reach Postgres before its FK target finishes
+// syncing. That's a real, reproducible foreign-key violation (e.g. a
+// contact's company_id, or a lead's linked_company_id/linked_contact_id,
+// pointing at a row that doesn't exist in Supabase yet), rejected silently
+// and never retried -- data that looked fully synced in the browser simply
+// never reaches the database. Deals/invoices/payments/activities/tasks all
+// carry company_id and/or contact_id too.
+const SYNC_DEPENDENCIES: Partial<Record<TenantTable, TenantTable[]>> = {
+  contacts: ["companies"],
+  leads: ["companies", "contacts"],
+  deals: ["companies", "contacts"],
+  invoices: ["companies", "contacts"],
+  payments: ["companies"],
+  activities: ["companies", "contacts"],
+  tasks: ["companies", "contacts"],
+};
 
 async function performSync(table: TenantTable, tenantId: string, rows: Array<Record<string, any>>): Promise<void> {
   try {
+    // Flush this table's dependencies out of turn first, so its sync always
+    // lands after the rows it references.
+    const deps = SYNC_DEPENDENCIES[table];
+    if (deps) {
+      for (const dep of deps) {
+        const depKey = `${dep}:${tenantId}`;
+        const pendingDep = pendingSyncs.get(depKey);
+        if (pendingDep) {
+          pendingSyncs.delete(depKey);
+          clearTimeout(pendingDep.timeoutId);
+          await pendingDep.run();
+        }
+      }
+    }
+
     const supabase = getSupabaseAuthClient();
     const dbRows = rows.filter((r) => r && r.id).map((r) => toRow(table, tenantId, r));
 
@@ -341,21 +404,24 @@ export async function fetchMyTenants(): Promise<SupabaseTenantRow[] | null> {
 // the CRM record tables. Member roster changes are NOT handled here; that
 // needs its own tenant_members write path (not yet built — see the
 // deployment-readiness notes).
-const pendingTenantSyncs = new Map<string, ReturnType<typeof setTimeout>>();
+const pendingTenantRowSyncs = new Map<string, { timeoutId: ReturnType<typeof setTimeout>; run: () => Promise<void> }>();
 
 export function syncTenantRow(tenant: Tenant): void {
   if (!isSupabaseAuthConfigured() || !tenant?.id) return;
 
-  const existing = pendingTenantSyncs.get(tenant.id);
-  if (existing) clearTimeout(existing);
+  const existing = pendingTenantRowSyncs.get(tenant.id);
+  if (existing) clearTimeout(existing.timeoutId);
 
-  pendingTenantSyncs.set(
-    tenant.id,
-    setTimeout(() => {
-      pendingTenantSyncs.delete(tenant.id);
-      void performTenantRowSync(tenant);
-    }, 800)
-  );
+  const run = async () => {
+    pendingTenantRowSyncs.delete(tenant.id);
+    await performTenantRowSync(tenant);
+  };
+
+  const timeoutId = setTimeout(() => {
+    void run();
+  }, 800);
+
+  pendingTenantRowSyncs.set(tenant.id, { timeoutId, run });
 }
 
 async function performTenantRowSync(tenant: Tenant): Promise<void> {
