@@ -12,6 +12,10 @@ import {
   Trash2,
   X,
   Sparkles,
+  Link as LinkIcon,
+  Loader2,
+  AlertCircle,
+  Wand2,
 } from "lucide-react";
 
 const CATEGORY_META: Record<
@@ -36,6 +40,15 @@ const CATEGORY_META: Record<
     icon: ShieldCheck,
     accent: "amber",
   },
+};
+
+// Per-category microcopy for the "Generate from a link" feature -- what
+// kind of page the user should paste, since it means something different
+// per category (someone else's site vs. your own).
+const URL_HINT: Record<KnowledgeBaseCategory, string> = {
+  company: "Paste this lead's, contact's, or company's own website -- the AI will summarize what's useful to know about them.",
+  product: "Paste one of your product/service pages -- the AI will draft an entry describing this offering.",
+  operator: "Paste your company's About/homepage -- the AI will draft an entry describing who you are.",
 };
 
 const ACCENT_CLASSES: Record<string, { badge: string; icon: string; button: string }> = {
@@ -123,14 +136,19 @@ const EntryEditorModal: React.FC<{
   entry: KnowledgeBaseEntry | null;
   onClose: () => void;
 }> = ({ isOpen, category, entry, onClose }) => {
-  const { addKnowledgeBaseEntry, updateKnowledgeBaseEntry, leads, contacts, companies } = useCRM();
+  const { addKnowledgeBaseEntry, updateKnowledgeBaseEntry, generateKnowledgeBaseDraftFromUrl, leads, contacts, companies } = useCRM();
   const [title, setTitle] = useState(entry?.title || "");
   const [content, setContent] = useState(entry?.content || "");
   const [tagsInput, setTagsInput] = useState((entry?.tags || []).join(", "));
   const [linkedLeadIds, setLinkedLeadIds] = useState<string[]>(entry?.linkedLeadIds || []);
   const [linkedContactIds, setLinkedContactIds] = useState<string[]>(entry?.linkedContactIds || []);
   const [linkedCompanyIds, setLinkedCompanyIds] = useState<string[]>(entry?.linkedCompanyIds || []);
+  const [sourceUrl, setSourceUrl] = useState(entry?.sourceUrl || "");
   const [error, setError] = useState<string | null>(null);
+
+  const [importUrl, setImportUrl] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -140,9 +158,32 @@ const EntryEditorModal: React.FC<{
       setLinkedLeadIds(entry?.linkedLeadIds || []);
       setLinkedContactIds(entry?.linkedContactIds || []);
       setLinkedCompanyIds(entry?.linkedCompanyIds || []);
+      setSourceUrl(entry?.sourceUrl || "");
+      setImportUrl(entry?.sourceUrl || "");
+      setImportError(null);
       setError(null);
     }
   }, [isOpen, entry]);
+
+  const handleImportFromUrl = async () => {
+    if (!importUrl.trim()) {
+      setImportError("Paste a URL first.");
+      return;
+    }
+    setIsImporting(true);
+    setImportError(null);
+    try {
+      const draft = await generateKnowledgeBaseDraftFromUrl(importUrl.trim(), category);
+      setTitle(draft.title);
+      setContent(draft.content);
+      if (draft.tags.length > 0) setTagsInput(draft.tags.join(", "));
+      setSourceUrl(draft.sourceUrl);
+    } catch (err: any) {
+      setImportError(err?.message || "Couldn't generate a knowledge base entry from that URL.");
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -169,9 +210,9 @@ const EntryEditorModal: React.FC<{
         : { linkedLeadIds: [], linkedContactIds: [], linkedCompanyIds: [] };
 
     if (entry) {
-      updateKnowledgeBaseEntry(entry.id, { title: title.trim(), content: content.trim(), tags, ...links });
+      updateKnowledgeBaseEntry(entry.id, { title: title.trim(), content: content.trim(), tags, sourceUrl: sourceUrl || undefined, ...links });
     } else {
-      addKnowledgeBaseEntry({ category, title: title.trim(), content: content.trim(), tags, ...links });
+      addKnowledgeBaseEntry({ category, title: title.trim(), content: content.trim(), tags, sourceUrl: sourceUrl || undefined, ...links });
     }
     onClose();
   };
@@ -205,6 +246,45 @@ const EntryEditorModal: React.FC<{
               {error}
             </div>
           )}
+
+          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+            <div className="flex items-center gap-1.5 font-semibold text-slate-700">
+              <Wand2 className="w-3.5 h-3.5 text-indigo-500" />
+              <span>Generate from a link</span>
+            </div>
+            <p className="text-[11px] text-slate-500">{URL_HINT[category]}</p>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <LinkIcon className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={importUrl}
+                  onChange={(e) => setImportUrl(e.target.value)}
+                  placeholder="https://example.com/about"
+                  disabled={isImporting}
+                  className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400 disabled:opacity-60"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleImportFromUrl}
+                disabled={isImporting}
+                className={`px-3 py-1.5 rounded-lg text-white font-semibold shrink-0 flex items-center gap-1.5 shadow-sm disabled:opacity-60 ${accent.button}`}
+              >
+                {isImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                <span>{isImporting ? "Skimming..." : "Fetch & Draft"}</span>
+              </button>
+            </div>
+            {importError && (
+              <div className="flex items-start gap-1.5 text-rose-700">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>{importError}</span>
+              </div>
+            )}
+            {sourceUrl && !importError && (
+              <p className="text-[10px] text-slate-400 truncate">Drafted from: {sourceUrl}</p>
+            )}
+          </div>
 
           <div>
             <label className="block font-semibold text-slate-600 mb-1">Title</label>

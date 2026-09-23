@@ -13,6 +13,26 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-09-23
+### Added
+- **"Generate from a link" in the Knowledge Base entry editor.** Paste a
+  URL and AarPex fetches the page server-side, strips it down to plain
+  text, and drafts a title/content/tags entry with AI -- framed
+  differently per category:
+  - Company: paste a lead's/contact's/company's own website -- drafts a
+    summary of what's useful to know about them.
+  - Product & Service: paste one of your own product pages -- drafts an
+    entry describing that offering.
+  - Dashboard Operator: paste your own About/homepage -- drafts an entry
+    describing who you are.
+  The draft always lands in the editor for review/editing before saving --
+  nothing is created automatically. New `/api/ai/knowledge-base-from-url`
+  endpoint (dependency-free HTML-to-text extraction, basic SSRF guard
+  against private/internal addresses, 12s fetch timeout, graceful fallback
+  to the raw extracted text if the AI call fails).
+- Entries drafted this way remember their source (`sourceUrl`), shown
+  under the import box when set.
+
 ## [1.14.1] - 2026-09-23
 ### Changed
 - **Reworked what the Knowledge Base categories mean, based on real usage:**

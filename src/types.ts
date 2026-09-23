@@ -390,6 +390,9 @@ export interface KnowledgeBaseEntry {
   linkedLeadIds?: string[];
   linkedContactIds?: string[];
   linkedCompanyIds?: string[];
+  // Set when this entry was drafted (or last re-drafted) from a webpage via
+  // "Generate from a link" -- shown as provenance, never required.
+  sourceUrl?: string;
   createdBy: string;
   createdAt: string;
   updatedAt: string;

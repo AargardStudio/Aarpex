@@ -260,6 +260,10 @@ interface CRMContextType {
   ) => KnowledgeBaseEntry;
   updateKnowledgeBaseEntry: (id: string, updates: Partial<KnowledgeBaseEntry>) => void;
   deleteKnowledgeBaseEntry: (id: string) => void;
+  generateKnowledgeBaseDraftFromUrl: (
+    url: string,
+    category: KnowledgeBaseCategory
+  ) => Promise<{ title: string; content: string; tags: string[]; sourceUrl: string }>;
 
   // Business Profile: AI analysis + manual call log riding on a Company record.
   runCompanyAIAnalysis: (companyId: string) => Promise<void>;
@@ -2286,6 +2290,33 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Fetches a public webpage server-side and asks the AI to turn it into a
+  // single Knowledge Base entry draft -- framed differently per category
+  // (see the endpoint's own comment). Never saves anything itself; throws
+  // with a user-facing message on failure so the entry editor can show
+  // exactly why (site unreachable, blocked, no readable text, etc.) instead
+  // of silently doing nothing.
+  const generateKnowledgeBaseDraftFromUrl = async (
+    url: string,
+    category: KnowledgeBaseCategory
+  ): Promise<{ title: string; content: string; tags: string[]; sourceUrl: string }> => {
+    const res = await apiFetch("/api/ai/knowledge-base-from-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, category }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Couldn't generate a knowledge base entry from that URL.");
+    }
+    return {
+      title: data.title || "",
+      content: data.content || "",
+      tags: Array.isArray(data.tags) ? data.tags : [],
+      sourceUrl: data.sourceUrl || url,
+    };
+  };
+
   // Re-runs (or runs for the first time) the AI targeting/positioning
   // insight for an already-saved product -- used when the user tweaks a
   // product's description/criteria and wants fresh pitch angles without
@@ -2550,6 +2581,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addKnowledgeBaseEntry,
         updateKnowledgeBaseEntry,
         deleteKnowledgeBaseEntry,
+        generateKnowledgeBaseDraftFromUrl,
 
         runCompanyAIAnalysis,
         addCallLogEntry,

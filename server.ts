@@ -158,6 +158,54 @@ async function callGeminiSafe(prompt: string, responseMimeType: string = "applic
   return null;
 }
 
+// ----------------------------------------------------------------------------
+// Lightweight HTML -> plain text extraction, used by the "generate a
+// Knowledge Base entry from a URL" feature below. Deliberately dependency-
+// free (no cheerio/jsdom) -- good enough for typical marketing/about pages,
+// not a general-purpose HTML parser.
+// ----------------------------------------------------------------------------
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCharCode(parseInt(code, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_match, code) => String.fromCharCode(parseInt(code, 16)));
+}
+
+function htmlToPlainText(html: string): string {
+  let out = html
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<(script|style|noscript|svg|head)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|section|article|li|h[1-6]|tr)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ");
+  out = decodeHtmlEntities(out);
+  out = out.replace(/[ \t]+/g, " ").replace(/\n[ \t]*\n+/g, "\n\n").trim();
+  return out;
+}
+
+// Basic SSRF guard: refuse hostnames that are obviously local/private-network
+// addresses. Not exhaustive (doesn't cover DNS rebinding), but this feature
+// is an authenticated, low-stakes convenience for skimming a public
+// marketing page, not a general-purpose fetch proxy.
+function isPrivateOrLocalHostname(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return (
+    h === "localhost" ||
+    h === "0.0.0.0" ||
+    h === "::1" ||
+    /^127\./.test(h) ||
+    /^10\./.test(h) ||
+    /^192\.168\./.test(h) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(h) ||
+    /^169\.254\./.test(h)
+  );
+}
+
 // Health check
 app.get("/api/health", (_req, res) => {
   res.json({
@@ -1603,6 +1651,129 @@ IMPORTANT: Return pure valid JSON only, without markdown fences or additional co
     });
   } catch (err: any) {
     res.status(500).json({ error: "Failed to generate product draft", details: err?.message });
+  }
+});
+
+// AI-assisted Knowledge Base drafting from a URL: fetches a public webpage
+// server-side (the browser can't do this cross-origin), strips it down to
+// plain text, and asks Gemini to turn it into a single well-organized
+// Knowledge Base entry -- framed differently per category, since "company"
+// entries are about skimming a LEAD/CONTACT/COMPANY's own site (what's
+// useful to know about them), while "product"/"operator" entries are about
+// skimming the user's OWN site (their offering, or who they are). Never
+// persists anything -- the client always reviews/edits the draft before
+// saving, same as every other AI-assist endpoint in this file.
+app.post("/api/ai/knowledge-base-from-url", async (req, res) => {
+  try {
+    const { url, category } = req.body;
+    if (!url || typeof url !== "string") {
+      return res.status(400).json({ error: "url is required" });
+    }
+    if (!["company", "product", "operator"].includes(category)) {
+      return res.status(400).json({ error: "category must be company, product, or operator" });
+    }
+
+    let target: URL;
+    try {
+      target = new URL(url.trim());
+    } catch {
+      return res.status(400).json({ error: "That doesn't look like a valid URL." });
+    }
+    if (target.protocol !== "http:" && target.protocol !== "https:") {
+      return res.status(400).json({ error: "Only http:// and https:// URLs are supported." });
+    }
+    if (isPrivateOrLocalHostname(target.hostname)) {
+      return res.status(400).json({ error: "That URL points to a private/internal address, which can't be fetched." });
+    }
+
+    let html: string;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const response = await fetch(target.toString(), {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; AarpexBot/1.0; +https://aarpex.aarbook.com)" },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!response.ok) {
+        return res.status(502).json({ error: `The site responded with ${response.status} ${response.statusText}.` });
+      }
+      html = await response.text();
+    } catch (fetchErr: any) {
+      const message =
+        fetchErr?.name === "AbortError"
+          ? "Timed out fetching that page -- it may be slow or unreachable."
+          : `Couldn't reach that URL: ${fetchErr?.message || "unknown error"}`;
+      return res.status(502).json({ error: message });
+    }
+
+    if (html.length > 2_000_000) html = html.slice(0, 2_000_000);
+
+    const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+    const pageTitle = titleMatch ? decodeHtmlEntities(titleMatch[1]).trim() : "";
+    const pageText = htmlToPlainText(html).slice(0, 15000);
+
+    if (!pageText || pageText.replace(/\s/g, "").length < 40) {
+      return res.status(422).json({
+        error: "Couldn't extract readable text from that page -- it may be JavaScript-rendered, gated behind a login, or blocking automated requests.",
+      });
+    }
+
+    const categoryGuidance: Record<string, string> = {
+      company:
+        "This is a specific lead's, contact's, or company's OWN website. Write ONE Knowledge Base entry capturing what's useful to know about THEM when a salesperson is reaching out or preparing to talk -- what they do, their industry, size/positioning signals, anything relevant to selling to this specific prospect. Do not describe AarPex or the CRM itself.",
+      product:
+        "This is the user's OWN product or service page. Write ONE Knowledge Base entry describing this offering -- what it is, who it's for, key features/benefits, pricing signals if present -- suitable for grounding AI-written pitches and answers about this offering.",
+      operator:
+        "This is the user's OWN company/about page. Write ONE Knowledge Base entry describing who this business is -- their background, mission, service offering, and what makes them credible -- suitable for grounding how the AI should position this business and its offering to prospects.",
+    };
+
+    const prompt = `You are helping populate a CRM's Knowledge Base from a webpage's content. ${categoryGuidance[category]}
+
+Page URL: ${target.toString()}
+Page title: ${pageTitle || "(none found)"}
+
+Extracted page text (this is a raw dump -- it may include navigation links, footer boilerplate, or other noise; ignore that and focus on substantive content):
+"""
+${pageText}
+"""
+
+Return pure JSON only, matching this exact schema:
+{
+  "title": string (a short, specific title for this entry, under 80 characters -- not just the page title verbatim),
+  "content": string (a well-organized summary in plain prose, 150-400 words, strictly factual -- never invent anything not supported by the page text; if the page has too little substantive content, say so plainly in "content" instead of padding it out),
+  "tags": string[] (2-5 short, relevant tags)
+}
+
+IMPORTANT: Return pure valid JSON only, without markdown fences or additional commentary.`;
+
+    const rawAiText = await callGeminiSafe(prompt);
+    if (rawAiText) {
+      try {
+        const parsed = JSON.parse(rawAiText);
+        return res.json({
+          title: parsed.title || pageTitle || target.hostname,
+          content: parsed.content || pageText.slice(0, 1500),
+          tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+          sourceUrl: target.toString(),
+          source: "gemini",
+        });
+      } catch {
+        // Fall through to the heuristic response below
+      }
+    }
+
+    // Heuristic fallback: no AI cleanup, just the raw extracted text --
+    // still useful as a starting draft the user edits down themselves.
+    return res.json({
+      title: pageTitle || target.hostname,
+      content: pageText.slice(0, 1500),
+      tags: [],
+      sourceUrl: target.toString(),
+      source: "heuristic",
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to generate a knowledge base entry from that URL", details: err?.message });
   }
 });
 

@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.15.0",
+    date: "2026-09-23",
+    headline: "Let AI Skim the Web to Build Your Knowledge Base",
+    tagline: "Paste a link, get a drafted entry -- no more typing up notes from scratch.",
+    highlights: [
+      {
+        title: "\"Generate from a link\" in every entry editor",
+        description: "Paste a URL and AarPex fetches the page and drafts a title, summary, and tags for you -- review and tweak before saving.",
+      },
+      {
+        title: "Framed for what you're actually looking at",
+        description: "Paste a prospect's website for Company KB and it summarizes them; paste your own site for Product or Operator KB and it summarizes you.",
+      },
+    ],
+  },
+  {
     version: "1.14.1",
     date: "2026-09-23",
     headline: "Attach Knowledge Base Entries to Leads, Contacts & Companies",
