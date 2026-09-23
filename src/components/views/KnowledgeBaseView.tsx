@@ -20,7 +20,7 @@ const CATEGORY_META: Record<
 > = {
   company: {
     label: "Company Knowledge Base",
-    description: "Who you are: mission, differentiators, tone of voice, policies -- grounds the AI when it talks about your business.",
+    description: "Context about specific leads, contacts, or companies -- industry background, research notes, anything relevant to who you're talking to. Attach one entry to as many records as apply.",
     icon: Building2,
     accent: "indigo",
   },
@@ -32,7 +32,7 @@ const CATEGORY_META: Record<
   },
   operator: {
     label: "Dashboard Operator Knowledge Base",
-    description: "Internal playbook for your own team: SOPs, scripts, objection handling. Never shown to prospects or customers.",
+    description: "Who you are: your background and service offering, and how it aligns with what you sell -- so the AI can help position it to the right leads, companies, and contacts. Internal-only.",
     icon: ShieldCheck,
     accent: "amber",
   },
@@ -56,16 +56,80 @@ const ACCENT_CLASSES: Record<string, { badge: string; icon: string; button: stri
   },
 };
 
+// Compact searchable multi-select for attaching a "company" category entry
+// to specific Leads/Contacts/Companies -- lists can run into the hundreds,
+// so this filters client-side rather than rendering every record at once.
+const RecordMultiSelect: React.FC<{
+  label: string;
+  records: Array<{ id: string; name: string }>;
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+}> = ({ label, records, selectedIds, onChange }) => {
+  const [search, setSearch] = useState("");
+  const selectedSet = new Set(selectedIds);
+  const filtered = search.trim()
+    ? records.filter((r) => r.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : records;
+
+  const toggle = (id: string) => {
+    if (selectedSet.has(id)) onChange(selectedIds.filter((x) => x !== id));
+    else onChange([...selectedIds, id]);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className="font-semibold text-slate-600">{label}</label>
+        {selectedIds.length > 0 && (
+          <span className="text-[10px] text-indigo-600 font-semibold">{selectedIds.length} selected</span>
+        )}
+      </div>
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder={`Search ${label.toLowerCase()}...`}
+        className="w-full px-3 py-1.5 border border-slate-200 rounded-lg mb-1.5 focus:outline-none focus:border-indigo-400"
+      />
+      <div className="border border-slate-200 rounded-lg max-h-32 overflow-y-auto divide-y divide-slate-100">
+        {records.length === 0 ? (
+          <div className="px-3 py-2 text-slate-400">None yet.</div>
+        ) : filtered.length === 0 ? (
+          <div className="px-3 py-2 text-slate-400">No matches.</div>
+        ) : (
+          filtered.slice(0, 200).map((r) => (
+            <label
+              key={r.id}
+              className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={selectedSet.has(r.id)}
+                onChange={() => toggle(r.id)}
+                className="rounded border-slate-300"
+              />
+              <span className="text-slate-700">{r.name}</span>
+            </label>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
 const EntryEditorModal: React.FC<{
   isOpen: boolean;
   category: KnowledgeBaseCategory;
   entry: KnowledgeBaseEntry | null;
   onClose: () => void;
 }> = ({ isOpen, category, entry, onClose }) => {
-  const { addKnowledgeBaseEntry, updateKnowledgeBaseEntry } = useCRM();
+  const { addKnowledgeBaseEntry, updateKnowledgeBaseEntry, leads, contacts, companies } = useCRM();
   const [title, setTitle] = useState(entry?.title || "");
   const [content, setContent] = useState(entry?.content || "");
   const [tagsInput, setTagsInput] = useState((entry?.tags || []).join(", "));
+  const [linkedLeadIds, setLinkedLeadIds] = useState<string[]>(entry?.linkedLeadIds || []);
+  const [linkedContactIds, setLinkedContactIds] = useState<string[]>(entry?.linkedContactIds || []);
+  const [linkedCompanyIds, setLinkedCompanyIds] = useState<string[]>(entry?.linkedCompanyIds || []);
   const [error, setError] = useState<string | null>(null);
 
   React.useEffect(() => {
@@ -73,6 +137,9 @@ const EntryEditorModal: React.FC<{
       setTitle(entry?.title || "");
       setContent(entry?.content || "");
       setTagsInput((entry?.tags || []).join(", "));
+      setLinkedLeadIds(entry?.linkedLeadIds || []);
+      setLinkedContactIds(entry?.linkedContactIds || []);
+      setLinkedCompanyIds(entry?.linkedCompanyIds || []);
       setError(null);
     }
   }, [isOpen, entry]);
@@ -96,10 +163,15 @@ const EntryEditorModal: React.FC<{
       .map((t) => t.trim())
       .filter(Boolean);
 
+    const links =
+      category === "company"
+        ? { linkedLeadIds, linkedContactIds, linkedCompanyIds }
+        : { linkedLeadIds: [], linkedContactIds: [], linkedCompanyIds: [] };
+
     if (entry) {
-      updateKnowledgeBaseEntry(entry.id, { title: title.trim(), content: content.trim(), tags });
+      updateKnowledgeBaseEntry(entry.id, { title: title.trim(), content: content.trim(), tags, ...links });
     } else {
-      addKnowledgeBaseEntry({ category, title: title.trim(), content: content.trim(), tags });
+      addKnowledgeBaseEntry({ category, title: title.trim(), content: content.trim(), tags, ...links });
     }
     onClose();
   };
@@ -167,6 +239,32 @@ const EntryEditorModal: React.FC<{
               className="w-full px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400"
             />
           </div>
+
+          {category === "company" && (
+            <div className="space-y-3 pt-1 border-t border-slate-100">
+              <p className="text-[11px] text-slate-500 pt-3">
+                Attach this to specific records so it grounds the AI when it's asked about them -- leave all empty for general reference content.
+              </p>
+              <RecordMultiSelect
+                label="Leads"
+                records={leads.map((l) => ({ id: l.id, name: l.name }))}
+                selectedIds={linkedLeadIds}
+                onChange={setLinkedLeadIds}
+              />
+              <RecordMultiSelect
+                label="Contacts"
+                records={contacts.map((c) => ({ id: c.id, name: `${c.firstName} ${c.lastName || ""}`.trim() }))}
+                selectedIds={linkedContactIds}
+                onChange={setLinkedContactIds}
+              />
+              <RecordMultiSelect
+                label="Companies"
+                records={companies.map((c) => ({ id: c.id, name: c.name }))}
+                selectedIds={linkedCompanyIds}
+                onChange={setLinkedCompanyIds}
+              />
+            </div>
+          )}
         </div>
 
         <div className="px-5 py-3.5 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2">
@@ -359,6 +457,20 @@ export const KnowledgeBaseView: React.FC = () => {
                   ))}
                 </div>
               )}
+
+              {activeCategory === "company" &&
+                ((entry.linkedLeadIds?.length || 0) +
+                  (entry.linkedContactIds?.length || 0) +
+                  (entry.linkedCompanyIds?.length || 0) >
+                  0) && (
+                  <div className="mt-3">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                      Attached to {(entry.linkedLeadIds?.length || 0)} lead(s),{" "}
+                      {(entry.linkedContactIds?.length || 0)} contact(s),{" "}
+                      {(entry.linkedCompanyIds?.length || 0)} compan{(entry.linkedCompanyIds?.length || 0) === 1 ? "y" : "ies"}
+                    </span>
+                  </div>
+                )}
 
               <div className="text-[10px] text-slate-400 mt-3 pt-3 border-t border-slate-100">
                 Updated {new Date(entry.updatedAt).toLocaleDateString()}

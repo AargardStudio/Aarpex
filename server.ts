@@ -1265,23 +1265,32 @@ app.post("/api/ai/chat-assistant", async (req, res) => {
 
     // Knowledge Base grounding: the client sends whatever entries fit its
     // own size budget (see FloatingAIChat's buildKnowledgeBase), already
-    // split by category. Format each category into its own labeled block so
-    // the model can tell "how we describe ourselves" (company) apart from
-    // "what we sell" (product) apart from "how our own team should operate"
-    // (operator) -- and so it knows operator content is internal-only and
-    // should never be quoted back as if it were customer-facing copy.
+    // split by category. Format each category into its own labeled block:
+    //   - "company" entries are context ABOUT specific leads/contacts/
+    //     companies (industry background, research notes, etc.) and may
+    //     name which records they're attached to (linkedNames) -- use that
+    //     to answer questions about a specific lead/company/contact.
+    //   - "product" entries describe what's being sold.
+    //   - "operator" entries describe the business running this dashboard
+    //     (background, offering) and how to position it to a given lead/
+    //     company/contact -- INTERNAL ONLY, never quoted back as if it were
+    //     customer-facing copy.
     const kb = knowledgeBase && typeof knowledgeBase === "object" ? knowledgeBase : {};
     const formatKbSection = (label: string, entries: any[] | undefined): string => {
       if (!Array.isArray(entries) || entries.length === 0) return "";
       return `\n### ${label}\n${entries
-        .map((e: any) => `- ${e.title}: ${e.content}`)
+        .map((e: any) => {
+          const names = Array.isArray(e.linkedNames) ? e.linkedNames.filter(Boolean) : [];
+          const scope = names.length > 0 ? ` [about: ${names.join(", ")}]` : "";
+          return `- ${e.title}${scope}: ${e.content}`;
+        })
         .join("\n")}`;
     };
     const kbBlock = [
-      formatKbSection("Company Knowledge Base (who this business is)", kb.company),
+      formatKbSection("Company Knowledge Base (context about specific leads/contacts/companies)", kb.company),
       formatKbSection("Product & Service Knowledge Base (what they sell)", kb.product),
       formatKbSection(
-        "Operator Playbook (INTERNAL ONLY -- for the team using this dashboard, never for prospects/customers)",
+        "Operator Playbook (INTERNAL ONLY -- who this business is, their offering, and how to position it to leads/companies/contacts; never for prospects/customers)",
         kb.operator
       ),
     ]

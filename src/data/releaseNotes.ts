@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.14.1",
+    date: "2026-09-23",
+    headline: "Attach Knowledge Base Entries to Leads, Contacts & Companies",
+    tagline: "The Knowledge Base categories now match how you actually work: per-record context, your own positioning, and what you sell.",
+    highlights: [
+      {
+        title: "Company Knowledge Base now attaches to real records",
+        description: "Write an entry once (e.g. \"Healthcare industry context\") and attach it to as many leads, contacts, or companies as it applies to, right from the entry editor.",
+      },
+      {
+        title: "Operator Playbook now covers your own positioning",
+        description: "Your background and service offering, and how it aligns with what you sell -- so the AI can help you position it to a specific lead or company. Still internal-only.",
+      },
+      {
+        title: "The AI assistant knows who a note is about",
+        description: "When a Company Knowledge Base entry is attached to specific records, the assistant sees exactly which ones by name -- so it can answer \"what do we know about Acme Corp\" accurately.",
+      },
+    ],
+  },
+  {
     version: "1.14.0",
     date: "2026-09-23",
     headline: "Introducing the Knowledge Base",

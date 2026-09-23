@@ -141,6 +141,19 @@ export const FloatingAIChat: React.FC = () => {
   const KB_MAX_ENTRIES_PER_CATEGORY = 12;
   const KB_MAX_CONTENT_CHARS = 600;
   const buildKnowledgeBase = () => {
+    // "Company" entries can be attached to specific Leads/Contacts/Companies
+    // -- resolve those ids to plain names here (never send raw ids to the
+    // model) so the assistant can tell "this note is about Acme Corp"
+    // rather than only "this is general reference content".
+    const companyNameById = new Map(companies.map((c) => [c.id, c.name]));
+    const contactNameById = new Map(contacts.map((c) => [c.id, `${c.firstName} ${c.lastName || ""}`.trim()]));
+    const leadNameById = new Map(leads.map((l) => [l.id, l.name]));
+    const resolveLinkedNames = (e: (typeof knowledgeBase)[number]): string[] => [
+      ...(e.linkedLeadIds || []).map((id) => leadNameById.get(id)).filter(Boolean),
+      ...(e.linkedContactIds || []).map((id) => contactNameById.get(id)).filter(Boolean),
+      ...(e.linkedCompanyIds || []).map((id) => companyNameById.get(id)).filter(Boolean),
+    ] as string[];
+
     const byCategory = (category: "company" | "product" | "operator") =>
       knowledgeBase
         .filter((e) => e.category === category)
@@ -149,6 +162,7 @@ export const FloatingAIChat: React.FC = () => {
         .map((e) => ({
           title: e.title,
           content: e.content.length > KB_MAX_CONTENT_CHARS ? `${e.content.slice(0, KB_MAX_CONTENT_CHARS)}...` : e.content,
+          ...(category === "company" ? { linkedNames: resolveLinkedNames(e) } : {}),
         }));
     return {
       company: byCategory("company"),

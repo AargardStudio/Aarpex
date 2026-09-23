@@ -13,6 +13,30 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.14.1] - 2026-09-23
+### Changed
+- **Reworked what the Knowledge Base categories mean, based on real usage:**
+  - **Company Knowledge Base** is now context ABOUT specific leads,
+    contacts, or companies (industry background, research notes, anything
+    relevant to who you're talking to) -- an entry can be attached to as
+    many records as apply (e.g. one "Healthcare industry context" entry
+    linked to every lead/company in that vertical) via a new searchable
+    multi-select picker in the entry editor. Entries with nothing attached
+    still work as general company-category reference.
+  - **Dashboard Operator Knowledge Base** now covers who YOUR business is
+    (background, service offering) and how it aligns with what you sell --
+    absorbing what used to be Company KB's "who we are" purpose -- so the
+    AI can help position your offering to a specific lead/company/contact.
+    Still internal-only.
+  - Product & Service Knowledge Base is unchanged.
+- The floating AI chat assistant now resolves attached leads/contacts/
+  companies to their names (never raw ids) and includes that scope inline
+  next to each Company KB entry it's grounded with, so it can tell "this
+  note is about Acme Corp" apart from general reference content.
+- New `knowledge_base.linked_lead_ids` / `linked_contact_ids` /
+  `linked_company_ids` columns (migration 0009, additive to the table
+  added in 0008 -- re-run needed if you already applied 0008).
+
 ## [1.14.0] - 2026-09-23
 ### Added
 - **Knowledge Base**, a new section with three categories -- Company,

@@ -364,10 +364,18 @@ export interface Product {
 // Knowledge Base — free-text reference material the AI chat assistant is
 // grounded in, split into three categories so the right content shows up in
 // the right place instead of one undifferentiated pile:
-//   - "company": who your business is, mission, differentiators, tone/voice
+//   - "company": context ABOUT specific leads/contacts/companies -- industry
+//     background, research notes, anything relevant to who you're talking
+//     to. An entry can be attached to as many records as apply (e.g. one
+//     "Healthcare industry context" entry attached to every lead/company in
+//     that vertical) via linkedLeadIds/linkedContactIds/linkedCompanyIds.
+//     An entry with none of those set is still usable as general
+//     company-category reference, just not tied to specific records.
 //   - "product": what you sell -- positioning, pricing rationale, FAQs
-//   - "operator": internal playbook for your own team -- SOPs, scripts,
-//     objection handling, policies (never shown to prospects/customers)
+//   - "operator": who YOUR business is (background, service offering) and
+//     how it aligns with what you sell -- so the AI can help position it to
+//     specific leads/companies/contacts. Internal-only: never shown to
+//     prospects/customers as if it were customer-facing copy.
 // ----------------------------------------------------------------------------
 export type KnowledgeBaseCategory = "company" | "product" | "operator";
 
@@ -377,6 +385,11 @@ export interface KnowledgeBaseEntry {
   title: string;
   content: string;
   tags: string[];
+  // "company" category only: which specific records this entry is about.
+  // Ignored for "product"/"operator" entries.
+  linkedLeadIds?: string[];
+  linkedContactIds?: string[];
+  linkedCompanyIds?: string[];
   createdBy: string;
   createdAt: string;
   updatedAt: string;
