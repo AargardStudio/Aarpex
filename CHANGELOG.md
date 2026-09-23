@@ -13,6 +13,27 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.13.1] - 2026-09-23
+
+### Fixed
+
+- **Found the real reason "Sync All to Companies/Contacts" kept looking
+  broken even after the v1.11.0 fix.** That fix made the app write
+  `linkedCompanyId`/`linkedContactId` onto every synced Lead, but the
+  `leads` table in Supabase never had matching columns. The app's Supabase
+  mirror sync upserts every field of every row in one call per table, so as
+  soon as any lead carried those two fields, Postgres rejected the *entire*
+  leads upsert with "column does not exist" — silently, in the browser
+  console only. That meant no lead (not just the sync) was reaching
+  Supabase for any tenant that had run the sync since v1.11.0 shipped: it
+  looked right in the browser (state + localStorage were fine) but reverted
+  on reload/re-login, since Supabase is the source of truth on every load.
+  New migration `supabase/migrations/0007_lead_linked_company_contact.sql`
+  adds `leads.linked_company_id` / `leads.linked_contact_id` — **run this
+  migration** (or `supabase/companies_and_contacts_schema.sql`, which
+  includes it alongside a full idempotent reference schema for the
+  Companies and Contacts tables) in the Supabase SQL Editor.
+
 ## [1.13.0] - 2026-09-23
 
 ### Changed
