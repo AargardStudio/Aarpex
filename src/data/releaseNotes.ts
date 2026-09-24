@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.18.0",
+    date: "2026-09-24",
+    headline: "Send WhatsApp Messages from Leads & Contacts",
+    tagline: "Connect one WhatsApp Business number and message people straight from their record.",
+    highlights: [
+      {
+        title: "WhatsApp Business, connected in Settings",
+        description: "A new \"WhatsApp Business\" Settings tab connects your Meta WhatsApp phone number in a couple of fields, with a one-click Test Connection against Meta's own API.",
+      },
+      {
+        title: "Message leads and contacts directly",
+        description: "A new WhatsApp button on lead cards, contact rows, and company contact lists opens a compose window prefilled with that person's number -- sends log to the timeline just like email.",
+      },
+      {
+        title: "Free text or template, your call",
+        description: "WhatsApp only allows a free-text reply within 24 hours of the contact last messaging you -- outside that window the compose window switches you to a pre-approved template instead of just failing.",
+      },
+    ],
+  },
+  {
     version: "1.17.0",
     date: "2026-09-24",
     headline: "Standardized Industries & Client Categories",

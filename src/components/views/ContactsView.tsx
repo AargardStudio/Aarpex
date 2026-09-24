@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { useCRM } from "../../context/CRMContext";
-import { Users, Plus, Search, Mail, Phone, Building2, ExternalLink } from "lucide-react";
+import { Users, Plus, Search, Mail, Phone, Building2, ExternalLink, MessageSquare } from "lucide-react";
 
 export const ContactsView: React.FC = () => {
-  const { contacts, companies, setSelectedCompanyId, setQuickCreateOpen, setQuickCreateType } = useCRM();
+  const { contacts, companies, setSelectedCompanyId, setQuickCreateOpen, setQuickCreateType, openWhatsAppComposer } = useCRM();
   const [searchTerm, setSearchTerm] = useState("");
 
   const filteredContacts = contacts.filter((cnt) => {
@@ -131,9 +131,25 @@ export const ContactsView: React.FC = () => {
 
                     <td className="p-3.5 text-slate-600">
                       {cnt.phone ? (
-                        <span className="flex items-center gap-1.5">
-                          <Phone className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{cnt.phone}</span>
+                        <span className="flex items-center justify-between gap-1.5">
+                          <span className="flex items-center gap-1.5">
+                            <Phone className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{cnt.phone}</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openWhatsAppComposer({
+                                to: cnt.whatsapp || cnt.phone,
+                                companyId: cnt.companyId,
+                                contactId: cnt.id,
+                              })
+                            }
+                            className="p-1 rounded text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
+                            title="Send WhatsApp Message"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          </button>
                         </span>
                       ) : (
                         <span className="text-slate-400">—</span>

@@ -21,6 +21,7 @@ import {
   TenantMember,
   TenantStripeConfig,
   TenantWebmailConfig,
+  TenantWhatsAppConfig,
   CRMSettings,
   SupabaseConfig,
   EmailAttachment,
@@ -158,6 +159,7 @@ interface CRMContextType {
   updateWebmailConfig: (id: string, config: Partial<TenantWebmailConfig>) => void;
   deleteWebmailConfig: (id: string) => void;
   setDefaultWebmailConfig: (id: string) => void;
+  updateWhatsAppConfig: (config: Partial<TenantWhatsAppConfig>) => void;
   updateSupabaseConfig: (config: Partial<SupabaseConfig>) => void;
   addAuditLogEntry: (action: string, details?: string, category?: AuditLogEntry["category"]) => void;
 
@@ -181,6 +183,24 @@ interface CRMContextType {
     companyId?: string;
     contactId?: string;
     dealId?: string;
+  }) => void;
+
+  // WhatsApp Composer (send-to-lead/contact/company, mirrors Email Composer)
+  isWhatsAppComposeOpen: boolean;
+  setWhatsAppComposeOpen: (open: boolean) => void;
+  whatsappComposeProps: {
+    to?: string;
+    body?: string;
+    companyId?: string;
+    contactId?: string;
+    leadId?: string;
+  };
+  openWhatsAppComposer: (props?: {
+    to?: string;
+    body?: string;
+    companyId?: string;
+    contactId?: string;
+    leadId?: string;
   }) => void;
 
   // Entities
@@ -373,6 +393,26 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }) => {
     setEmailComposeProps(props || {});
     setEmailComposeOpen(true);
+  };
+
+  const [isWhatsAppComposeOpen, setWhatsAppComposeOpen] = useState(false);
+  const [whatsappComposeProps, setWhatsAppComposeProps] = useState<{
+    to?: string;
+    body?: string;
+    companyId?: string;
+    contactId?: string;
+    leadId?: string;
+  }>({});
+
+  const openWhatsAppComposer = (props?: {
+    to?: string;
+    body?: string;
+    companyId?: string;
+    contactId?: string;
+    leadId?: string;
+  }) => {
+    setWhatsAppComposeProps(props || {});
+    setWhatsAppComposeOpen(true);
   };
 
   const [isAccessControlOpen, setAccessControlOpen] = useState(false);
@@ -1112,6 +1152,26 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...t,
             stripeConfig: {
               ...t.stripeConfig,
+              ...configUpdates,
+            },
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  const updateWhatsAppConfig = (configUpdates: Partial<TenantWhatsAppConfig>) => {
+    setTenants((prev) =>
+      prev.map((t) => {
+        if (t.id === activeTenantId) {
+          return {
+            ...t,
+            whatsappConfig: {
+              isEnabled: false,
+              phoneNumberId: "",
+              status: "unconfigured",
+              ...t.whatsappConfig,
               ...configUpdates,
             },
           };
@@ -2579,6 +2639,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateWebmailConfig,
         deleteWebmailConfig,
         setDefaultWebmailConfig,
+        updateWhatsAppConfig,
         updateSupabaseConfig,
         addAuditLogEntry,
 
@@ -2586,6 +2647,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setEmailComposeOpen,
         emailComposeProps,
         openEmailComposer,
+
+        isWhatsAppComposeOpen,
+        setWhatsAppComposeOpen,
+        whatsappComposeProps,
+        openWhatsAppComposer,
 
         companies,
         contacts,

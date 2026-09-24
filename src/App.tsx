@@ -29,6 +29,7 @@ import { UserAccessControlModal } from "./components/auth/UserAccessControlModal
 import { WorkspaceModal } from "./components/modals/WorkspaceModal";
 import { AuthPage } from "./components/auth/AuthPage";
 import { EmailComposeModal } from "./components/modals/EmailComposeModal";
+import { WhatsAppComposeModal } from "./components/modals/WhatsAppComposeModal";
 import { FloatingAIChat } from "./components/common/FloatingAIChat";
 
 const CRMMainContent: React.FC = () => {
@@ -41,6 +42,9 @@ const CRMMainContent: React.FC = () => {
     isEmailComposeOpen,
     setEmailComposeOpen,
     emailComposeProps,
+    isWhatsAppComposeOpen,
+    setWhatsAppComposeOpen,
+    whatsappComposeProps,
     tenants,
   } = useCRM();
 
@@ -176,6 +180,17 @@ const CRMMainContent: React.FC = () => {
         companyId={emailComposeProps.companyId}
         contactId={emailComposeProps.contactId}
         dealId={emailComposeProps.dealId}
+      />
+
+      {/* Global WhatsApp Send Composer Modal */}
+      <WhatsAppComposeModal
+        isOpen={isWhatsAppComposeOpen}
+        onClose={() => setWhatsAppComposeOpen(false)}
+        initialTo={whatsappComposeProps.to}
+        initialBody={whatsappComposeProps.body}
+        companyId={whatsappComposeProps.companyId}
+        contactId={whatsappComposeProps.contactId}
+        leadId={whatsappComposeProps.leadId}
       />
 
       {/* Floating AI Chat -- available on every signed-in screen */}

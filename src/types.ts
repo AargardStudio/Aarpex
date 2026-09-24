@@ -584,6 +584,7 @@ export interface Activity {
   companyId?: string;
   contactId?: string;
   dealId?: string;
+  leadId?: string;
   date: string;
   time: string;
   user: string;
@@ -790,6 +791,29 @@ export interface TenantWebmailConfig {
   statusMessage?: string;
 }
 
+// WhatsApp Business (Meta Cloud API) -- one connection per tenant. A real
+// send requires either a free-text message inside the 24-hour customer
+// service window (the lead/contact messaged this number first, or replied
+// within the last day) or a pre-approved message template outside it --
+// that's a WhatsApp platform rule, not something AarPex can route around,
+// so the compose UI surfaces both options rather than pretending free text
+// always works.
+export interface TenantWhatsAppConfig {
+  isEnabled: boolean;
+  // Meta Graph API access token (system user or temporary) for the
+  // WhatsApp Business Account this phone number belongs to.
+  accessToken?: string;
+  phoneNumberId: string;
+  businessAccountId?: string;
+  // Filled in by "Test Connection" from the Graph API's own record of the
+  // number -- not user-entered, so it always matches what Meta has on file.
+  displayPhoneNumber?: string;
+  verifiedName?: string;
+  lastVerifiedAt?: string;
+  status: "unconfigured" | "connected" | "error" | "testing";
+  statusMessage?: string;
+}
+
 export interface TenantMember {
   userId: string;
   name: string;
@@ -875,6 +899,7 @@ export interface Tenant {
    * Marketing campaigns pick a specific mailbox to send from (falling back
    * to the one with isDefault:true); see TenantWebmailConfig.id. */
   webmailConfigs: TenantWebmailConfig[];
+  whatsappConfig?: TenantWhatsAppConfig;
   supabaseConfig?: SupabaseConfig;
   auditLog?: AuditLogEntry[];
 }

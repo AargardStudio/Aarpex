@@ -13,6 +13,36 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-09-24
+### Added
+- **WhatsApp Business integration (Meta Cloud API).** A workspace can now
+  connect a single WhatsApp Business phone number and send one-off
+  messages to leads, contacts, and companies straight from their records --
+  the same idea as the existing email compose flow, adapted for WhatsApp's
+  platform rules.
+  - New `Tenant.whatsappConfig` (`TenantWhatsAppConfig`): access token,
+    phone number ID, business account ID, and connection status. Stored as
+    one JSON object per tenant (same pattern as `stripeConfig`), synced via
+    migration `0011_tenant_whatsapp_config.sql`.
+  - New Settings tab, "WhatsApp Business", to enter the Meta access token
+    and phone number ID and test the connection against the Graph API
+    (`GET /{phoneNumberId}`), showing the verified display number, verified
+    name, and quality rating on success.
+  - New "Send WhatsApp Message" compose modal, opened from a global header
+    button/quick-menu item or from a lead card, a contact's phone cell, or
+    a company's contacts list. Supports both a free-text message (only
+    valid within WhatsApp's 24-hour customer service window -- the contact
+    must have messaged first or replied recently) and a pre-approved
+    message template (works any time). A send rejected for being outside
+    the 24-hour window is detected from Meta's own error code and the UI
+    explains it and points at the template option instead of just failing.
+  - New backend endpoints `POST /api/whatsapp/verify` and
+    `POST /api/whatsapp/send-message`, both calling the Meta Graph API
+    (`v21.0`) directly -- no new dependency.
+  - Sending logs an activity to the record's timeline, same as email.
+    `Activity` gained an optional `leadId` field so lead-record activity
+    (not just company/contact/deal) can be tracked this way.
+
 ## [1.17.0] - 2026-09-24
 ### Added
 - **Standardized industries and client categories.** A new `src/data/industries.ts`

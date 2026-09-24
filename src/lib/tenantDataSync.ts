@@ -22,7 +22,7 @@
  * dataset anymore: every workspace is real, created through sign-up.
  */
 import { getSupabaseAuthClient, isSupabaseAuthConfigured } from "../config/supabaseAuthClient";
-import type { Tenant, TenantMember, TenantStripeConfig, TenantWebmailConfig } from "../types";
+import type { Tenant, TenantMember, TenantStripeConfig, TenantWebmailConfig, TenantWhatsAppConfig } from "../types";
 
 export type TenantTable =
   | "companies"
@@ -604,6 +604,7 @@ async function performTenantRowSync(tenant: Tenant): Promise<void> {
         // same `webmail_config jsonb` column from 0001_aarpex_schema.sql),
         // it just now holds an array instead of a single object.
         webmail_config: tenant.webmailConfigs || [],
+        whatsapp_config: tenant.whatsappConfig || {},
       })
       .eq("id", tenant.id);
     if (error) {
@@ -620,6 +621,12 @@ const DEFAULT_STRIPE_CONFIG: TenantStripeConfig = {
   secretKey: "",
   currency: "USD",
   isLiveMode: false,
+  status: "unconfigured",
+};
+
+const DEFAULT_WHATSAPP_CONFIG: TenantWhatsAppConfig = {
+  isEnabled: false,
+  phoneNumberId: "",
   status: "unconfigured",
 };
 
@@ -721,6 +728,13 @@ export async function fetchMyTenantsFull(): Promise<Tenant[] | null> {
         ...(r.stripe_config || {}),
       };
       const webmailConfigs = webmailConfigsFromRow(r.webmail_config);
+      // r.whatsapp_config is undefined until migration 0011 has been run on
+      // this project's Supabase instance -- defaults to "unconfigured"
+      // rather than throwing, same as every other optional tenant config.
+      const whatsappConfig: TenantWhatsAppConfig = {
+        ...DEFAULT_WHATSAPP_CONFIG,
+        ...(r.whatsapp_config || {}),
+      };
       const tenant: Tenant = {
         id: r.id,
         name: r.name,
@@ -745,6 +759,7 @@ export async function fetchMyTenantsFull(): Promise<Tenant[] | null> {
         members: membersByTenant.get(r.id) || [],
         stripeConfig,
         webmailConfigs,
+        whatsappConfig,
       };
       return tenant;
     });

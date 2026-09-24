@@ -3088,6 +3088,168 @@ app.post("/api/supabase/verify", async (req, res) => {
   }
 });
 
+// ============================================================================
+// WhatsApp Business (Meta Cloud API) -- verify connection + send message.
+//
+// Meta's Cloud API only allows a free-text message inside the 24-hour
+// "customer service window" (the contact messaged this number first, or
+// replied within the last 24h). Outside that window only a pre-approved
+// message *template* can be sent. That's a platform rule enforced by Meta
+// itself -- if a free-text send is attempted outside the window, Meta's API
+// rejects it with error code 131047, which is passed straight back to the
+// client so the UI can explain it and offer the template path instead.
+// ============================================================================
+
+const WHATSAPP_GRAPH_VERSION = "v21.0";
+
+// 5. Verify a WhatsApp Business phone number connection
+app.post("/api/whatsapp/verify", async (req, res) => {
+  try {
+    const { accessToken, phoneNumberId } = req.body;
+
+    if (!accessToken || !accessToken.trim()) {
+      return res.status(400).json({ success: false, error: "Meta access token is required." });
+    }
+    if (!phoneNumberId || !phoneNumberId.trim()) {
+      return res.status(400).json({ success: false, error: "WhatsApp Phone Number ID is required." });
+    }
+
+    const cleanToken = accessToken.trim();
+    const cleanPhoneId = phoneNumberId.trim();
+
+    try {
+      const response = await fetch(
+        `https://graph.facebook.com/${WHATSAPP_GRAPH_VERSION}/${encodeURIComponent(cleanPhoneId)}?fields=display_phone_number,verified_name,quality_rating`,
+        {
+          method: "GET",
+          headers: { Authorization: `Bearer ${cleanToken}` },
+        }
+      );
+
+      const data: any = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const metaError = data?.error?.message || `Meta API returned HTTP ${response.status}.`;
+        return res.json({
+          success: false,
+          status: "error",
+          error: metaError,
+        });
+      }
+
+      return res.json({
+        success: true,
+        status: "connected",
+        displayPhoneNumber: data.display_phone_number || "",
+        verifiedName: data.verified_name || "",
+        qualityRating: data.quality_rating || undefined,
+        verifiedAt: new Date().toISOString(),
+      });
+    } catch (networkErr: any) {
+      return res.json({
+        success: false,
+        status: "error",
+        error: networkErr.message || "Failed to reach the Meta Graph API.",
+      });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || "WhatsApp verification service error" });
+  }
+});
+
+// 6. Send a WhatsApp message -- free text (within the 24h window) or a
+// pre-approved template (any time).
+app.post("/api/whatsapp/send-message", async (req, res) => {
+  try {
+    const { accessToken, phoneNumberId, to, body, templateName, templateLanguage, templateParams } = req.body;
+
+    if (!accessToken || !accessToken.trim()) {
+      return res.status(400).json({ success: false, error: "Meta access token is required." });
+    }
+    if (!phoneNumberId || !phoneNumberId.trim()) {
+      return res.status(400).json({ success: false, error: "WhatsApp Phone Number ID is required." });
+    }
+    if (!to || !String(to).trim()) {
+      return res.status(400).json({ success: false, error: "Recipient WhatsApp number is required." });
+    }
+
+    // WhatsApp numbers are sent to the Graph API in E.164 without a leading "+".
+    const cleanTo = String(to).trim().replace(/[^\d]/g, "");
+    if (!cleanTo) {
+      return res.status(400).json({ success: false, error: "Recipient WhatsApp number is invalid." });
+    }
+
+    let payload: Record<string, any>;
+    if (templateName && String(templateName).trim()) {
+      payload = {
+        messaging_product: "whatsapp",
+        to: cleanTo,
+        type: "template",
+        template: {
+          name: String(templateName).trim(),
+          language: { code: (templateLanguage && String(templateLanguage).trim()) || "en_US" },
+          ...(Array.isArray(templateParams) && templateParams.length > 0
+            ? { components: [{ type: "body", parameters: templateParams.map((p: string) => ({ type: "text", text: String(p) })) }] }
+            : {}),
+        },
+      };
+    } else {
+      if (!body || !String(body).trim()) {
+        return res.status(400).json({ success: false, error: "Message body is required for a free-text WhatsApp message." });
+      }
+      payload = {
+        messaging_product: "whatsapp",
+        to: cleanTo,
+        type: "text",
+        text: { body: String(body) },
+      };
+    }
+
+    try {
+      const response = await fetch(
+        `https://graph.facebook.com/${WHATSAPP_GRAPH_VERSION}/${encodeURIComponent(String(phoneNumberId).trim())}/messages`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken.trim()}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const data: any = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const metaError = data?.error || {};
+        // Error code 131047 is Meta's "outside the 24-hour customer service
+        // window" rejection -- surface it distinctly so the UI can point the
+        // user at the template option instead of a generic failure.
+        const outsideWindow = metaError.code === 131047 || metaError.error_subcode === 131047;
+        return res.status(200).json({
+          success: false,
+          error: metaError.message || `Meta API returned HTTP ${response.status}.`,
+          outsideWindow,
+        });
+      }
+
+      const messageId = data?.messages?.[0]?.id;
+      return res.json({
+        success: true,
+        messageId,
+        sentAt: new Date().toISOString(),
+      });
+    } catch (networkErr: any) {
+      return res.status(200).json({
+        success: false,
+        error: networkErr.message || "Failed to reach the Meta Graph API.",
+      });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || "WhatsApp send service error" });
+  }
+});
+
 // The app is reverse-proxied in from the landing page's domain at
 // https://aarpex.aarbook.com/app (the landing page itself is a separate
 // Netlify deployment owning the bare domain root — see netlify.toml there).

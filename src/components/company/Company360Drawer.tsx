@@ -69,6 +69,7 @@ export const Company360Drawer: React.FC = () => {
     leads,
     addLead,
     updateLead,
+    openWhatsAppComposer,
   } = useCRM();
 
   const [activeTab, setActiveTab] = useState<
@@ -603,9 +604,27 @@ export const Company360Drawer: React.FC = () => {
                           </div>
                         )}
                         {cnt.phone && (
-                          <div className="flex items-center gap-1.5">
-                            <Phone className="w-3 h-3 text-slate-400" />
-                            <span>{cnt.phone}</span>
+                          <div className="flex items-center justify-between gap-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <Phone className="w-3 h-3 text-slate-400" />
+                              <span>{cnt.phone}</span>
+                            </div>
+                            {(cnt.whatsapp || cnt.phone) && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openWhatsAppComposer({
+                                    to: cnt.whatsapp || cnt.phone,
+                                    companyId: company.id,
+                                    contactId: cnt.id,
+                                  })
+                                }
+                                className="p-1 rounded text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
+                                title="Send WhatsApp Message"
+                              >
+                                <MessageSquare className="w-3 h-3" />
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>

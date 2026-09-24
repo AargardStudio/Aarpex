@@ -22,6 +22,7 @@ import {
   Mail,
   LogIn,
   Menu,
+  MessageSquare,
 } from "lucide-react";
 import { DateFilterRange, ROLE_LABELS, UserRole } from "../../types";
 import { apiFetch } from "../../lib/apiClient";
@@ -45,6 +46,7 @@ export const Header: React.FC = () => {
     setAuthPageOpen,
     setAuthPageMode,
     openEmailComposer,
+    openWhatsAppComposer,
     activeTenant,
     setSettingsDeepLinkTab,
     setMobileSidebarOpen,
@@ -468,6 +470,17 @@ export const Header: React.FC = () => {
           <span className="hidden md:inline">Compose</span>
         </button>
 
+        {/* Send WhatsApp Message Button */}
+        <button
+          id="btn-header-whatsapp"
+          onClick={() => openWhatsAppComposer()}
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 rounded-lg text-xs font-bold shadow-sm transition-all"
+          title="Send a WhatsApp Message"
+        >
+          <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="hidden md:inline">WhatsApp</span>
+        </button>
+
         {/* Global Quick Create Dropdown Button (Executive Slate-Grey) */}
         <div className="relative">
           <button
@@ -491,6 +504,17 @@ export const Header: React.FC = () => {
               >
                 <Mail className="w-3.5 h-3.5 text-teal-400" />
                 <span>Send Email (Attachments)</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  openWhatsAppComposer();
+                  setIsQuickMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs text-emerald-300 hover:bg-emerald-950/40 hover:text-emerald-200 rounded-md text-left transition-colors font-semibold"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Send WhatsApp Message</span>
               </button>
 
               <div className="border-t border-[#282d39] my-1" />

@@ -18,6 +18,7 @@ import {
   Sparkles,
   Users2,
   Link2,
+  MessageSquare,
 } from "lucide-react";
 import { LeadConvertModal } from "../modals/LeadConvertModal";
 import { LeadImportModal } from "../leads/LeadImportModal";
@@ -40,6 +41,7 @@ export const LeadsView: React.FC = () => {
     setQuickCreateOpen,
     setQuickCreateType,
     syncAllLeadsToCompaniesAndContacts,
+    openWhatsAppComposer,
   } = useCRM();
 
   const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
@@ -300,6 +302,21 @@ export const LeadsView: React.FC = () => {
                               <Sparkles className="w-2.5 h-2.5" />
                               <span>Analyze</span>
                             </button>
+
+                            {(lead.whatsapp || lead.phone) && (
+                              <button
+                                onClick={() =>
+                                  openWhatsAppComposer({
+                                    to: lead.whatsapp || lead.phone,
+                                    leadId: lead.id,
+                                  })
+                                }
+                                className="p-1 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded border border-emerald-200"
+                                title="Send WhatsApp Message"
+                              >
+                                <MessageSquare className="w-2.5 h-2.5" />
+                              </button>
+                            )}
 
                             {lead.status !== "Converted" && (
                               <button

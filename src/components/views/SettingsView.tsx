@@ -30,6 +30,7 @@ import {
   Check,
   Zap,
   Clock,
+  MessageSquare,
 } from "lucide-react";
 import { ROLE_LABELS, UserRole } from "../../types";
 import {
@@ -42,7 +43,7 @@ import {
 import { apiFetch } from "../../lib/apiClient";
 import { getMailboxById, mailboxLabel } from "../../lib/webmail";
 
-type SettingsTab = "workspaces" | "subscription" | "stripe" | "webmail" | "company" | "security" | "database";
+type SettingsTab = "workspaces" | "subscription" | "stripe" | "webmail" | "whatsapp" | "company" | "security" | "database";
 
 export const SettingsView: React.FC = () => {
   const {
@@ -61,6 +62,7 @@ export const SettingsView: React.FC = () => {
     updateWebmailConfig,
     deleteWebmailConfig,
     setDefaultWebmailConfig,
+    updateWhatsAppConfig,
     addAuditLogEntry,
     signOut,
     clearAllData,
@@ -116,6 +118,16 @@ export const SettingsView: React.FC = () => {
   const [stripeVerifyResult, setStripeVerifyResult] = useState<any>(null);
   const [stripeSaveSuccess, setStripeSaveSuccess] = useState(false);
 
+  // WhatsApp Business (Meta Cloud API) State -- one connection per tenant.
+  const waCfg = activeTenant?.whatsappConfig || {};
+  const [waAccessToken, setWaAccessToken] = useState(waCfg.accessToken || "");
+  const [waPhoneNumberId, setWaPhoneNumberId] = useState(waCfg.phoneNumberId || "");
+  const [waBusinessAccountId, setWaBusinessAccountId] = useState(waCfg.businessAccountId || "");
+  const [showWaToken, setShowWaToken] = useState(false);
+  const [isVerifyingWa, setIsVerifyingWa] = useState(false);
+  const [waVerifyResult, setWaVerifyResult] = useState<any>(null);
+  const [waSaveSuccess, setWaSaveSuccess] = useState(false);
+
   // Webmail / Hostinger State (100% Customizable in Settings) -- a
   // workspace can connect more than one mailbox now; selectedMailboxId
   // tracks which one this form is currently editing, defaulting to the
@@ -160,6 +172,12 @@ export const SettingsView: React.FC = () => {
       setStripeCurrency(s.currency || activeTenant.currency || "USD");
       setStripeAccountName(s.accountName || `${activeTenant.name} Stripe`);
       setStripeVerifyResult(null);
+
+      const w = activeTenant.whatsappConfig || {};
+      setWaAccessToken(w.accessToken || "");
+      setWaPhoneNumberId(w.phoneNumberId || "");
+      setWaBusinessAccountId(w.businessAccountId || "");
+      setWaVerifyResult(null);
 
       // Jump to this workspace's default mailbox -- the per-mailbox effect
       // below fills in the rest of the webmail form fields.
@@ -276,6 +294,62 @@ export const SettingsView: React.FC = () => {
     addAuditLogEntry("Updated Stripe configuration", `Account: ${stripeAccountName.trim() || "Unnamed"}`, "billing");
     setStripeSaveSuccess(true);
     setTimeout(() => setStripeSaveSuccess(false), 3000);
+  };
+
+  // Verify WhatsApp Business connection via Backend (Meta Graph API)
+  const handleVerifyWhatsApp = async () => {
+    setIsVerifyingWa(true);
+    setWaVerifyResult(null);
+    try {
+      const res = await apiFetch("/api/whatsapp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accessToken: waAccessToken.trim(),
+          phoneNumberId: waPhoneNumberId.trim(),
+        }),
+      });
+      const data = await res.json();
+      setWaVerifyResult(data);
+      if (data.success) {
+        updateWhatsAppConfig({
+          accessToken: waAccessToken.trim(),
+          phoneNumberId: waPhoneNumberId.trim(),
+          businessAccountId: waBusinessAccountId.trim(),
+          isEnabled: true,
+          status: "connected",
+          displayPhoneNumber: data.displayPhoneNumber,
+          verifiedName: data.verifiedName,
+          lastVerifiedAt: data.verifiedAt,
+          statusMessage: undefined,
+        });
+        addAuditLogEntry("Verified WhatsApp Business connection", data.verifiedName || data.displayPhoneNumber, "settings");
+      } else {
+        updateWhatsAppConfig({ status: "error", statusMessage: data.error });
+      }
+    } catch (err: any) {
+      setWaVerifyResult({
+        success: false,
+        error: err.message || "Failed to reach backend verification service.",
+      });
+    } finally {
+      setIsVerifyingWa(false);
+    }
+  };
+
+  // Save WhatsApp Business Config
+  const handleSaveWhatsApp = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateWhatsAppConfig({
+      accessToken: waAccessToken.trim(),
+      phoneNumberId: waPhoneNumberId.trim(),
+      businessAccountId: waBusinessAccountId.trim(),
+      isEnabled: true,
+      status: waAccessToken.trim() && waPhoneNumberId.trim() ? "connected" : "unconfigured",
+    });
+    addAuditLogEntry("Updated WhatsApp Business configuration", `Phone Number ID: ${waPhoneNumberId.trim() || "Unset"}`, "settings");
+    setWaSaveSuccess(true);
+    setTimeout(() => setWaSaveSuccess(false), 3000);
   };
 
   // Verify Webmail SMTP Handshake via Backend
@@ -604,6 +678,21 @@ export const SettingsView: React.FC = () => {
           <Mail className="w-3.5 h-3.5" />
           <span>Hostinger & Webmail</span>
           {(activeTenant?.webmailConfigs || []).some((m: any) => m.status === "connected") && (
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab("whatsapp")}
+          className={`px-3.5 py-2 rounded-lg font-bold flex items-center gap-2 transition-all whitespace-nowrap ${
+            activeTab === "whatsapp"
+              ? "bg-teal-600 text-white shadow-sm"
+              : "text-slate-400 hover:text-white hover:bg-[#1e232d]"
+          }`}
+        >
+          <MessageSquare className="w-3.5 h-3.5" />
+          <span>WhatsApp Business</span>
+          {activeTenant?.whatsappConfig?.status === "connected" && (
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
           )}
         </button>
@@ -1270,6 +1359,140 @@ export const SettingsView: React.FC = () => {
                     <span>Save Webmail Settings</span>
                   </button>
                 </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: WHATSAPP BUSINESS (META CLOUD API) */}
+      {activeTab === "whatsapp" && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          <div className="bg-[#181b21] p-6 rounded-2xl border border-[#2d323f] shadow-md space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-emerald-400" /> WhatsApp Business (Meta Cloud API)
+                </h3>
+                <p className="text-slate-400 mt-0.5">
+                  Connect a WhatsApp Business phone number so your team can message leads and contacts directly from
+                  their records. Requires a Meta developer app with the WhatsApp product enabled, a system user
+                  access token, and the phone number ID from your WhatsApp Business Account.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleVerifyWhatsApp}
+                disabled={isVerifyingWa || !waAccessToken.trim() || !waPhoneNumberId.trim()}
+                className="px-3.5 py-1.5 bg-emerald-600/20 hover:bg-emerald-600 disabled:opacity-40 text-emerald-300 hover:text-white border border-emerald-500/40 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors self-start sm:self-auto"
+              >
+                <RefreshCw className={`w-3 h-3 ${isVerifyingWa ? "animate-spin" : ""}`} />
+                <span>{isVerifyingWa ? "Verifying with Meta..." : "Test Connection"}</span>
+              </button>
+            </div>
+
+            {waVerifyResult && (
+              <div
+                className={`p-3 rounded-xl border flex items-start gap-2.5 ${
+                  waVerifyResult.success
+                    ? "bg-emerald-950/40 border-emerald-800 text-emerald-200"
+                    : "bg-rose-950/40 border-rose-800 text-rose-200"
+                }`}
+              >
+                {waVerifyResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                )}
+                <div className="text-xs">
+                  {waVerifyResult.success ? (
+                    <div>
+                      <div className="font-bold">Connected to {waVerifyResult.displayPhoneNumber}</div>
+                      {waVerifyResult.verifiedName && (
+                        <div className="text-slate-300">Verified name: {waVerifyResult.verifiedName}</div>
+                      )}
+                      {waVerifyResult.qualityRating && (
+                        <div className="text-slate-400">Quality rating: {waVerifyResult.qualityRating}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="font-bold">{waVerifyResult.error}</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveWhatsApp} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-slate-300 font-semibold text-[11px]">Meta Access Token</label>
+                <div className="relative">
+                  <input
+                    type={showWaToken ? "text" : "password"}
+                    value={waAccessToken}
+                    onChange={(e) => setWaAccessToken(e.target.value)}
+                    placeholder="EAAG..."
+                    className="w-full px-3 py-2 pr-10 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-emerald-400 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowWaToken((v) => !v)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  >
+                    {showWaToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-slate-300 font-semibold text-[11px]">Phone Number ID</label>
+                  <input
+                    type="text"
+                    value={waPhoneNumberId}
+                    onChange={(e) => setWaPhoneNumberId(e.target.value)}
+                    placeholder="1029384756..."
+                    className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-emerald-400 font-mono"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-slate-300 font-semibold text-[11px]">
+                    Business Account ID <span className="text-slate-500 font-normal">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={waBusinessAccountId}
+                    onChange={(e) => setWaBusinessAccountId(e.target.value)}
+                    placeholder="1029384756..."
+                    className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-emerald-400 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-800/40 text-amber-200 text-[11px] leading-relaxed">
+                WhatsApp only allows free-text messages within 24 hours of the contact last messaging you. Outside
+                that window, sends must use a pre-approved message template -- the compose window in the CRM offers
+                both options.
+              </div>
+
+              <div className="pt-4 border-t border-[#282d39] flex items-center justify-between">
+                {waSaveSuccess ? (
+                  <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Saved
+                  </span>
+                ) : (
+                  <span className="text-slate-400">
+                    Configuration is isolated to <strong className="text-white">{activeTenant?.name}</strong>.
+                  </span>
+                )}
+
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Save WhatsApp Settings</span>
+                </button>
               </div>
             </form>
           </div>
