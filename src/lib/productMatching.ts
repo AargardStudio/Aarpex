@@ -30,6 +30,7 @@ export function companyMatchesProduct(company: Company, product: Product): boole
   const c = product.targetCriteria;
   return (
     matchesList(company.industry, c.industries) &&
+    matchesList(company.clientCategory, c.clientCategories) &&
     matchesList(company.country, c.countries) &&
     (!c.companyStatuses || c.companyStatuses.length === 0 || c.companyStatuses.includes(company.status)) &&
     matchesTags(company.tags, c.tags)
@@ -40,6 +41,7 @@ export function leadMatchesProduct(lead: Lead, product: Product): boolean {
   const c = product.targetCriteria;
   return (
     matchesList(lead.industry, c.industries) &&
+    matchesList(lead.clientCategory, c.clientCategories) &&
     matchesList(lead.country, c.countries) &&
     matchesList(lead.source, c.leadSources) &&
     matchesTags(lead.tags, c.tags)
@@ -51,6 +53,7 @@ export function contactMatchesProduct(contact: Contact, product: Product, compan
   const company = companies.find((co) => co.id === contact.companyId);
   return (
     matchesList(company?.industry, c.industries) &&
+    matchesList(company?.clientCategory, c.clientCategories) &&
     matchesList(contact.country, c.countries) &&
     matchesList(contact.leadSource, c.leadSources) &&
     matchesTags(contact.tags, c.tags)
@@ -81,6 +84,7 @@ export function hasAnyTargetCriteria(product: Product): boolean {
   const c = product.targetCriteria;
   return Boolean(
     (c.industries && c.industries.length > 0) ||
+      (c.clientCategories && c.clientCategories.length > 0) ||
       (c.companyStatuses && c.companyStatuses.length > 0) ||
       (c.countries && c.countries.length > 0) ||
       (c.tags && c.tags.length > 0) ||

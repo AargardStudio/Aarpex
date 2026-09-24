@@ -31,6 +31,7 @@ export const CompaniesView: React.FC = () => {
     const matchesSearch =
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.industry.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (c.clientCategory || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.salesperson.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "All" || c.status === statusFilter;
@@ -159,7 +160,10 @@ export const CompaniesView: React.FC = () => {
                           <span>{comp.name}</span>
                           <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 text-indigo-500 transition-opacity" />
                         </div>
-                        <div className="text-slate-400 text-[11px]">{comp.industry}</div>
+                        <div className="text-slate-400 text-[11px]">
+                          {comp.industry}
+                          {comp.clientCategory ? ` • ${comp.clientCategory}` : ""}
+                        </div>
                       </div>
                     </div>
                   </td>

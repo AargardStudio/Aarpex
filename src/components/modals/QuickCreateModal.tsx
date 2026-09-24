@@ -13,6 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { InvoiceItem } from "../../types";
+import { INDUSTRIES, CLIENT_CATEGORIES } from "../../data/industries";
 
 export const QuickCreateModal: React.FC = () => {
   const {
@@ -46,6 +47,9 @@ export const QuickCreateModal: React.FC = () => {
   const [leadPriority, setLeadPriority] = useState<"Low" | "Medium" | "High" | "Urgent">("High");
   const [leadRating, setLeadRating] = useState<"Hot" | "Warm" | "Cold">("Hot");
   const [leadNotes, setLeadNotes] = useState("");
+  const [leadIndustry, setLeadIndustry] = useState(INDUSTRIES[0]);
+  const [leadIndustryCustom, setLeadIndustryCustom] = useState("");
+  const [leadClientCategory, setLeadClientCategory] = useState("");
 
   // Deal State
   const [dealName, setDealName] = useState("");
@@ -62,6 +66,8 @@ export const QuickCreateModal: React.FC = () => {
   // Company State
   const [compName, setCompName] = useState("");
   const [compIndustry, setCompIndustry] = useState("Technology / SaaS");
+  const [compIndustryCustom, setCompIndustryCustom] = useState("");
+  const [compClientCategory, setCompClientCategory] = useState("");
   const [compWebsite, setCompWebsite] = useState("");
   const [compCity, setCompCity] = useState("San Francisco");
   const [compCountry, setCompCountry] = useState("United States");
@@ -138,7 +144,8 @@ export const QuickCreateModal: React.FC = () => {
         jobTitle: leadJobTitle,
         email: leadEmail,
         phone: leadPhone,
-        industry: "Technology / SaaS",
+        industry: leadIndustry === "Other" ? leadIndustryCustom.trim() || "Other" : leadIndustry,
+        clientCategory: leadClientCategory || undefined,
         country: "United States",
         city: "",
         estimatedValue: Number(leadEstimatedValue) || 0,
@@ -179,7 +186,8 @@ export const QuickCreateModal: React.FC = () => {
       if (!compName) return;
       addCompany({
         name: compName,
-        industry: compIndustry,
+        industry: compIndustry === "Other" ? compIndustryCustom.trim() || "Other" : compIndustry,
+        clientCategory: compClientCategory || undefined,
         website: compWebsite,
         city: compCity,
         country: compCountry,
@@ -394,6 +402,45 @@ export const QuickCreateModal: React.FC = () => {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-medium text-slate-700 mb-1">Industry</label>
+                  <select
+                    value={leadIndustry}
+                    onChange={(e) => setLeadIndustry(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
+                  >
+                    {INDUSTRIES.map((ind) => (
+                      <option key={ind}>{ind}</option>
+                    ))}
+                  </select>
+                  {leadIndustry === "Other" && (
+                    <input
+                      type="text"
+                      value={leadIndustryCustom}
+                      onChange={(e) => setLeadIndustryCustom(e.target.value)}
+                      placeholder="Type the industry"
+                      className="w-full mt-1.5 px-3 py-1.5 border border-slate-300 rounded-lg"
+                    />
+                  )}
+                </div>
+                <div>
+                  <label className="block font-medium text-slate-700 mb-1">
+                    Client Category <span className="text-slate-400 font-normal">(optional)</span>
+                  </label>
+                  <select
+                    value={leadClientCategory}
+                    onChange={(e) => setLeadClientCategory(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
+                  >
+                    <option value="">Not set</option>
+                    {CLIENT_CATEGORIES.map((cat) => (
+                      <option key={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block font-medium text-slate-700 mb-1">Lead Source</label>
@@ -572,12 +619,24 @@ export const QuickCreateModal: React.FC = () => {
                 </div>
                 <div>
                   <label className="block font-medium text-slate-700 mb-1">Industry</label>
-                  <input
-                    type="text"
+                  <select
                     value={compIndustry}
                     onChange={(e) => setCompIndustry(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"
-                  />
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
+                  >
+                    {INDUSTRIES.map((ind) => (
+                      <option key={ind}>{ind}</option>
+                    ))}
+                  </select>
+                  {compIndustry === "Other" && (
+                    <input
+                      type="text"
+                      value={compIndustryCustom}
+                      onChange={(e) => setCompIndustryCustom(e.target.value)}
+                      placeholder="Type the industry"
+                      className="w-full mt-1.5 px-3 py-1.5 border border-slate-300 rounded-lg"
+                    />
+                  )}
                 </div>
               </div>
 
@@ -612,6 +671,24 @@ export const QuickCreateModal: React.FC = () => {
                     <option>Prospect</option>
                     <option>At Risk</option>
                     <option>Former Customer</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-medium text-slate-700 mb-1">
+                    Client Category <span className="text-slate-400 font-normal">(optional)</span>
+                  </label>
+                  <select
+                    value={compClientCategory}
+                    onChange={(e) => setCompClientCategory(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
+                  >
+                    <option value="">Not set</option>
+                    {CLIENT_CATEGORIES.map((cat) => (
+                      <option key={cat}>{cat}</option>
+                    ))}
                   </select>
                 </div>
               </div>

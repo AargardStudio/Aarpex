@@ -13,6 +13,40 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-09-24
+### Added
+- **Standardized industries and client categories.** A new `src/data/industries.ts`
+  defines two shared picklists -- 25 industries (Textile & Fashion, Travel &
+  Hospitality, Security Services, Cleaning & Facilities, Financial Services
+  & Bookkeeping, and 20 more, plus "Other") and 9 client categories
+  (Startup, SMB, Mid-Market, Enterprise, Franchise/Multi-Location,
+  Government/Public Sector, Nonprofit/NGO, Reseller/Channel Partner,
+  Individual/Consumer, plus "Other") -- used everywhere a Company or Lead's
+  industry/category is set or targeted, so the same label means the same
+  thing across the app.
+  - `Company.clientCategory` and `Lead.clientCategory` (both optional
+    strings, additive -- existing records are unaffected).
+  - Quick Create now has a real Industry dropdown for both Company and Lead
+    (previously leads silently got a hardcoded "Technology / SaaS" with no
+    way to change it), plus a new optional Client Category dropdown on
+    both. Picking "Other" reveals a free-text field, so nothing already in
+    the list is ever a dead end.
+  - Company 360 and the Companies table now show the client category
+    alongside industry when one is set.
+- **Product targeting by client category.** `ProductTargetCriteria` gained
+  `clientCategories: string[]`, matched the same way `industries` already
+  is (empty = no constraint). The Products "who should this be sold to"
+  editor now shows both Industries and Client Categories as togglable chip
+  pickers (seeded from the standard lists, with a free-text field for
+  anything not listed) instead of a single comma-separated industries box.
+  `computeProductMatches`/`hasAnyTargetCriteria` and the AI-assisted
+  "set up by AI" product drafting (`/api/ai/product-assist`) all account
+  for it.
+- The AI Assistant's create-lead/create-company actions
+  (`/api/ai/chat-assistant`) and its quick-create-from-chat handler now
+  also accept and set `clientCategory`, grounded against the same standard
+  picklists server-side.
+
 ## [1.16.0] - 2026-09-24
 ### Added
 - **Multiple sending mailboxes.** A workspace is no longer limited to one

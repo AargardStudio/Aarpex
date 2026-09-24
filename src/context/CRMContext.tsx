@@ -2340,6 +2340,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         tags: data.tags || [],
         targetCriteria: {
           industries: data.targetCriteria?.industries || [],
+          clientCategories: data.targetCriteria?.clientCategories || [],
           companyStatuses: data.targetCriteria?.companyStatuses || [],
           countries: data.targetCriteria?.countries || [],
           tags: data.targetCriteria?.tags || [],

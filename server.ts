@@ -1381,10 +1381,13 @@ If the user is asking you to CREATE, UPDATE, or DELETE something, populate "acti
   "fields": { ... }              // entity-specific plain values the user actually specified or clearly implied -- do NOT invent unrelated data, leave anything unstated out of "fields" so the app can fill sane defaults
 }
 
+AarPex's standard industry picklist (prefer these exact labels for "industry" when one fits; free text is still fine for anything not listed): ${JSON.stringify(STANDARD_INDUSTRIES)}
+AarPex's standard client-category picklist (for "clientCategory" -- the type/size of the buyer, independent of industry): ${JSON.stringify(STANDARD_CLIENT_CATEGORIES)}
+
 Field guidance per entity (only include what the user actually said or clearly implied):
-- lead: name, company (plain text, not a companyRef), jobTitle, email, phone, industry, country, city, source, estimatedValue (number), priority ("Low"|"Medium"|"High"|"Urgent"), status ("New"|"Contacted"|"Engaged"|"Qualified"|"Proposal"|"Negotiation"|"Converted"|"Lost"|"Nurture"), notes
+- lead: name, company (plain text, not a companyRef), jobTitle, email, phone, industry, clientCategory, country, city, source, estimatedValue (number), priority ("Low"|"Medium"|"High"|"Urgent"), status ("New"|"Contacted"|"Engaged"|"Qualified"|"Proposal"|"Negotiation"|"Converted"|"Lost"|"Nurture"), notes
 - contact: firstName, lastName, position, email, phone, country, city, notes (company via companyRef)
-- company: name, industry, website, country, city, phone, email, status ("Prospect"|"Qualified Prospect"|"Active Customer"|"High Value Customer"|"At Risk"|"Dormant"|"Former Customer"), notes
+- company: name, industry, clientCategory, website, country, city, phone, email, status ("Prospect"|"Qualified Prospect"|"Active Customer"|"High Value Customer"|"At Risk"|"Dormant"|"Former Customer"), notes
 - deal: name, dealValue (number), currency, priority ("Low"|"Medium"|"High"), expectedCloseDate (YYYY-MM-DD), productService, notes (company via companyRef, contact via contactRef, pipeline/stage via pipelineRef/stageRef)
 - task: title, dueDate (YYYY-MM-DD), priority ("Low"|"Medium"|"High"|"Urgent"), status ("To Do"|"In Progress"|"Completed"|"Cancelled"), notes (related company/contact/deal via companyRef/contactRef/dealRef)
 - activity: type ("Call"|"Meeting"|"Email"|"WhatsApp"|"Follow-up"|"Demo"|"Proposal"|"Note"), description, outcome, nextAction (related company/contact/deal via companyRef/contactRef/dealRef)
@@ -1519,6 +1522,50 @@ Return pure JSON only, no markdown fences: {"reply": string, "navigateTo": strin
 // positioning insights (pitch angles, objection handling). Also used to
 // re-run just the AI insight for an already-saved product. Never persists
 // anything itself; the client always reviews/edits before saving.
+// Kept in sync by hand with src/data/industries.ts's INDUSTRIES/
+// CLIENT_CATEGORIES -- duplicated here rather than imported since server.ts
+// bundles standalone for the Node runtime and the two lists rarely change.
+const STANDARD_INDUSTRIES = [
+  "Technology / SaaS",
+  "Textile & Fashion",
+  "Retail & Ecommerce",
+  "Travel & Hospitality",
+  "Real Estate & Property Management",
+  "Security Services",
+  "Cleaning & Facilities Services",
+  "Healthcare & Wellness",
+  "Financial Services & Bookkeeping",
+  "Professional Services & Consulting",
+  "Legal Services",
+  "Marketing & Advertising Agency",
+  "Construction & Trades",
+  "Manufacturing & Industrial",
+  "Logistics & Transportation",
+  "Food & Beverage",
+  "Education & Training",
+  "Nonprofit & NGO",
+  "Government & Public Sector",
+  "Automotive",
+  "Energy & Utilities",
+  "Media & Entertainment",
+  "Telecommunications",
+  "Agriculture",
+  "Wholesale & Distribution",
+  "Other",
+];
+const STANDARD_CLIENT_CATEGORIES = [
+  "Startup",
+  "Small Business / SMB",
+  "Mid-Market",
+  "Enterprise",
+  "Franchise / Multi-Location",
+  "Government / Public Sector",
+  "Nonprofit / NGO",
+  "Reseller / Channel Partner",
+  "Individual / Consumer",
+  "Other",
+];
+
 app.post("/api/ai/product-assist", async (req, res) => {
   try {
     const { rawDescription, existingIndustries, existingProduct } = req.body;
@@ -1563,6 +1610,9 @@ User's description: "${text}"
 
 Industries already seen in this workspace's CRM data (ground your industry suggestions in these when they make sense, but you may suggest others): ${JSON.stringify(existingIndustries || [])}
 
+AarPex's standard industry picklist (prefer these exact labels when they fit; you may still suggest others): ${JSON.stringify(STANDARD_INDUSTRIES)}
+AarPex's standard client-category picklist (which type/size of buyer this suits -- prefer these exact labels): ${JSON.stringify(STANDARD_CLIENT_CATEGORIES)}
+
 Return pure JSON only, matching this exact schema:
 {
   "name": string,
@@ -1575,6 +1625,7 @@ Return pure JSON only, matching this exact schema:
   "tags": string[] (3-6 short tags),
   "targetCriteria": {
     "industries": string[] (which industries should buy this),
+    "clientCategories": string[] (which type/size of buyer this suits, from the standard client-category picklist above),
     "companyStatuses": string[] (choose only from: "Prospect", "Qualified Prospect", "Active Customer", "High Value Customer", "At Risk", "Dormant", "Former Customer", "Lead"),
     "countries": string[],
     "tags": string[],
@@ -1607,6 +1658,7 @@ IMPORTANT: Return pure valid JSON only, without markdown fences or additional co
           tags: parsed.tags || [],
           targetCriteria: parsed.targetCriteria || {
             industries: fallbackIndustries,
+            clientCategories: [],
             companyStatuses: [],
             countries: [],
             tags: [],

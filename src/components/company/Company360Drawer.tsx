@@ -338,6 +338,7 @@ export const Company360Drawer: React.FC = () => {
                   <span className="flex items-center gap-1">
                     <Building2 className="w-3.5 h-3.5 text-slate-400" />
                     {company.industry}
+                    {company.clientCategory ? ` • ${company.clientCategory}` : ""}
                   </span>
                   <span className="flex items-center gap-1">
                     <MapPin className="w-3.5 h-3.5 text-slate-400" />
@@ -1037,7 +1038,10 @@ export const Company360Drawer: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2 text-slate-600">
                     <Briefcase className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>{company.industry || "Industry not specified"}</span>
+                    <span>
+                      {company.industry || "Industry not specified"}
+                      {company.clientCategory ? ` • ${company.clientCategory}` : ""}
+                    </span>
                   </div>
                   {company.sourceLeadId && (
                     <div className="flex items-center gap-2 text-slate-600">

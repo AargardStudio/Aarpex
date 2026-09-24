@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Product, ProductPricingModel, ProductType, ProductStatus, CustomerStatus } from "../../types";
 import { computeProductMatches, hasAnyTargetCriteria } from "../../lib/productMatching";
+import { INDUSTRIES, CLIENT_CATEGORIES } from "../../data/industries";
 
 const PRODUCT_TYPES: ProductType[] = [
   "Agency Retainer",
@@ -87,6 +88,7 @@ const emptyDraft = (createdBy: string): Omit<Product, "id" | "createdAt"> => ({
   tags: [],
   targetCriteria: {
     industries: [],
+    clientCategories: [],
     companyStatuses: [],
     countries: [],
     tags: [],
@@ -116,7 +118,10 @@ const ProductFormModal: React.FC<{ editing: Product | null; onClose: () => void 
           description: editing.description,
           pitch: editing.pitch,
           tags: editing.tags,
-          targetCriteria: editing.targetCriteria,
+          // Older products saved before clientCategories existed won't have
+          // it in their stored targetCriteria -- default it so the toggle
+          // buttons below don't choke on undefined.
+          targetCriteria: { clientCategories: [], ...editing.targetCriteria },
           aiInsight: editing.aiInsight,
           createdBy: editing.createdBy,
         }
@@ -170,6 +175,22 @@ const ProductFormModal: React.FC<{ editing: Product | null; onClose: () => void 
           companyStatuses: has
             ? prev.targetCriteria.companyStatuses.filter((s) => s !== status)
             : [...prev.targetCriteria.companyStatuses, status],
+        },
+      };
+    });
+  };
+
+  // Shared toggle for the industries / client-categories chip pickers below
+  // -- both are plain string[] fields on targetCriteria.
+  const toggleListValue = (field: "industries" | "clientCategories", value: string) => {
+    setDraft((prev) => {
+      const current = prev.targetCriteria[field] || [];
+      const has = current.includes(value);
+      return {
+        ...prev,
+        targetCriteria: {
+          ...prev.targetCriteria,
+          [field]: has ? current.filter((v) => v !== value) : [...current, value],
         },
       };
     });
@@ -327,19 +348,58 @@ const ProductFormModal: React.FC<{ editing: Product | null; onClose: () => void 
               Who should this be sold to?
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-slate-400 font-semibold mb-1">Industries (comma-separated)</label>
-                <input
-                  type="text"
-                  value={csv(draft.targetCriteria.industries)}
-                  onChange={(e) =>
-                    setDraft((p) => ({ ...p, targetCriteria: { ...p.targetCriteria, industries: fromCsv(e.target.value) } }))
-                  }
-                  placeholder="e.g. Fitness, Retail, Healthcare"
-                  className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
-                />
+            <div>
+              <label className="block text-slate-400 font-semibold mb-1.5">Industries</label>
+              <div className="flex flex-wrap gap-1.5">
+                {INDUSTRIES.map((ind) => (
+                  <button
+                    key={ind}
+                    type="button"
+                    onClick={() => toggleListValue("industries", ind)}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
+                      draft.targetCriteria.industries.includes(ind)
+                        ? "bg-teal-600 border-teal-500 text-white"
+                        : "bg-[#181b21] border-[#2d323f] text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {ind}
+                  </button>
+                ))}
               </div>
+              <input
+                type="text"
+                value={csv(draft.targetCriteria.industries.filter((v) => !INDUSTRIES.includes(v)))}
+                onChange={(e) => {
+                  const custom = fromCsv(e.target.value);
+                  const standard = draft.targetCriteria.industries.filter((v) => INDUSTRIES.includes(v));
+                  setDraft((p) => ({ ...p, targetCriteria: { ...p.targetCriteria, industries: [...standard, ...custom] } }));
+                }}
+                placeholder="Other industries not listed above (comma-separated)"
+                className="w-full mt-1.5 px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-slate-400 font-semibold mb-1.5">Client Categories</label>
+              <div className="flex flex-wrap gap-1.5">
+                {CLIENT_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => toggleListValue("clientCategories", cat)}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
+                      draft.targetCriteria.clientCategories.includes(cat)
+                        ? "bg-teal-600 border-teal-500 text-white"
+                        : "bg-[#181b21] border-[#2d323f] text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-slate-400 font-semibold mb-1">Countries (comma-separated)</label>
                 <input

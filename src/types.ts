@@ -215,6 +215,12 @@ export interface Company {
   callLog?: CallLogEntry[];
   sourceLeadId?: string;
   industry: string;
+  // Classification of the client itself (size/type of buyer), independent
+  // of what industry they're in -- e.g. two Textile & Fashion companies
+  // might be "Enterprise" and "Startup" respectively. See
+  // src/data/industries.ts for the standard picklist (freeform is still
+  // accepted for anything not on it).
+  clientCategory?: string;
   website: string;
   country: string;
   city: string;
@@ -274,6 +280,8 @@ export interface Lead {
   whatsapp?: string;
   website?: string;
   industry: string;
+  // See Company.clientCategory -- same idea, set at the lead stage.
+  clientCategory?: string;
   country: string;
   city: string;
   source: string;
@@ -326,6 +334,9 @@ export type ProductStatus = "Active" | "Draft" | "Archived";
 // a product with no criteria at all simply matches everyone.
 export interface ProductTargetCriteria {
   industries: string[]; // matches Company.industry / Lead.industry
+  // matches Company.clientCategory / Lead.clientCategory -- optional, an
+  // empty array means "no constraint" same as every other criteria field.
+  clientCategories: string[];
   companyStatuses: CustomerStatus[]; // e.g. "Prospect", "Active Customer"
   countries: string[];
   tags: string[]; // matches Company.tags / Lead.tags / Contact.tags

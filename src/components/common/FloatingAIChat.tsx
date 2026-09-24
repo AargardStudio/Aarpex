@@ -228,6 +228,7 @@ export const FloatingAIChat: React.FC = () => {
           email: p.email || "",
           phone: p.phone || "",
           industry: p.industry || "Technology / SaaS",
+          clientCategory: p.clientCategory || undefined,
           country: p.country || "United States",
           city: p.city || "",
           source: p.source || "AI Assistant",
@@ -290,6 +291,7 @@ export const FloatingAIChat: React.FC = () => {
         const company = addCompany({
           name: p.name || "New Company",
           industry: p.industry || "Technology / SaaS",
+          clientCategory: p.clientCategory || undefined,
           website: p.website || "",
           city: p.city || "",
           country: p.country || "United States",

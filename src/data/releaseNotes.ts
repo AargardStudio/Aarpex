@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.17.0",
+    date: "2026-09-24",
+    headline: "Standardized Industries & Client Categories",
+    tagline: "A shared industry list, a new Client Category field, and product targeting that uses both.",
+    highlights: [
+      {
+        title: "Real industry dropdowns, everywhere",
+        description: "Companies and Leads now pick from a standard list of 25 industries in Quick Create (leads used to get silently stuck on \"Technology / SaaS\") -- with a custom option if yours isn't listed.",
+      },
+      {
+        title: "New: Client Category",
+        description: "Classify who a company or lead actually is -- Startup, SMB, Mid-Market, Enterprise, Government, and more -- independent of what industry they're in.",
+      },
+      {
+        title: "Products can target by client category too",
+        description: "The \"who should this be sold to\" targeting on Products now has chip pickers for both Industries and Client Categories, and AI-assisted product setup grounds its suggestions in the same standard lists.",
+      },
+    ],
+  },
+  {
     version: "1.16.0",
     date: "2026-09-24",
     headline: "Connect More Than One Mailbox",
