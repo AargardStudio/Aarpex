@@ -34,6 +34,7 @@ import {
   KnowledgeBaseCategory,
 } from "../types";
 import { isSupabaseAuthConfigured, getSupabaseAuthClient } from "../config/supabaseAuthClient";
+import { getMailboxById } from "../lib/webmail";
 import {
   syncTenantTable,
   syncTenantRow,
@@ -153,7 +154,10 @@ interface CRMContextType {
   settings: CRMSettings;
   updateSettings: (updates: Partial<CRMSettings>) => void;
   updateStripeConfig: (config: Partial<TenantStripeConfig>) => void;
-  updateWebmailConfig: (config: Partial<TenantWebmailConfig>) => void;
+  addWebmailConfig: (config?: Partial<TenantWebmailConfig>) => TenantWebmailConfig;
+  updateWebmailConfig: (id: string, config: Partial<TenantWebmailConfig>) => void;
+  deleteWebmailConfig: (id: string) => void;
+  setDefaultWebmailConfig: (id: string) => void;
   updateSupabaseConfig: (config: Partial<SupabaseConfig>) => void;
   addAuditLogEntry: (action: string, details?: string, category?: AuditLogEntry["category"]) => void;
 
@@ -783,22 +787,30 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         status: "unconfigured",
         accountName: `${tenantData.name || "Workspace"} Merchant`,
       },
-      webmailConfig: {
-        isEnabled: true,
-        provider: "hostinger",
-        email: currentUser.email,
-        displayName: currentUser.name,
-        password: "",
-        smtpHost: "smtp.hostinger.com",
-        smtpPort: 465,
-        smtpEncryption: "SSL",
-        imapHost: "imap.hostinger.com",
-        imapPort: 993,
-        imapEncryption: "SSL",
-        replyTo: currentUser.email,
-        status: "unconfigured",
-        signature: `--\n${currentUser.name}\n${tenantData.name || "Workspace"}`,
-      },
+      webmailConfigs: [
+        {
+          id:
+            typeof crypto !== "undefined" && "randomUUID" in crypto
+              ? crypto.randomUUID()
+              : `mbx_${Date.now().toString(36)}`,
+          label: "Primary Mailbox",
+          isDefault: true,
+          isEnabled: true,
+          provider: "hostinger",
+          email: currentUser.email,
+          displayName: currentUser.name,
+          password: "",
+          smtpHost: "smtp.hostinger.com",
+          smtpPort: 465,
+          smtpEncryption: "SSL",
+          imapHost: "imap.hostinger.com",
+          imapPort: 993,
+          imapEncryption: "SSL",
+          replyTo: currentUser.email,
+          status: "unconfigured",
+          signature: `--\n${currentUser.name}\n${tenantData.name || "Workspace"}`,
+        },
+      ],
     };
 
     setTenants((prev) => [...prev, newTenant]);
@@ -1109,19 +1121,81 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const updateWebmailConfig = (configUpdates: Partial<TenantWebmailConfig>) => {
+  // Webmail mailboxes -- a workspace can connect more than one, each one
+  // usable for both sending (SMTP) and receiving/reply-detection (IMAP).
+  // Exactly one is ever flagged isDefault; compose and campaign creation
+  // fall back to it when no specific mailbox is chosen (see lib/webmail.ts).
+  const addWebmailConfig = (configData?: Partial<TenantWebmailConfig>): TenantWebmailConfig => {
+    const newId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `mbx_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const newConfig: TenantWebmailConfig = {
+      isEnabled: false,
+      provider: "hostinger",
+      email: "",
+      displayName: "",
+      password: "",
+      smtpHost: "smtp.hostinger.com",
+      smtpPort: 465,
+      smtpEncryption: "SSL",
+      imapHost: "imap.hostinger.com",
+      imapPort: 993,
+      imapEncryption: "SSL",
+      status: "unconfigured",
+      ...configData,
+      id: newId,
+      label: configData?.label?.trim() || "New Mailbox",
+    };
     setTenants((prev) =>
       prev.map((t) => {
-        if (t.id === activeTenantId) {
-          return {
-            ...t,
-            webmailConfig: {
-              ...t.webmailConfig,
-              ...configUpdates,
-            },
-          };
+        if (t.id !== activeTenantId) return t;
+        const existing = t.webmailConfigs || [];
+        const isFirstMailbox = existing.length === 0;
+        return {
+          ...t,
+          webmailConfigs: [...existing, { ...newConfig, isDefault: isFirstMailbox || !!configData?.isDefault }],
+        };
+      })
+    );
+    return newConfig;
+  };
+
+  const updateWebmailConfig = (id: string, configUpdates: Partial<TenantWebmailConfig>) => {
+    setTenants((prev) =>
+      prev.map((t) => {
+        if (t.id !== activeTenantId) return t;
+        return {
+          ...t,
+          webmailConfigs: (t.webmailConfigs || []).map((m) => (m.id === id ? { ...m, ...configUpdates } : m)),
+        };
+      })
+    );
+  };
+
+  const deleteWebmailConfig = (id: string) => {
+    setTenants((prev) =>
+      prev.map((t) => {
+        if (t.id !== activeTenantId) return t;
+        const remaining = (t.webmailConfigs || []).filter((m) => m.id !== id);
+        // The deleted mailbox may have been the default -- promote whatever
+        // is left so compose/campaigns never end up with zero default.
+        if (remaining.length > 0 && !remaining.some((m) => m.isDefault)) {
+          remaining[0] = { ...remaining[0], isDefault: true };
         }
-        return t;
+        return { ...t, webmailConfigs: remaining };
+      })
+    );
+  };
+
+  const setDefaultWebmailConfig = (id: string) => {
+    setTenants((prev) =>
+      prev.map((t) => {
+        if (t.id !== activeTenantId) return t;
+        return {
+          ...t,
+          webmailConfigs: (t.webmailConfigs || []).map((m) => ({ ...m, isDefault: m.id === id })),
+        };
       })
     );
   };
@@ -2153,7 +2227,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      const webmail = activeTenant?.webmailConfig;
+      const webmail = getMailboxById(activeTenant, campaign.mailboxId);
       const res = await apiFetch("/api/webmail/check-replies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2500,7 +2574,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         settings,
         updateSettings,
         updateStripeConfig,
+        addWebmailConfig,
         updateWebmailConfig,
+        deleteWebmailConfig,
+        setDefaultWebmailConfig,
         updateSupabaseConfig,
         addAuditLogEntry,
 

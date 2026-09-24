@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.16.0",
+    date: "2026-09-24",
+    headline: "Connect More Than One Mailbox",
+    tagline: "Sales, support, or your own inbox -- send and track replies from whichever one fits, per email or per campaign.",
+    highlights: [
+      {
+        title: "Multiple mailboxes per workspace",
+        description: "Settings > Hostinger & Webmail now manages a list of mailboxes instead of one -- add, edit, disconnect, and pick a default, each with its own send (SMTP) and receive (IMAP) credentials.",
+      },
+      {
+        title: "Choose the sender when it matters",
+        description: "Composing a one-off email or building an Email Marketing campaign now lets you pick which connected mailbox sends it -- campaigns remember their choice for reply-tracking too.",
+      },
+    ],
+  },
+  {
     version: "1.15.0",
     date: "2026-09-23",
     headline: "Let AI Skim the Web to Build Your Knowledge Base",

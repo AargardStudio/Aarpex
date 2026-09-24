@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useCRM } from "../../context/CRMContext";
 import { Invoice, InvoiceTemplateTheme, InvoiceTemplateConfig } from "../../types";
+import { getDefaultMailbox } from "../../lib/webmail";
 import {
   Printer,
   CreditCard,
@@ -59,7 +60,7 @@ export const InvoiceTemplateView: React.FC<InvoiceTemplateViewProps> = ({
     companyAddress: "100 Montgomery Street, Suite 2400",
     companyCityStateZip: "San Francisco, CA 94104, USA",
     companyTaxId: activeTenant?.taxId || "US-EIN-94-2819402 / VAT: EU37201948",
-    companyEmail: activeTenant?.webmailConfig?.email || "billing@aargard-solutions.com",
+    companyEmail: getDefaultMailbox(activeTenant)?.email || "billing@aargard-solutions.com",
     companyPhone: "+1 (415) 890-2400",
     companyWebsite: "www.aargard-solutions.com",
     paymentTerms: "Net 30 Days. Invoices unpaid after 30 days are subject to 1.5% monthly late assessment.",

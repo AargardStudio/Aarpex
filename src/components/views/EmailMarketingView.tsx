@@ -3,6 +3,7 @@ import { useCRM } from "../../context/CRMContext";
 import { EmailCampaign, EmailFrequency, EmailCampaignTechnique, EmailStep, SalesTechnique } from "../../types";
 import { apiFetch } from "../../lib/apiClient";
 import { computeProductMatches } from "../../lib/productMatching";
+import { getMailboxById, mailboxLabel } from "../../lib/webmail";
 import {
   Mail,
   Plus,
@@ -259,6 +260,9 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   const [audienceSearch, setAudienceSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string>("");
+  const [selectedMailboxId, setSelectedMailboxId] = useState<string>(
+    () => getMailboxById(activeTenant)?.id || ""
+  );
 
   const selectedProduct = products.find((p) => p.id === selectedProductId) || null;
 
@@ -402,7 +406,7 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     try {
       let steps = generatedSteps;
       const recipients = buildRecipients();
-      const mailCfg = activeTenant?.webmailConfig;
+      const mailCfg = getMailboxById(activeTenant, selectedMailboxId);
 
       if (activate && recipients.length > 0) {
         // Send step 1 to every recipient right now (personalizing merge tags
@@ -459,6 +463,7 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
         steps,
         startDate: activate ? new Date().toISOString().split("T")[0] : undefined,
         salesperson: currentUser?.name || "",
+        mailboxId: selectedMailboxId || undefined,
       });
 
       onClose();
@@ -508,6 +513,26 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                   className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
                 />
               </div>
+
+              {(activeTenant?.webmailConfigs?.length || 0) > 1 && (
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Send From</label>
+                  <select
+                    value={selectedMailboxId}
+                    onChange={(e) => setSelectedMailboxId(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+                  >
+                    {(activeTenant?.webmailConfigs || []).map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {mailboxLabel(m)} {m.isDefault ? "(Default)" : ""} — {m.email || "not configured"}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Every email and reply check for this campaign uses this mailbox.
+                  </p>
+                </div>
+              )}
 
               {products.length > 0 && (
                 <div>
@@ -873,7 +898,7 @@ const CampaignDetailModal: React.FC<{ campaign: EmailCampaign; onClose: () => vo
   const sendStep = async (step: EmailStep) => {
     setSendingStepId(step.id);
     try {
-      const mailCfg = activeTenant?.webmailConfig;
+      const mailCfg = getMailboxById(activeTenant, campaign.mailboxId);
       await Promise.all(
         recipients.map((r) =>
           apiFetch("/api/webmail/send-email", {

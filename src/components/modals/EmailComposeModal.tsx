@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { EmailAttachment } from "../../types";
 import { apiFetch } from "../../lib/apiClient";
+import { getMailboxById, mailboxLabel } from "../../lib/webmail";
 
 interface EmailComposeModalProps {
   isOpen: boolean;
@@ -63,6 +64,7 @@ export const EmailComposeModal: React.FC<EmailComposeModalProps> = ({
   );
 
   const [attachments, setAttachments] = useState<EmailAttachment[]>(initialAttachments);
+  const [selectedMailboxId, setSelectedMailboxId] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [resultStatus, setResultStatus] = useState<{
@@ -83,12 +85,18 @@ export const EmailComposeModal: React.FC<EmailComposeModalProps> = ({
         setAttachments(initialAttachments);
       }
       setResultStatus(null);
+      setSelectedMailboxId((prev) => {
+        if (prev && (activeTenant?.webmailConfigs || []).some((m) => m.id === prev)) return prev;
+        return getMailboxById(activeTenant)?.id || "";
+      });
     }
-  }, [isOpen, initialTo, initialSubject, initialBody, initialAttachments]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, initialTo, initialSubject, initialBody, initialAttachments, activeTenant?.id]);
 
   if (!isOpen) return null;
 
-  const mailCfg = activeTenant?.webmailConfig;
+  const mailboxes = activeTenant?.webmailConfigs || [];
+  const mailCfg = getMailboxById(activeTenant, selectedMailboxId);
   const isSmtpConfigured = !!(mailCfg?.email && mailCfg?.smtpHost);
   const senderEmail = mailCfg?.email || currentUser?.email || "billing@apexcrm.enterprise";
 
@@ -312,7 +320,21 @@ export const EmailComposeModal: React.FC<EmailComposeModalProps> = ({
               </div>
               <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
                 <span>From:</span>
-                <span className="text-white font-mono">{senderEmail}</span>
+                {mailboxes.length > 1 ? (
+                  <select
+                    value={selectedMailboxId}
+                    onChange={(e) => setSelectedMailboxId(e.target.value)}
+                    className="px-1.5 py-0.5 bg-[#121418] border border-[#2d323f] text-white rounded-md font-mono text-[11px] focus:outline-none focus:border-teal-400"
+                  >
+                    {mailboxes.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {mailboxLabel(m)} {m.isDefault ? "(Default)" : ""} — {m.email || "not configured"}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="text-white font-mono">{senderEmail}</span>
+                )}
                 {isSmtpConfigured ? (
                   <span className="text-[10px] text-emerald-400 flex items-center gap-0.5">
                     • <Server className="w-3 h-3" /> {mailCfg?.smtpHost}

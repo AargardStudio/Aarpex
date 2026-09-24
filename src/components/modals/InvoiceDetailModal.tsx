@@ -2,6 +2,7 @@ import React from "react";
 import { useCRM } from "../../context/CRMContext";
 import { Invoice } from "../../types";
 import { X, Printer, CreditCard, Copy, Building2, CheckCircle2, FileText } from "lucide-react";
+import { getDefaultMailbox } from "../../lib/webmail";
 
 interface InvoiceDetailModalProps {
   invoice: Invoice | null;
@@ -84,7 +85,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
               </div>
               <div className="text-slate-500 text-[11px] mt-1 space-y-0.5">
                 <div>AarPex Enterprise Multi-Tenant Platform</div>
-                <div>{activeTenant?.webmailConfig?.email || "billing@aargard-solutions.com"}</div>
+                <div>{getDefaultMailbox(activeTenant)?.email || "billing@aargard-solutions.com"}</div>
                 <div>Tax / VAT: {activeTenant?.taxId || "GB-9012384-EX"}</div>
               </div>
             </div>

@@ -44,7 +44,7 @@ export const InboxView: React.FC = () => {
     }
   };
 
-  const mailboxConnected = !!(activeTenant?.webmailConfig?.password && activeTenant?.webmailConfig?.imapHost);
+  const mailboxConnected = (activeTenant?.webmailConfigs || []).some((m) => !!m.password && !!m.imapHost);
   const totalReplied = trackedCampaigns.reduce((sum, c) => sum + (c.repliedAudienceIds?.length || 0), 0);
   const totalAwaiting = trackedCampaigns.reduce(
     (sum, c) => sum + c.audienceIds.filter((id) => !(c.repliedAudienceIds || []).includes(id)).length,

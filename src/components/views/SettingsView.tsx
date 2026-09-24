@@ -40,6 +40,7 @@ import {
   isProTesterEmail,
 } from "../../data/subscriptionPlans";
 import { apiFetch } from "../../lib/apiClient";
+import { getMailboxById, mailboxLabel } from "../../lib/webmail";
 
 type SettingsTab = "workspaces" | "subscription" | "stripe" | "webmail" | "company" | "security" | "database";
 
@@ -56,7 +57,10 @@ export const SettingsView: React.FC = () => {
     settings,
     updateSettings,
     updateStripeConfig,
+    addWebmailConfig,
     updateWebmailConfig,
+    deleteWebmailConfig,
+    setDefaultWebmailConfig,
     addAuditLogEntry,
     signOut,
     clearAllData,
@@ -112,8 +116,15 @@ export const SettingsView: React.FC = () => {
   const [stripeVerifyResult, setStripeVerifyResult] = useState<any>(null);
   const [stripeSaveSuccess, setStripeSaveSuccess] = useState(false);
 
-  // Webmail / Hostinger State (100% Customizable in Settings)
-  const mailCfg = activeTenant?.webmailConfig || {};
+  // Webmail / Hostinger State (100% Customizable in Settings) -- a
+  // workspace can connect more than one mailbox now; selectedMailboxId
+  // tracks which one this form is currently editing, defaulting to the
+  // tenant's default mailbox.
+  const [selectedMailboxId, setSelectedMailboxId] = useState<string>(
+    () => getMailboxById(activeTenant)?.id || ""
+  );
+  const mailCfg = getMailboxById(activeTenant, selectedMailboxId) || ({} as any);
+  const [mailLabel, setMailLabel] = useState(mailCfg.label || "");
   const [mailProvider, setMailProvider] = useState<any>(mailCfg.provider || "hostinger");
   const [mailEmail, setMailEmail] = useState(mailCfg.email || currentUser?.email || "hamzamazharsheikh007@gmail.com");
   const [mailDisplayName, setMailDisplayName] = useState(mailCfg.displayName || currentUser?.name || "Hamza Sheikh");
@@ -150,22 +161,40 @@ export const SettingsView: React.FC = () => {
       setStripeAccountName(s.accountName || `${activeTenant.name} Stripe`);
       setStripeVerifyResult(null);
 
-      const m = activeTenant.webmailConfig || {};
-      setMailProvider(m.provider || "hostinger");
-      setMailEmail(m.email || currentUser?.email || "");
-      setMailDisplayName(m.displayName || currentUser?.name || "");
-      setMailPassword(m.password || "");
-      setSmtpHost(m.smtpHost || "smtp.hostinger.com");
-      setSmtpPort(m.smtpPort || 465);
-      setSmtpEncryption(m.smtpEncryption || "SSL");
-      setImapHost(m.imapHost || "imap.hostinger.com");
-      setImapPort(m.imapPort || 993);
-      setMailSignature(m.signature || `--\n${currentUser?.name}\n${activeTenant.name}`);
-      setTestRecipient(m.email || currentUser?.email || "");
-      setMailVerifyResult(null);
-      setTestMailResult(null);
+      // Jump to this workspace's default mailbox -- the per-mailbox effect
+      // below fills in the rest of the webmail form fields.
+      setSelectedMailboxId(getMailboxById(activeTenant)?.id || "");
     }
   }, [activeTenantId]);
+
+  // Synchronize the webmail form whenever the selected mailbox changes --
+  // switching mailboxes within the tab, a new one being added, or the
+  // active tenant changing (handled above, which resets selectedMailboxId).
+  useEffect(() => {
+    const mailboxes = activeTenant?.webmailConfigs || [];
+    if (selectedMailboxId && !mailboxes.some((m: any) => m.id === selectedMailboxId)) {
+      // The selected mailbox no longer exists (e.g. just deleted) -- fall
+      // back to whatever is now the default.
+      setSelectedMailboxId(getMailboxById(activeTenant)?.id || "");
+      return;
+    }
+    const m = mailboxes.find((mb: any) => mb.id === selectedMailboxId) || {};
+    setMailLabel(m.label || "");
+    setMailProvider(m.provider || "hostinger");
+    setMailEmail(m.email || currentUser?.email || "");
+    setMailDisplayName(m.displayName || currentUser?.name || "");
+    setMailPassword(m.password || "");
+    setSmtpHost(m.smtpHost || "smtp.hostinger.com");
+    setSmtpPort(m.smtpPort || 465);
+    setSmtpEncryption(m.smtpEncryption || "SSL");
+    setImapHost(m.imapHost || "imap.hostinger.com");
+    setImapPort(m.imapPort || 993);
+    setMailSignature(m.signature || `--\n${currentUser?.name}\n${activeTenant?.name}`);
+    setTestRecipient(m.email || currentUser?.email || "");
+    setMailVerifyResult(null);
+    setTestMailResult(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMailboxId, activeTenant?.webmailConfigs?.length]);
 
   // Provider presets helper
   const applyMailPreset = (preset: "hostinger" | "gmail" | "outlook" | "cpanel" | "custom") => {
@@ -268,8 +297,8 @@ export const SettingsView: React.FC = () => {
       });
       const data = await res.json();
       setMailVerifyResult(data);
-      if (data.success) {
-        updateWebmailConfig({
+      if (data.success && selectedMailboxId) {
+        updateWebmailConfig(selectedMailboxId, {
           status: "connected",
           statusMessage: data.message,
           lastVerifiedAt: data.verifiedAt,
@@ -317,10 +346,12 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  // Save Webmail Config
+  // Save Webmail Config (for whichever mailbox is currently selected --
+  // creates a new one if the workspace has none configured yet)
   const handleSaveWebmail = (e: React.FormEvent) => {
     e.preventDefault();
-    updateWebmailConfig({
+    const payload = {
+      label: mailLabel.trim() || undefined,
       isEnabled: true,
       provider: mailProvider,
       email: mailEmail.trim(),
@@ -334,10 +365,39 @@ export const SettingsView: React.FC = () => {
       signature: mailSignature,
       replyTo: mailEmail.trim(),
       status: mailPassword.trim() ? "connected" : "unconfigured",
-    });
+    };
+    if (selectedMailboxId) {
+      updateWebmailConfig(selectedMailboxId, payload);
+    } else {
+      const created = addWebmailConfig(payload);
+      setSelectedMailboxId(created.id);
+    }
     addAuditLogEntry("Updated webmail configuration", mailEmail.trim(), "settings");
     setMailSaveSuccess(true);
     setTimeout(() => setMailSaveSuccess(false), 3000);
+  };
+
+  // Connect a new, blank mailbox and switch the form to it
+  const handleAddMailbox = () => {
+    const mailboxCount = activeTenant?.webmailConfigs?.length || 0;
+    const created = addWebmailConfig({ label: `Mailbox ${mailboxCount + 1}` });
+    setSelectedMailboxId(created.id);
+    setMailSaveSuccess(false);
+  };
+
+  const handleDeleteMailbox = (id: string) => {
+    const mailbox = (activeTenant?.webmailConfigs || []).find((m: any) => m.id === id);
+    if (!confirm(`Disconnect mailbox "${mailboxLabel(mailbox)}"? Any campaign sending from it will fall back to the default mailbox.`)) {
+      return;
+    }
+    deleteWebmailConfig(id);
+    addAuditLogEntry("Disconnected webmail mailbox", mailboxLabel(mailbox), "settings");
+  };
+
+  const handleSetDefaultMailbox = (id: string) => {
+    setDefaultWebmailConfig(id);
+    const mailbox = (activeTenant?.webmailConfigs || []).find((m: any) => m.id === id);
+    addAuditLogEntry("Set default webmail mailbox", mailboxLabel(mailbox), "settings");
   };
 
   // Handle Subscription Plan Modification
@@ -543,7 +603,7 @@ export const SettingsView: React.FC = () => {
         >
           <Mail className="w-3.5 h-3.5" />
           <span>Hostinger & Webmail</span>
-          {activeTenant?.webmailConfig?.status === "connected" && (
+          {(activeTenant?.webmailConfigs || []).some((m: any) => m.status === "connected") && (
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
           )}
         </button>
@@ -613,7 +673,8 @@ export const SettingsView: React.FC = () => {
                 const isActive = tenant.id === activeTenantId;
                 const membersCount = tenant.members?.length || 1;
                 const hasStripe = !!tenant.stripeConfig?.secretKey || !!tenant.stripeConfig?.publishableKey;
-                const hasMail = !!tenant.webmailConfig?.email;
+                const tenantDefaultMailbox = getMailboxById(tenant);
+                const hasMail = !!tenantDefaultMailbox?.email;
 
                 return (
                   <div
@@ -673,7 +734,8 @@ export const SettingsView: React.FC = () => {
                       <div className="flex items-center justify-between text-slate-400">
                         <span>Mail Gateway:</span>
                         <span className={hasMail ? "text-teal-400 font-medium" : "text-slate-500"}>
-                          {tenant.webmailConfig?.provider?.toUpperCase() || "HOSTINGER"} ({tenant.webmailConfig?.email || "None"})
+                          {tenantDefaultMailbox?.provider?.toUpperCase() || "HOSTINGER"} ({tenantDefaultMailbox?.email || "None"})
+                          {(tenant.webmailConfigs?.length || 0) > 1 ? ` +${tenant.webmailConfigs.length - 1} more` : ""}
                         </span>
                       </div>
                     </div>
@@ -920,6 +982,80 @@ export const SettingsView: React.FC = () => {
               </button>
             </div>
 
+            {/* Mailbox List -- a workspace can connect more than one, each
+                usable for both sending and receiving (its own IMAP inbox).
+                Composing an email and creating an Email Marketing campaign
+                both let you pick which of these sends. */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-slate-300 font-semibold text-[11px]">
+                  Connected Mailboxes ({activeTenant?.webmailConfigs?.length || 0})
+                </label>
+                <button
+                  type="button"
+                  onClick={handleAddMailbox}
+                  className="px-2.5 py-1 bg-teal-600/20 hover:bg-teal-600 text-teal-300 hover:text-white border border-teal-500/40 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-colors"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Add Mailbox</span>
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(activeTenant?.webmailConfigs || []).length === 0 && (
+                  <div className="text-[11px] text-slate-500">
+                    No mailboxes connected yet -- fill in the form below and save to connect your first one.
+                  </div>
+                )}
+                {(activeTenant?.webmailConfigs || []).map((m: any) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setSelectedMailboxId(m.id)}
+                    className={`px-3 py-1.5 rounded-lg border text-left transition-all flex items-center gap-2 ${
+                      m.id === selectedMailboxId
+                        ? "bg-teal-500/10 border-teal-500/50 text-white shadow-sm"
+                        : "bg-[#121418] border-[#2d323f] text-slate-400 hover:border-slate-600"
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                        m.status === "connected" ? "bg-emerald-400" : "bg-slate-600"
+                      }`}
+                    />
+                    <span className="text-xs font-semibold">{mailboxLabel(m)}</span>
+                    {m.isDefault && (
+                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-teal-500/20 text-teal-300 font-bold uppercase">
+                        Default
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              {selectedMailboxId && (
+                <div className="flex items-center gap-3 pt-0.5">
+                  {!mailCfg?.isDefault && (
+                    <button
+                      type="button"
+                      onClick={() => handleSetDefaultMailbox(selectedMailboxId)}
+                      className="text-[10px] text-teal-400 hover:text-teal-300 font-semibold"
+                    >
+                      Set as default mailbox
+                    </button>
+                  )}
+                  {(activeTenant?.webmailConfigs?.length || 0) > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteMailbox(selectedMailboxId)}
+                      className="text-[10px] text-rose-400 hover:text-rose-300 font-semibold flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Disconnect this mailbox
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Quick Provider Presets */}
             <div className="space-y-1.5">
               <label className="block text-slate-300 font-semibold text-[11px]">Quick Setup Presets</label>
@@ -977,6 +1113,17 @@ export const SettingsView: React.FC = () => {
             {/* Webmail Form */}
             <form onSubmit={handleSaveWebmail} className="space-y-4 pt-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-slate-300 font-semibold mb-1">Mailbox Label</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Sales Inbox, Support, Founder"
+                    value={mailLabel}
+                    onChange={(e) => setMailLabel(e.target.value)}
+                    className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">
                     Email Account Address <span className="text-rose-400">*</span>

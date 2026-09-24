@@ -598,7 +598,12 @@ async function performTenantRowSync(tenant: Tenant): Promise<void> {
         tax_id: tenant.taxId,
         commission_rate: tenant.commissionRate,
         stripe_config: tenant.stripeConfig,
-        webmail_config: tenant.webmailConfig,
+        // Stored as a JSON array (one entry per connected mailbox) now that
+        // a tenant can have more than one -- see the migration note above
+        // DEFAULT_WEBMAIL_CONFIG. The column itself is unchanged (still the
+        // same `webmail_config jsonb` column from 0001_aarpex_schema.sql),
+        // it just now holds an array instead of a single object.
+        webmail_config: tenant.webmailConfigs || [],
       })
       .eq("id", tenant.id);
     if (error) {
@@ -618,7 +623,12 @@ const DEFAULT_STRIPE_CONFIG: TenantStripeConfig = {
   status: "unconfigured",
 };
 
-const DEFAULT_WEBMAIL_CONFIG: TenantWebmailConfig = {
+// Field defaults used to backfill a mailbox entry read back from Supabase
+// (older rows, or ones created before a field existed, may be missing some
+// of these). Deliberately has no `id` -- see webmailConfigsFromRow, which
+// assigns one per entry as it maps the raw jsonb array/object into
+// TenantWebmailConfig[].
+const DEFAULT_WEBMAIL_CONFIG: Omit<TenantWebmailConfig, "id"> = {
   isEnabled: false,
   provider: "hostinger",
   email: "",
@@ -632,6 +642,43 @@ const DEFAULT_WEBMAIL_CONFIG: TenantWebmailConfig = {
   imapEncryption: "SSL",
   status: "unconfigured",
 };
+
+/**
+ * Reconstructs a tenant's mailbox list from the raw `webmail_config` jsonb
+ * column, handling three shapes it may hold:
+ *  - an array (the current shape) -- each entry backfilled with defaults
+ *    and given a stable id/label/isDefault if it's somehow missing one.
+ *  - a single object (the pre-multi-mailbox shape, from before this
+ *    feature) -- migrated in place into a one-item array so a tenant that
+ *    already had a mailbox configured doesn't lose it.
+ *  - empty/null -- no mailboxes connected yet.
+ */
+function webmailConfigsFromRow(raw: unknown): TenantWebmailConfig[] {
+  if (Array.isArray(raw)) {
+    const configs: TenantWebmailConfig[] = raw.map((entry: any, idx: number) => ({
+      ...DEFAULT_WEBMAIL_CONFIG,
+      ...(entry || {}),
+      id: entry?.id || `mbx_legacy_${idx}`,
+      label: entry?.label || (idx === 0 ? "Primary Mailbox" : `Mailbox ${idx + 1}`),
+    }));
+    if (configs.length > 0 && !configs.some((m) => m.isDefault)) {
+      configs[0] = { ...configs[0], isDefault: true };
+    }
+    return configs;
+  }
+  if (raw && typeof raw === "object" && Object.keys(raw).length > 0) {
+    return [
+      {
+        ...DEFAULT_WEBMAIL_CONFIG,
+        ...(raw as object),
+        id: "mbx_legacy_primary",
+        label: "Primary Mailbox",
+        isDefault: true,
+      },
+    ];
+  }
+  return [];
+}
 
 /**
  * Fetches every workspace the signed-in user belongs to, as full local
@@ -673,10 +720,7 @@ export async function fetchMyTenantsFull(): Promise<Tenant[] | null> {
         ...DEFAULT_STRIPE_CONFIG,
         ...(r.stripe_config || {}),
       };
-      const webmailConfig: TenantWebmailConfig = {
-        ...DEFAULT_WEBMAIL_CONFIG,
-        ...(r.webmail_config || {}),
-      };
+      const webmailConfigs = webmailConfigsFromRow(r.webmail_config);
       const tenant: Tenant = {
         id: r.id,
         name: r.name,
@@ -700,7 +744,7 @@ export async function fetchMyTenantsFull(): Promise<Tenant[] | null> {
         commissionRate: r.commission_rate ?? 10,
         members: membersByTenant.get(r.id) || [],
         stripeConfig,
-        webmailConfig,
+        webmailConfigs,
       };
       return tenant;
     });

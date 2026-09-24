@@ -445,6 +445,10 @@ export interface EmailCampaign {
   // auto-paused once they show up here.
   repliedAudienceIds?: string[];
   lastReplyCheckAt?: string;
+  // Which of the workspace's connected mailboxes sends this campaign's
+  // emails and is scanned for its replies. Unset falls back to the
+  // tenant's default mailbox (see Tenant.webmailConfigs).
+  mailboxId?: string;
 }
 
 export interface Deal {
@@ -747,6 +751,16 @@ export interface TenantStripeConfig {
 }
 
 export interface TenantWebmailConfig {
+  /** Stable id for this mailbox within the tenant -- used to pick a sender
+   * when composing a single email or a campaign (see EmailCampaign.mailboxId)
+   * now that a workspace can connect more than one mailbox. */
+  id: string;
+  /** Friendly name shown in mailbox pickers, e.g. "Sales Inbox". Falls back
+   * to the email address itself when not set. */
+  label?: string;
+  /** Exactly one mailbox per tenant is the default -- used when composing or
+   * building a campaign without explicitly choosing a mailbox. */
+  isDefault?: boolean;
   isEnabled: boolean;
   provider: "hostinger" | "cpanel" | "gmail" | "outlook" | "custom";
   email: string;
@@ -845,7 +859,11 @@ export interface Tenant {
   commissionRate: number;
   members: TenantMember[];
   stripeConfig: TenantStripeConfig;
-  webmailConfig: TenantWebmailConfig;
+  /** Every mailbox this workspace has connected. Each one supports both
+   * sending (SMTP) and receiving (IMAP reply detection). Compose and Email
+   * Marketing campaigns pick a specific mailbox to send from (falling back
+   * to the one with isDefault:true); see TenantWebmailConfig.id. */
+  webmailConfigs: TenantWebmailConfig[];
   supabaseConfig?: SupabaseConfig;
   auditLog?: AuditLogEntry[];
 }

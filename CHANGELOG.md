@@ -13,6 +13,43 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-09-24
+### Added
+- **Multiple sending mailboxes.** A workspace is no longer limited to one
+  connected mailbox -- Settings > Hostinger & Webmail now manages a list of
+  mailboxes, each with its own SMTP (send) and IMAP (receive/reply-check)
+  credentials, provider preset, signature, and connection status. Add,
+  edit, disconnect, and set-default all live in a new mailbox picker above
+  the existing connection form, which now edits whichever mailbox is
+  selected instead of a single tenant-wide config.
+  - Composing a single email (`EmailComposeModal`) shows a "From" mailbox
+    dropdown whenever more than one is connected, defaulting to the
+    workspace's default mailbox.
+  - Creating an Email Marketing campaign lets you pick which mailbox sends
+    it and is scanned for replies (`EmailCampaign.mailboxId`); the
+    campaign's send/follow-up/reply-check actions all use that one mailbox
+    consistently for its lifetime.
+  - The Inbox view's "mailbox connected" gate now checks whether *any*
+    connected mailbox has IMAP credentials, not just a single one.
+- Invoice templates and the invoice detail view now show the workspace's
+  *default* mailbox's email as the billing contact address, matching how
+  it always worked when there was only one mailbox.
+
+### Changed
+- `Tenant.webmailConfig` (a single object) is now `Tenant.webmailConfigs`
+  (an array); each entry gained `id`, `label`, and `isDefault`. Existing
+  workspaces are migrated automatically and losslessly on next load: the
+  `webmail_config` jsonb column on `tenants` is unchanged (no new
+  migration needed), it simply now holds an array instead of a single
+  object -- `fetchMyTenantsFull` detects the old single-object shape and
+  wraps it into a one-item default mailbox the first time it's read.
+- New helper module `src/lib/webmail.ts` (`getMailboxById`,
+  `getDefaultMailbox`, `mailboxLabel`) centralizes "which mailbox should
+  this action use" so every consumer (compose, campaigns, reply-checking,
+  invoice display, the Settings mailbox list) resolves it the same way:
+  explicit id if given and still present, else the tenant's default
+  mailbox, else the first mailbox on file.
+
 ## [1.15.0] - 2026-09-23
 ### Added
 - **"Generate from a link" in the Knowledge Base entry editor.** Paste a
