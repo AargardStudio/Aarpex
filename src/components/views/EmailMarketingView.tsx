@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useCRM } from "../../context/CRMContext";
-import { EmailCampaign, EmailFrequency, EmailCampaignTechnique, EmailStep, SalesTechnique } from "../../types";
+import { EmailCampaign, EmailFrequency, EmailCampaignTechnique, EmailStep, EmailStepDeliveryResult, SalesTechnique } from "../../types";
 import { apiFetch } from "../../lib/apiClient";
 import { computeProductMatches } from "../../lib/productMatching";
 import { getMailboxById, mailboxLabel } from "../../lib/webmail";
@@ -83,6 +83,62 @@ interface Recipient {
   firstName: string;
   company: string;
   jobTitle: string;
+}
+
+// Sends one email and reports back what actually happened instead of
+// assuming success. /api/webmail/send-email only rejects on a genuine
+// network failure -- an SMTP/auth error still comes back as a normal 2xx-or-4xx
+// HTTP response, so we have to read res.ok + the JSON body's `success` flag,
+// not just catch().
+async function sendCampaignEmail(
+  mailCfg: ReturnType<typeof getMailboxById>,
+  currentUser: { email?: string; name?: string } | null | undefined,
+  activeTenant: { name?: string } | null | undefined,
+  recipient: Recipient,
+  subject: string,
+  body: string
+): Promise<EmailStepDeliveryResult> {
+  const sentAt = new Date().toISOString();
+  try {
+    const res = await apiFetch("/api/webmail/send-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: mailCfg?.email || currentUser?.email,
+        displayName: mailCfg?.displayName || currentUser?.name || activeTenant?.name,
+        password: mailCfg?.password || "",
+        smtpHost: mailCfg?.smtpHost || "smtp.hostinger.com",
+        smtpPort: mailCfg?.smtpPort || 465,
+        to: recipient.email,
+        subject,
+        body,
+      }),
+    });
+    let data: any = null;
+    try {
+      data = await res.json();
+    } catch {
+      // Non-JSON body -- fall through and treat as a failure below.
+    }
+    if (res.ok && data?.success) {
+      return { recipientId: recipient.id, email: recipient.email, success: true, messageId: data.messageId, sentAt };
+    }
+    return {
+      recipientId: recipient.id,
+      email: recipient.email,
+      success: false,
+      error: data?.error || `Server responded ${res.status} ${res.statusText}`.trim(),
+      sentAt,
+    };
+  } catch (err: any) {
+    return {
+      recipientId: recipient.id,
+      email: recipient.email,
+      success: false,
+      error: err?.message || "Network error -- request never reached the server",
+      sentAt,
+    };
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -196,6 +252,10 @@ const CampaignCard: React.FC<{
   onToggleStatus: () => void;
 }> = ({ campaign, onOpen, onDelete, onToggleStatus }) => {
   const sentCount = campaign.steps.filter((s) => s.status === "Sent").length;
+  const failedDeliveryCount = campaign.steps.reduce(
+    (sum, s) => sum + (s.deliveryResults || []).filter((r) => !r.success).length,
+    0
+  );
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col gap-3">
@@ -218,6 +278,12 @@ const CampaignCard: React.FC<{
           {campaign.frequency} cadence &bull; {sentCount}/{campaign.steps.length} sent
         </span>
       </div>
+
+      {failedDeliveryCount > 0 && (
+        <div className="text-[11px] font-semibold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5">
+          {failedDeliveryCount} send{failedDeliveryCount === 1 ? "" : "s"} failed — open to review
+        </div>
+      )}
 
       <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100">
         <button
@@ -412,39 +478,46 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
         // Send step 1 to every recipient right now (personalizing merge tags
         // per recipient), and compute the due dates for the remaining steps.
         const step1 = steps[0];
-        await Promise.all(
+        const deliveryResults = await Promise.all(
           recipients.map((r) =>
-            apiFetch("/api/webmail/send-email", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                email: mailCfg?.email || currentUser?.email,
-                displayName: mailCfg?.displayName || currentUser?.name || activeTenant?.name,
-                password: mailCfg?.password || "",
-                smtpHost: mailCfg?.smtpHost || "smtp.hostinger.com",
-                smtpPort: mailCfg?.smtpPort || 465,
-                to: r.email,
-                subject: mergeTags(step1.subject, r),
-                body: mergeTags(step1.body, r),
-              }),
-            }).catch(() => null)
+            sendCampaignEmail(mailCfg, currentUser, activeTenant, r, mergeTags(step1.subject, r), mergeTags(step1.body, r))
           )
         );
+        const succeeded = deliveryResults.filter((d) => d.success).length;
+        const failed = deliveryResults.length - succeeded;
+        const today = new Date().toISOString().split("T")[0];
 
         addActivity({
           type: "Email",
-          date: new Date().toISOString().split("T")[0],
+          date: today,
           time: new Date().toTimeString().slice(0, 5),
           user: currentUser?.name || "System",
-          description: `Launched email campaign "${name}" — sent initial email to ${recipients.length} ${audienceType.toLowerCase()}`,
-          outcome: "Delivered",
-          nextAction: steps.length > 1 ? `${steps.length - 1} follow-up(s) scheduled` : "Monitor responses",
+          description:
+            failed === 0
+              ? `Launched email campaign "${name}" — delivered to all ${succeeded} ${audienceType.toLowerCase()}`
+              : `Launched email campaign "${name}" — ${succeeded} delivered, ${failed} failed out of ${recipients.length} ${audienceType.toLowerCase()}`,
+          outcome: failed === 0 ? "Delivered" : succeeded === 0 ? "Failed" : "Partially Delivered",
+          nextAction:
+            failed > 0
+              ? "Review failed sends in campaign details and retry"
+              : steps.length > 1
+              ? `${steps.length - 1} follow-up(s) scheduled`
+              : "Monitor responses",
         });
 
         steps = steps.map((s, i) => {
           if (i === 0) {
-            return { ...s, status: "Sent" as const, sentDate: new Date().toISOString().split("T")[0] };
+            return {
+              ...s,
+              status: succeeded > 0 ? ("Sent" as const) : ("Failed" as const),
+              sentDate: today,
+              deliveryResults,
+            };
           }
+          // Only schedule follow-ups once the initial send actually reached
+          // someone -- no point queuing a sequence for recipients step 1
+          // never got to.
+          if (succeeded === 0) return s;
           const cumulativeDelay = steps.slice(1, i + 1).reduce((sum, st) => sum + (st.delayDays || frequencyDays), 0);
           return { ...s, status: "Scheduled" as const, scheduledDate: addDaysToToday(cumulativeDelay) };
         });
@@ -895,31 +968,33 @@ const CampaignDetailModal: React.FC<{ campaign: EmailCampaign; onClose: () => vo
 
   const today = new Date().toISOString().split("T")[0];
 
-  const sendStep = async (step: EmailStep) => {
+  // targetRecipients lets "Retry" re-send only to whoever previously failed,
+  // instead of hitting everyone (including already-successful recipients)
+  // again -- see the "Retry Failed" button below.
+  const sendStep = async (step: EmailStep, targetRecipients: Recipient[] = recipients) => {
     setSendingStepId(step.id);
     try {
       const mailCfg = getMailboxById(activeTenant, campaign.mailboxId);
-      await Promise.all(
-        recipients.map((r) =>
-          apiFetch("/api/webmail/send-email", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              email: mailCfg?.email || currentUser?.email,
-              displayName: mailCfg?.displayName || currentUser?.name || activeTenant?.name,
-              password: mailCfg?.password || "",
-              smtpHost: mailCfg?.smtpHost || "smtp.hostinger.com",
-              smtpPort: mailCfg?.smtpPort || 465,
-              to: r.email,
-              subject: mergeTags(step.subject, r),
-              body: mergeTags(step.body, r),
-            }),
-          }).catch(() => null)
+      const newResults = await Promise.all(
+        targetRecipients.map((r) =>
+          sendCampaignEmail(mailCfg, currentUser, activeTenant, r, mergeTags(step.subject, r), mergeTags(step.body, r))
         )
       );
+      const succeeded = newResults.filter((d) => d.success).length;
+      const failed = newResults.length - succeeded;
+
+      // Merge into any prior results for this step -- a retry of just the
+      // failed recipients shouldn't erase the record of who already got it.
+      const priorResults = (step.deliveryResults || []).filter(
+        (r) => !newResults.some((nr) => nr.recipientId === r.recipientId)
+      );
+      const deliveryResults = [...priorResults, ...newResults];
+      const overallSucceeded = deliveryResults.filter((d) => d.success).length;
 
       const updatedSteps = campaign.steps.map((s) =>
-        s.id === step.id ? { ...s, status: "Sent" as const, sentDate: today } : s
+        s.id === step.id
+          ? { ...s, status: overallSucceeded > 0 ? ("Sent" as const) : ("Failed" as const), sentDate: today, deliveryResults }
+          : s
       );
       const allSent = updatedSteps.every((s) => s.status === "Sent");
       updateEmailCampaign(campaign.id, {
@@ -932,9 +1007,12 @@ const CampaignDetailModal: React.FC<{ campaign: EmailCampaign; onClose: () => vo
         date: today,
         time: new Date().toTimeString().slice(0, 5),
         user: currentUser?.name || "System",
-        description: `Sent "${campaign.name}" step ${step.stepNumber} to ${recipients.length} recipient(s)`,
-        outcome: "Delivered",
-        nextAction: allSent ? "Sequence complete" : "Next follow-up scheduled",
+        description:
+          failed === 0
+            ? `Sent "${campaign.name}" step ${step.stepNumber} — delivered to all ${succeeded} recipient(s)`
+            : `Sent "${campaign.name}" step ${step.stepNumber} — ${succeeded} delivered, ${failed} failed out of ${targetRecipients.length} recipient(s)`,
+        outcome: failed === 0 ? "Delivered" : succeeded === 0 ? "Failed" : "Partially Delivered",
+        nextAction: failed > 0 ? "Review failed sends below and retry" : allSent ? "Sequence complete" : "Next follow-up scheduled",
       });
     } finally {
       setSendingStepId(null);
@@ -975,6 +1053,9 @@ const CampaignDetailModal: React.FC<{ campaign: EmailCampaign; onClose: () => vo
         <div className="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar">
           {campaign.steps.map((s) => {
             const isDue = s.status === "Scheduled" && s.scheduledDate && s.scheduledDate <= today;
+            const results = s.deliveryResults || [];
+            const failedResults = results.filter((r) => !r.success);
+            const succeededCount = results.length - failedResults.length;
             return (
               <div key={s.id} className="border border-[#2d323f] rounded-lg p-3.5 bg-[#121418]">
                 <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -983,25 +1064,81 @@ const CampaignDetailModal: React.FC<{ campaign: EmailCampaign; onClose: () => vo
                     <span className="text-[10px] text-slate-500 font-normal">({s.technique})</span>
                   </div>
                   <span
-                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                      s.status === "Sent"
+                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap ${
+                      s.status === "Sent" && failedResults.length === 0
                         ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                        : s.status === "Sent" || s.status === "Failed"
+                        ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
                         : isDue
                         ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
                         : "bg-slate-700/40 text-slate-400 border-slate-600/40"
                     }`}
                   >
-                    {s.status === "Sent" ? `Sent ${s.sentDate}` : isDue ? "Due today" : s.status === "Scheduled" ? `Scheduled ${s.scheduledDate}` : "Draft"}
+                    {results.length > 0
+                      ? failedResults.length === 0
+                        ? `Delivered to all ${succeededCount} · ${s.sentDate}`
+                        : `${succeededCount} delivered, ${failedResults.length} failed · ${s.sentDate}`
+                      : isDue
+                      ? "Due today"
+                      : s.status === "Scheduled"
+                      ? `Scheduled ${s.scheduledDate}`
+                      : "Draft"}
                   </span>
                 </div>
                 <div className="text-slate-300 font-medium mb-1">{s.subject}</div>
                 <p className="text-slate-500 whitespace-pre-wrap line-clamp-3">{s.body}</p>
-                {s.status !== "Sent" && recipients.length > 0 && (
+
+                {/* Per-recipient delivery breakdown -- only worth showing once
+                    a send has actually been attempted for this step. */}
+                {results.length > 0 && (
+                  <div className="mt-2.5 border-t border-[#2d323f] pt-2.5 space-y-1">
+                    {failedResults.length > 0 && (
+                      <div className="text-[10px] font-semibold text-rose-400 mb-1">
+                        {failedResults.length} send{failedResults.length === 1 ? "" : "s"} failed:
+                      </div>
+                    )}
+                    {results.map((r) => (
+                      <div
+                        key={r.recipientId}
+                        className={`flex items-center justify-between gap-2 text-[10.5px] px-2 py-1 rounded ${
+                          r.success ? "text-slate-500" : "bg-rose-500/5 text-rose-300"
+                        }`}
+                      >
+                        <span className="truncate">{r.email}</span>
+                        <span className="shrink-0 flex items-center gap-1">
+                          {r.success ? (
+                            <>
+                              <Check className="w-2.5 h-2.5 text-emerald-500" />
+                              <span className="text-emerald-500/80">Delivered</span>
+                            </>
+                          ) : (
+                            <span title={r.error} className="truncate max-w-[220px]">
+                              {r.error || "Failed"}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {(s.status !== "Sent" || failedResults.length > 0) && recipients.length > 0 && (
                   <button
-                    onClick={() => sendStep(s)}
+                    onClick={() => {
+                      if (failedResults.length > 0) {
+                        // Retry: only the recipients whose last attempt failed.
+                        const retryIds = new Set(failedResults.map((r) => r.recipientId));
+                        sendStep(
+                          s,
+                          recipients.filter((r) => retryIds.has(r.id))
+                        );
+                      } else {
+                        sendStep(s);
+                      }
+                    }}
                     disabled={sendingStepId === s.id}
                     className={`mt-2.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 ${
-                      isDue || s.status === "Draft"
+                      isDue || s.status === "Draft" || failedResults.length > 0
                         ? "bg-teal-600 hover:bg-teal-500 text-white"
                         : "bg-[#252a36] hover:bg-[#2f3544] text-slate-300"
                     } disabled:opacity-60`}
@@ -1011,7 +1148,13 @@ const CampaignDetailModal: React.FC<{ campaign: EmailCampaign; onClose: () => vo
                     ) : (
                       <Send className="w-3 h-3" />
                     )}
-                    <span>{sendingStepId === s.id ? "Sending..." : "Send Now"}</span>
+                    <span>
+                      {sendingStepId === s.id
+                        ? "Sending..."
+                        : failedResults.length > 0
+                        ? `Retry ${failedResults.length} Failed`
+                        : "Send Now"}
+                    </span>
                   </button>
                 )}
               </div>

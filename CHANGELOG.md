@@ -13,6 +13,28 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.20.1] - 2026-09-25
+
+### Fixed
+- **Email Marketing campaign sends no longer silently swallow failures.**
+  Previously, sending a campaign step fired every recipient's email at once
+  and immediately marked the whole batch "Sent"/"Delivered" without ever
+  checking whether each individual send actually succeeded -- a failed send
+  (bad address, SMTP/auth error, timeout) was caught and discarded, so a
+  campaign could claim "sent to 10 recipients" when some had silently
+  failed, with no way to tell which.
+- Each send to `/api/webmail/send-email` is now inspected for its actual
+  result (HTTP status + response body), not just whether the request threw.
+- Campaign steps now store a per-recipient delivery result (delivered /
+  failed + the actual error message) and the Campaign Detail view shows
+  that breakdown under each step, plus a "Retry Failed" action that
+  re-sends only to the recipients that failed -- not everyone again.
+- The campaign list now flags any campaign with failed sends so it's
+  visible without opening it.
+- The logged activity for a send now reflects the real outcome
+  ("Delivered" / "Partially Delivered" / "Failed") instead of always
+  "Delivered".
+
 ## [1.20.0] - 2026-09-25
 
 ### Added

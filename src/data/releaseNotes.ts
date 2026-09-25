@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.20.1",
+    date: "2026-09-25",
+    headline: "Know Exactly Who Your Campaign Actually Reached",
+    tagline: "Email Marketing now tells you who was delivered and who failed -- instead of just assuming everyone got it.",
+    highlights: [
+      {
+        title: "Real delivery tracking, not a guess",
+        description: "Sending a campaign step now checks each recipient's actual result instead of marking the whole batch \"Sent\" regardless of what happened.",
+      },
+      {
+        title: "See exactly who failed, and why",
+        description: "Open a campaign to see a per-recipient breakdown under each step -- delivered vs. failed, with the real error message for anyone that didn't go through.",
+      },
+      {
+        title: "Retry just the failures",
+        description: "A new \"Retry Failed\" button re-sends only to the recipients who didn't get it the first time -- no duplicate emails to people who already received it.",
+      },
+    ],
+  },
+  {
     version: "1.20.0",
     date: "2026-09-25",
     headline: "Contact & Lead Profiles, With AI Built In",

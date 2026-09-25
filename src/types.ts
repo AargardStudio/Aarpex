@@ -428,6 +428,18 @@ export type EmailFrequency = "Daily" | "Weekly" | "Biweekly" | "Monthly" | "Cust
 export type EmailStepStatus = "Draft" | "Scheduled" | "Sent" | "Failed";
 export type EmailCampaignStatus = "Draft" | "Active" | "Paused" | "Completed";
 
+// Per-recipient outcome of a step's most recent send attempt -- captured so
+// "Sent" reflects what actually happened instead of just "we fired the
+// requests and didn't wait to see". Overwritten each time a step is (re)sent.
+export interface EmailStepDeliveryResult {
+  recipientId: string;
+  email: string;
+  success: boolean;
+  error?: string;
+  messageId?: string;
+  sentAt: string; // ISO timestamp
+}
+
 export interface EmailStep {
   id: string;
   stepNumber: number; // 1 = initial send, 2+ = follow-ups
@@ -440,6 +452,9 @@ export interface EmailStep {
   status: EmailStepStatus;
   scheduledDate?: string; // ISO date this step becomes due to send
   sentDate?: string;
+  // Set once a send attempt completes -- one entry per recipient targeted,
+  // true success/failure per the actual API response (not assumed).
+  deliveryResults?: EmailStepDeliveryResult[];
 }
 
 export interface EmailCampaign {
