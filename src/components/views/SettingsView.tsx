@@ -118,11 +118,16 @@ export const SettingsView: React.FC = () => {
   const [stripeVerifyResult, setStripeVerifyResult] = useState<any>(null);
   const [stripeSaveSuccess, setStripeSaveSuccess] = useState(false);
 
-  // WhatsApp Business (Meta Cloud API) State -- one connection per tenant.
+  // WhatsApp Business State -- one connection per tenant, via either the
+  // Meta Cloud API directly or Twilio's WhatsApp API in front of it.
   const waCfg = activeTenant?.whatsappConfig || {};
+  const [waProvider, setWaProvider] = useState<"meta" | "twilio">(waCfg.provider || "meta");
   const [waAccessToken, setWaAccessToken] = useState(waCfg.accessToken || "");
   const [waPhoneNumberId, setWaPhoneNumberId] = useState(waCfg.phoneNumberId || "");
   const [waBusinessAccountId, setWaBusinessAccountId] = useState(waCfg.businessAccountId || "");
+  const [waTwilioAccountSid, setWaTwilioAccountSid] = useState(waCfg.twilioAccountSid || "");
+  const [waTwilioAuthToken, setWaTwilioAuthToken] = useState(waCfg.twilioAuthToken || "");
+  const [waTwilioWhatsAppNumber, setWaTwilioWhatsAppNumber] = useState(waCfg.twilioWhatsAppNumber || "");
   const [showWaToken, setShowWaToken] = useState(false);
   const [isVerifyingWa, setIsVerifyingWa] = useState(false);
   const [waVerifyResult, setWaVerifyResult] = useState<any>(null);
@@ -174,9 +179,13 @@ export const SettingsView: React.FC = () => {
       setStripeVerifyResult(null);
 
       const w = activeTenant.whatsappConfig || {};
+      setWaProvider(w.provider || "meta");
       setWaAccessToken(w.accessToken || "");
       setWaPhoneNumberId(w.phoneNumberId || "");
       setWaBusinessAccountId(w.businessAccountId || "");
+      setWaTwilioAccountSid(w.twilioAccountSid || "");
+      setWaTwilioAuthToken(w.twilioAuthToken || "");
+      setWaTwilioWhatsAppNumber(w.twilioWhatsAppNumber || "");
       setWaVerifyResult(null);
 
       // Jump to this workspace's default mailbox -- the per-mailbox effect
@@ -296,7 +305,7 @@ export const SettingsView: React.FC = () => {
     setTimeout(() => setStripeSaveSuccess(false), 3000);
   };
 
-  // Verify WhatsApp Business connection via Backend (Meta Graph API)
+  // Verify WhatsApp Business connection via Backend (Meta Graph API or Twilio)
   const handleVerifyWhatsApp = async () => {
     setIsVerifyingWa(true);
     setWaVerifyResult(null);
@@ -304,18 +313,32 @@ export const SettingsView: React.FC = () => {
       const res = await apiFetch("/api/whatsapp/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accessToken: waAccessToken.trim(),
-          phoneNumberId: waPhoneNumberId.trim(),
-        }),
+        body: JSON.stringify(
+          waProvider === "twilio"
+            ? {
+                provider: "twilio",
+                twilioAccountSid: waTwilioAccountSid.trim(),
+                twilioAuthToken: waTwilioAuthToken.trim(),
+                twilioWhatsAppNumber: waTwilioWhatsAppNumber.trim(),
+              }
+            : {
+                provider: "meta",
+                accessToken: waAccessToken.trim(),
+                phoneNumberId: waPhoneNumberId.trim(),
+              }
+        ),
       });
       const data = await res.json();
       setWaVerifyResult(data);
       if (data.success) {
         updateWhatsAppConfig({
+          provider: waProvider,
           accessToken: waAccessToken.trim(),
           phoneNumberId: waPhoneNumberId.trim(),
           businessAccountId: waBusinessAccountId.trim(),
+          twilioAccountSid: waTwilioAccountSid.trim(),
+          twilioAuthToken: waTwilioAuthToken.trim(),
+          twilioWhatsAppNumber: waTwilioWhatsAppNumber.trim(),
           isEnabled: true,
           status: "connected",
           displayPhoneNumber: data.displayPhoneNumber,
@@ -323,7 +346,7 @@ export const SettingsView: React.FC = () => {
           lastVerifiedAt: data.verifiedAt,
           statusMessage: undefined,
         });
-        addAuditLogEntry("Verified WhatsApp Business connection", data.verifiedName || data.displayPhoneNumber, "settings");
+        addAuditLogEntry("Verified WhatsApp Business connection", `${waProvider === "twilio" ? "Twilio" : "Meta"}: ${data.verifiedName || data.displayPhoneNumber}`, "settings");
       } else {
         updateWhatsAppConfig({ status: "error", statusMessage: data.error });
       }
@@ -340,14 +363,22 @@ export const SettingsView: React.FC = () => {
   // Save WhatsApp Business Config
   const handleSaveWhatsApp = (e: React.FormEvent) => {
     e.preventDefault();
+    const isConfigured =
+      waProvider === "twilio"
+        ? waTwilioAccountSid.trim() && waTwilioAuthToken.trim() && waTwilioWhatsAppNumber.trim()
+        : waAccessToken.trim() && waPhoneNumberId.trim();
     updateWhatsAppConfig({
+      provider: waProvider,
       accessToken: waAccessToken.trim(),
       phoneNumberId: waPhoneNumberId.trim(),
       businessAccountId: waBusinessAccountId.trim(),
+      twilioAccountSid: waTwilioAccountSid.trim(),
+      twilioAuthToken: waTwilioAuthToken.trim(),
+      twilioWhatsAppNumber: waTwilioWhatsAppNumber.trim(),
       isEnabled: true,
-      status: waAccessToken.trim() && waPhoneNumberId.trim() ? "connected" : "unconfigured",
+      status: isConfigured ? "connected" : "unconfigured",
     });
-    addAuditLogEntry("Updated WhatsApp Business configuration", `Phone Number ID: ${waPhoneNumberId.trim() || "Unset"}`, "settings");
+    addAuditLogEntry("Updated WhatsApp Business configuration", `Provider: ${waProvider === "twilio" ? "Twilio" : "Meta Cloud API"}`, "settings");
     setWaSaveSuccess(true);
     setTimeout(() => setWaSaveSuccess(false), 3000);
   };
@@ -1365,30 +1396,56 @@ export const SettingsView: React.FC = () => {
         </div>
       )}
 
-      {/* TAB: WHATSAPP BUSINESS (META CLOUD API) */}
+      {/* TAB: WHATSAPP BUSINESS (META CLOUD API OR TWILIO) */}
       {activeTab === "whatsapp" && (
         <div className="space-y-5 animate-in fade-in duration-150">
           <div className="bg-[#181b21] p-6 rounded-2xl border border-[#2d323f] shadow-md space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-emerald-400" /> WhatsApp Business (Meta Cloud API)
+                  <MessageSquare className="w-4 h-4 text-emerald-400" /> WhatsApp Business
                 </h3>
                 <p className="text-slate-400 mt-0.5">
                   Connect a WhatsApp Business phone number so your team can message leads and contacts directly from
-                  their records. Requires a Meta developer app with the WhatsApp product enabled, a system user
-                  access token, and the phone number ID from your WhatsApp Business Account.
+                  their records -- either directly through Meta's Cloud API, or through Twilio's WhatsApp API.
                 </p>
               </div>
 
               <button
                 type="button"
                 onClick={handleVerifyWhatsApp}
-                disabled={isVerifyingWa || !waAccessToken.trim() || !waPhoneNumberId.trim()}
+                disabled={
+                  isVerifyingWa ||
+                  (waProvider === "meta"
+                    ? !waAccessToken.trim() || !waPhoneNumberId.trim()
+                    : !waTwilioAccountSid.trim() || !waTwilioAuthToken.trim() || !waTwilioWhatsAppNumber.trim())
+                }
                 className="px-3.5 py-1.5 bg-emerald-600/20 hover:bg-emerald-600 disabled:opacity-40 text-emerald-300 hover:text-white border border-emerald-500/40 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors self-start sm:self-auto"
               >
                 <RefreshCw className={`w-3 h-3 ${isVerifyingWa ? "animate-spin" : ""}`} />
-                <span>{isVerifyingWa ? "Verifying with Meta..." : "Test Connection"}</span>
+                <span>{isVerifyingWa ? `Verifying with ${waProvider === "twilio" ? "Twilio" : "Meta"}...` : "Test Connection"}</span>
+              </button>
+            </div>
+
+            {/* Provider Selector */}
+            <div className="flex items-center gap-2 p-1 bg-[#121418] border border-[#2d323f] rounded-lg w-fit">
+              <button
+                type="button"
+                onClick={() => setWaProvider("meta")}
+                className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-colors ${
+                  waProvider === "meta" ? "bg-emerald-600 text-white" : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Meta Cloud API
+              </button>
+              <button
+                type="button"
+                onClick={() => setWaProvider("twilio")}
+                className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition-colors ${
+                  waProvider === "twilio" ? "bg-emerald-600 text-white" : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Twilio
               </button>
             </div>
 
@@ -1424,55 +1481,110 @@ export const SettingsView: React.FC = () => {
             )}
 
             <form onSubmit={handleSaveWhatsApp} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="block text-slate-300 font-semibold text-[11px]">Meta Access Token</label>
-                <div className="relative">
-                  <input
-                    type={showWaToken ? "text" : "password"}
-                    value={waAccessToken}
-                    onChange={(e) => setWaAccessToken(e.target.value)}
-                    placeholder="EAAG..."
-                    className="w-full px-3 py-2 pr-10 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-emerald-400 font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowWaToken((v) => !v)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                  >
-                    {showWaToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              </div>
+              {waProvider === "meta" ? (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="block text-slate-300 font-semibold text-[11px]">Meta Access Token</label>
+                    <div className="relative">
+                      <input
+                        type={showWaToken ? "text" : "password"}
+                        value={waAccessToken}
+                        onChange={(e) => setWaAccessToken(e.target.value)}
+                        placeholder="EAAG..."
+                        className="w-full px-3 py-2 pr-10 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-emerald-400 font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowWaToken((v) => !v)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                      >
+                        {showWaToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block text-slate-300 font-semibold text-[11px]">Phone Number ID</label>
-                  <input
-                    type="text"
-                    value={waPhoneNumberId}
-                    onChange={(e) => setWaPhoneNumberId(e.target.value)}
-                    placeholder="1029384756..."
-                    className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-emerald-400 font-mono"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-slate-300 font-semibold text-[11px]">
-                    Business Account ID <span className="text-slate-500 font-normal">(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={waBusinessAccountId}
-                    onChange={(e) => setWaBusinessAccountId(e.target.value)}
-                    placeholder="1029384756..."
-                    className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-emerald-400 font-mono"
-                  />
-                </div>
-              </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="block text-slate-300 font-semibold text-[11px]">Phone Number ID</label>
+                      <input
+                        type="text"
+                        value={waPhoneNumberId}
+                        onChange={(e) => setWaPhoneNumberId(e.target.value)}
+                        placeholder="1029384756..."
+                        className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-emerald-400 font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-slate-300 font-semibold text-[11px]">
+                        Business Account ID <span className="text-slate-500 font-normal">(optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={waBusinessAccountId}
+                        onChange={(e) => setWaBusinessAccountId(e.target.value)}
+                        placeholder="1029384756..."
+                        className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-emerald-400 font-mono"
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="block text-slate-300 font-semibold text-[11px]">Twilio Account SID</label>
+                      <input
+                        type="text"
+                        value={waTwilioAccountSid}
+                        onChange={(e) => setWaTwilioAccountSid(e.target.value)}
+                        placeholder="AC..."
+                        className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-emerald-400 font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-slate-300 font-semibold text-[11px]">Twilio Auth Token</label>
+                      <div className="relative">
+                        <input
+                          type={showWaToken ? "text" : "password"}
+                          value={waTwilioAuthToken}
+                          onChange={(e) => setWaTwilioAuthToken(e.target.value)}
+                          placeholder="Auth token from Twilio console"
+                          className="w-full px-3 py-2 pr-10 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-emerald-400 font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowWaToken((v) => !v)}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                        >
+                          {showWaToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-slate-300 font-semibold text-[11px]">
+                      Twilio WhatsApp-Enabled Number
+                    </label>
+                    <input
+                      type="text"
+                      value={waTwilioWhatsAppNumber}
+                      onChange={(e) => setWaTwilioWhatsAppNumber(e.target.value)}
+                      placeholder="+14155238886"
+                      className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-emerald-400 font-mono"
+                    />
+                    <div className="text-[10px] text-slate-500">
+                      E.164 format, no "whatsapp:" prefix -- the Twilio Sandbox number or your own WhatsApp-approved
+                      Twilio number.
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-800/40 text-amber-200 text-[11px] leading-relaxed">
                 WhatsApp only allows free-text messages within 24 hours of the contact last messaging you. Outside
                 that window, sends must use a pre-approved message template -- the compose window in the CRM offers
-                both options.
+                both options
+                {waProvider === "twilio" ? " (a template here means a Twilio Content SID)." : "."}
               </div>
 
               <div className="pt-4 border-t border-[#282d39] flex items-center justify-between">

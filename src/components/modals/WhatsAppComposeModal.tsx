@@ -60,7 +60,11 @@ export const WhatsAppComposeModal: React.FC<WhatsAppComposeModalProps> = ({
   if (!isOpen) return null;
 
   const waConfig = activeTenant?.whatsappConfig;
-  const isConfigured = !!(waConfig?.accessToken && waConfig?.phoneNumberId);
+  const waProvider = waConfig?.provider || "meta";
+  const isConfigured =
+    waProvider === "twilio"
+      ? !!(waConfig?.twilioAccountSid && waConfig?.twilioAuthToken && waConfig?.twilioWhatsAppNumber)
+      : !!(waConfig?.accessToken && waConfig?.phoneNumberId);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,7 +75,7 @@ export const WhatsAppComposeModal: React.FC<WhatsAppComposeModalProps> = ({
     if (!isConfigured) {
       setResultStatus({
         success: false,
-        message: "WhatsApp Business isn't connected yet. Add your access token and phone number ID in Settings first.",
+        message: "WhatsApp Business isn't connected yet. Set it up in Settings first.",
       });
       return;
     }
@@ -80,11 +84,21 @@ export const WhatsAppComposeModal: React.FC<WhatsAppComposeModalProps> = ({
     setResultStatus(null);
 
     try {
-      const payload: Record<string, any> = {
-        accessToken: waConfig?.accessToken,
-        phoneNumberId: waConfig?.phoneNumberId,
-        to: to.trim(),
-      };
+      const payload: Record<string, any> =
+        waProvider === "twilio"
+          ? {
+              provider: "twilio",
+              twilioAccountSid: waConfig?.twilioAccountSid,
+              twilioAuthToken: waConfig?.twilioAuthToken,
+              twilioWhatsAppNumber: waConfig?.twilioWhatsAppNumber,
+              to: to.trim(),
+            }
+          : {
+              provider: "meta",
+              accessToken: waConfig?.accessToken,
+              phoneNumberId: waConfig?.phoneNumberId,
+              to: to.trim(),
+            };
       if (mode === "template") {
         payload.templateName = templateName.trim();
         payload.templateLanguage = templateLanguage.trim() || "en_US";
@@ -263,26 +277,30 @@ export const WhatsAppComposeModal: React.FC<WhatsAppComposeModalProps> = ({
           ) : (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <label className="w-28 font-semibold text-slate-400 text-right shrink-0">Template name:</label>
+                <label className="w-28 font-semibold text-slate-400 text-right shrink-0">
+                  {waProvider === "twilio" ? "Content SID:" : "Template name:"}
+                </label>
                 <input
                   type="text"
                   required
                   value={templateName}
                   onChange={(e) => setTemplateName(e.target.value)}
-                  placeholder="order_update"
+                  placeholder={waProvider === "twilio" ? "HX..." : "order_update"}
                   className="flex-1 px-3 py-1.5 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-emerald-400 font-mono"
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <label className="w-28 font-semibold text-slate-400 text-right shrink-0">Language code:</label>
-                <input
-                  type="text"
-                  value={templateLanguage}
-                  onChange={(e) => setTemplateLanguage(e.target.value)}
-                  placeholder="en_US"
-                  className="flex-1 px-3 py-1.5 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-emerald-400 font-mono"
-                />
-              </div>
+              {waProvider !== "twilio" && (
+                <div className="flex items-center gap-2">
+                  <label className="w-28 font-semibold text-slate-400 text-right shrink-0">Language code:</label>
+                  <input
+                    type="text"
+                    value={templateLanguage}
+                    onChange={(e) => setTemplateLanguage(e.target.value)}
+                    placeholder="en_US"
+                    className="flex-1 px-3 py-1.5 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-emerald-400 font-mono"
+                  />
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <label className="w-28 font-semibold text-slate-400 text-right shrink-0">Parameters:</label>
                 <input
@@ -294,7 +312,9 @@ export const WhatsAppComposeModal: React.FC<WhatsAppComposeModalProps> = ({
                 />
               </div>
               <div className="text-[10px] text-slate-500 pl-[7.5rem]">
-                Must match a template already approved for this WhatsApp number in Meta Business Manager.
+                {waProvider === "twilio"
+                  ? "Must be an approved Content Template's SID from the Twilio Console (Content Editor)."
+                  : "Must match a template already approved for this WhatsApp number in Meta Business Manager."}
               </div>
             </div>
           )}

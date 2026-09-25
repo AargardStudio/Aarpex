@@ -20,6 +20,11 @@ import {
   Link2,
   MessageSquare,
   PhoneCall,
+  Instagram,
+  Facebook,
+  Linkedin,
+  Twitter,
+  Globe2,
 } from "lucide-react";
 import { LeadConvertModal } from "../modals/LeadConvertModal";
 import { LeadImportModal } from "../leads/LeadImportModal";
@@ -32,6 +37,18 @@ const getLeadRating = (lead: Lead): "Hot" | "Warm" | "Cold" => {
   if (lead.leadScore >= 75) return "Hot";
   if (lead.leadScore >= 45) return "Warm";
   return "Cold";
+};
+
+// Icon + color for a lead's social links -- platform is free text (see
+// SocialLink in types.ts), so anything not recognized falls back to a
+// generic globe/link icon rather than being hidden.
+const socialIconFor = (platform: string): { Icon: typeof Instagram; className: string } => {
+  const p = platform.toLowerCase();
+  if (p.includes("instagram")) return { Icon: Instagram, className: "text-pink-600" };
+  if (p.includes("facebook")) return { Icon: Facebook, className: "text-blue-600" };
+  if (p.includes("linkedin")) return { Icon: Linkedin, className: "text-sky-700" };
+  if (p.includes("twitter") || p === "x" || p.includes("x /")) return { Icon: Twitter, className: "text-slate-800" };
+  return { Icon: Globe2, className: "text-slate-500" };
 };
 
 export const LeadsView: React.FC = () => {
@@ -273,6 +290,25 @@ export const LeadsView: React.FC = () => {
                                 <span>{lead.phone}</span>
                               </div>
                             )}
+                            {lead.socialLinks && lead.socialLinks.length > 0 && (
+                              <div className="flex items-center gap-1.5 mt-1">
+                                {lead.socialLinks.map((link) => {
+                                  const { Icon, className } = socialIconFor(link.platform);
+                                  return (
+                                    <a
+                                      key={link.id}
+                                      href={link.url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      title={`${link.platform}: ${link.url}`}
+                                      className={`${className} hover:opacity-70 transition-opacity`}
+                                    >
+                                      <Icon className="w-3 h-3" />
+                                    </a>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
 
                           {/* Temperature Badge */}
@@ -442,6 +478,25 @@ export const LeadsView: React.FC = () => {
                       </button>
                     )}
                     {lead.phone && <div className="text-slate-500 text-[11px]">{lead.phone}</div>}
+                    {lead.socialLinks && lead.socialLinks.length > 0 && (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        {lead.socialLinks.map((link) => {
+                          const { Icon, className } = socialIconFor(link.platform);
+                          return (
+                            <a
+                              key={link.id}
+                              href={link.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={`${link.platform}: ${link.url}`}
+                              className={`${className} hover:opacity-70 transition-opacity`}
+                            >
+                              <Icon className="w-3.5 h-3.5" />
+                            </a>
+                          );
+                        })}
+                      </div>
+                    )}
                   </td>
                   <td className="p-3">
                     <span className="px-2 py-0.5 bg-slate-100 text-slate-800 rounded-full font-semibold text-[10px]">

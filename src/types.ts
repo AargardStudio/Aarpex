@@ -270,6 +270,15 @@ export interface Contact {
   createdAt: string;
 }
 
+// A lead's social profile -- deliberately open-ended (platform is free
+// text, not a fixed union) so "any other social media link" beyond
+// Instagram/Facebook/LinkedIn/X/TikTok just works without a code change.
+export interface SocialLink {
+  id: string;
+  platform: string;
+  url: string;
+}
+
 export interface Lead {
   id: string;
   name: string;
@@ -279,6 +288,7 @@ export interface Lead {
   phone: string;
   whatsapp?: string;
   website?: string;
+  socialLinks?: SocialLink[];
   industry: string;
   // See Company.clientCategory -- same idea, set at the lead stage.
   clientCategory?: string;
@@ -800,13 +810,31 @@ export interface TenantWebmailConfig {
 // always works.
 export interface TenantWhatsAppConfig {
   isEnabled: boolean;
+  // Which API actually sends the message. Both talk to the same WhatsApp
+  // network -- this only picks how AarPex authenticates and which fields
+  // below are used. Defaults to "meta" for tenants configured before this
+  // field existed.
+  provider?: "meta" | "twilio";
+
+  // -- Meta Cloud API fields (provider: "meta") --
   // Meta Graph API access token (system user or temporary) for the
   // WhatsApp Business Account this phone number belongs to.
   accessToken?: string;
   phoneNumberId: string;
   businessAccountId?: string;
-  // Filled in by "Test Connection" from the Graph API's own record of the
-  // number -- not user-entered, so it always matches what Meta has on file.
+
+  // -- Twilio fields (provider: "twilio") -- Twilio's WhatsApp API sits in
+  // front of the same Meta WhatsApp network, authenticated with your
+  // Twilio Account SID/Auth Token instead of a Meta system-user token, and
+  // sent from a WhatsApp-enabled Twilio number (sandbox or a real number
+  // approved for WhatsApp in the Twilio console).
+  twilioAccountSid?: string;
+  twilioAuthToken?: string;
+  // E.164, no "whatsapp:" prefix -- that's added at send time.
+  twilioWhatsAppNumber?: string;
+
+  // Filled in by "Test Connection" from the provider's own record of the
+  // number -- not user-entered, so it always matches what's on file.
   displayPhoneNumber?: string;
   verifiedName?: string;
   lastVerifiedAt?: string;

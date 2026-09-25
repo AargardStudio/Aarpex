@@ -103,6 +103,11 @@ export const Company360Drawer: React.FC = () => {
   const [newActivityOutcome, setNewActivityOutcome] = useState("");
   const [newActivityNext, setNewActivityNext] = useState("");
 
+  // Timeline channel filter -- lets you isolate the customer's actual
+  // interaction history (sent Emails / WhatsApp messages) from calls,
+  // notes, and other manually logged activity.
+  const [timelineChannelFilter, setTimelineChannelFilter] = useState<"all" | "Email" | "WhatsApp">("all");
+
   // Inline comment state
   const [newCommentText, setNewCommentText] = useState("");
   const [replyingCommentId, setReplyingCommentId] = useState<string | null>(null);
@@ -954,37 +959,113 @@ export const Company360Drawer: React.FC = () => {
                 </div>
               </form>
 
+              {/* Customer Interaction History: filter the timeline down to
+                  just what was actually sent to this customer (Email /
+                  WhatsApp), separate from internally-logged calls & notes. */}
+              <div className="flex items-center gap-1.5">
+                {(
+                  [
+                    { id: "all", label: "All Activity", count: companyActivities.length },
+                    {
+                      id: "Email",
+                      label: "Emails Sent",
+                      count: companyActivities.filter((a) => a.type === "Email").length,
+                    },
+                    {
+                      id: "WhatsApp",
+                      label: "WhatsApp Sent",
+                      count: companyActivities.filter((a) => a.type === "WhatsApp").length,
+                    },
+                  ] as const
+                ).map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setTimelineChannelFilter(f.id)}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border flex items-center gap-1.5 transition-colors ${
+                      timelineChannelFilter === f.id
+                        ? "bg-slate-900 text-white border-slate-900"
+                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                    }`}
+                  >
+                    {f.id === "Email" && <Mail className="w-3 h-3" />}
+                    {f.id === "WhatsApp" && <MessageSquare className="w-3 h-3" />}
+                    <span>{f.label}</span>
+                    <span
+                      className={`px-1.5 rounded-full text-[10px] ${
+                        timelineChannelFilter === f.id ? "bg-white/20" : "bg-slate-100"
+                      }`}
+                    >
+                      {f.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
               {/* Feed of Activities */}
               <div className="relative pl-6 border-l-2 border-slate-200 space-y-6">
-                {companyActivities.map((act) => (
-                  <div key={act.id} className="relative group">
-                    <div className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-white border-2 border-indigo-600 group-hover:scale-110 transition-transform" />
-                    <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                          <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 text-[10px] font-semibold">
-                            {act.type}
-                          </span>
-                          <span>by {act.user}</span>
-                        </span>
-                        <span className="text-[11px] text-slate-400">
-                          {act.date} {act.time}
-                        </span>
+                {companyActivities
+                  .filter((act) => timelineChannelFilter === "all" || act.type === timelineChannelFilter)
+                  .map((act) => {
+                    const isEmail = act.type === "Email";
+                    const isWhatsApp = act.type === "WhatsApp";
+                    return (
+                      <div key={act.id} className="relative group">
+                        <div
+                          className={`absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-white border-2 group-hover:scale-110 transition-transform ${
+                            isEmail
+                              ? "border-indigo-600"
+                              : isWhatsApp
+                              ? "border-emerald-600"
+                              : "border-slate-400"
+                          }`}
+                        />
+                        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 ${
+                                  isEmail
+                                    ? "bg-indigo-50 text-indigo-700"
+                                    : isWhatsApp
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : "bg-slate-100 text-slate-700"
+                                }`}
+                              >
+                                {isEmail && <Mail className="w-3 h-3" />}
+                                {isWhatsApp && <MessageSquare className="w-3 h-3" />}
+                                {act.type}
+                              </span>
+                              <span>by {act.user}</span>
+                            </span>
+                            <span className="text-[11px] text-slate-400">
+                              {act.date} {act.time}
+                            </span>
+                          </div>
+                          <p className="text-slate-700 text-xs leading-relaxed">{act.description}</p>
+                          {act.outcome && (
+                            <div className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-1 rounded inline-block">
+                              Outcome: {act.outcome}
+                            </div>
+                          )}
+                          {act.nextAction && (
+                            <div className="text-[11px] text-slate-500 block">
+                              Next Action: <strong className="text-slate-700">{act.nextAction}</strong>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <p className="text-slate-700 text-xs leading-relaxed">{act.description}</p>
-                      {act.outcome && (
-                        <div className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-1 rounded inline-block">
-                          Outcome: {act.outcome}
-                        </div>
-                      )}
-                      {act.nextAction && (
-                        <div className="text-[11px] text-slate-500 block">
-                          Next Action: <strong className="text-slate-700">{act.nextAction}</strong>
-                        </div>
-                      )}
-                    </div>
+                    );
+                  })}
+                {companyActivities.filter(
+                  (act) => timelineChannelFilter === "all" || act.type === timelineChannelFilter
+                ).length === 0 && (
+                  <div className="text-center text-slate-400 text-xs py-6">
+                    {timelineChannelFilter === "all"
+                      ? "No activity logged yet."
+                      : `No ${timelineChannelFilter} messages sent to this customer yet.`}
                   </div>
-                ))}
+                )}
               </div>
             </div>
           )}

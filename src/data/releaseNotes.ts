@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.19.0",
+    date: "2026-09-25",
+    headline: "Interaction History, Twilio WhatsApp & Lead Socials",
+    tagline: "See what you've actually sent, send WhatsApp through Twilio too, and track a lead's social profiles.",
+    highlights: [
+      {
+        title: "Filter Company 360's Timeline by channel",
+        description: "New All Activity / Emails Sent / WhatsApp Sent filters on the Timeline tab, with sent messages standing out visually from calls and notes.",
+      },
+      {
+        title: "WhatsApp via Twilio, not just Meta",
+        description: "Settings > WhatsApp Business now lets you connect through Twilio instead of a direct Meta Cloud API token -- same 24-hour messaging window rules, your choice of provider.",
+      },
+      {
+        title: "Instagram, Facebook & more on Leads",
+        description: "Quick Create > Lead has a new Social Media section -- add as many platform links as you want, shown as clickable icons on the lead afterward.",
+      },
+    ],
+  },
+  {
     version: "1.18.2",
     date: "2026-09-25",
     headline: "Email Quick Actions Use AarPex's Own Composer",

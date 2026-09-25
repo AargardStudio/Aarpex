@@ -3089,22 +3089,89 @@ app.post("/api/supabase/verify", async (req, res) => {
 });
 
 // ============================================================================
-// WhatsApp Business (Meta Cloud API) -- verify connection + send message.
+// WhatsApp Business -- verify connection + send message, via either of two
+// providers a tenant can choose between in Settings:
 //
-// Meta's Cloud API only allows a free-text message inside the 24-hour
-// "customer service window" (the contact messaged this number first, or
-// replied within the last 24h). Outside that window only a pre-approved
-// message *template* can be sent. That's a platform rule enforced by Meta
-// itself -- if a free-text send is attempted outside the window, Meta's API
-// rejects it with error code 131047, which is passed straight back to the
-// client so the UI can explain it and offer the template path instead.
+//   "meta"   -- talks to Meta's Graph/Cloud API directly with a system-user
+//               access token.
+//   "twilio" -- talks to Twilio's WhatsApp API (Twilio sits in front of the
+//               same underlying WhatsApp network), authenticated with a
+//               Twilio Account SID + Auth Token and sent from a
+//               WhatsApp-enabled Twilio number.
+//
+// Both providers enforce the same WhatsApp platform rule: a free-text
+// message only works inside the 24-hour "customer service window" (the
+// contact messaged this number first, or replied within the last 24h).
+// Outside that window only a pre-approved message template can be sent.
+// Meta rejects an out-of-window free text with error code 131047; Twilio
+// rejects it with error code 63016 -- both are detected below and passed
+// back as `outsideWindow` so the UI can point at the template option
+// instead of just failing.
 // ============================================================================
 
 const WHATSAPP_GRAPH_VERSION = "v21.0";
+const TWILIO_API_VERSION = "2010-04-01";
 
-// 5. Verify a WhatsApp Business phone number connection
+// 5. Verify a WhatsApp Business connection (Meta or Twilio)
 app.post("/api/whatsapp/verify", async (req, res) => {
   try {
+    const provider = req.body.provider === "twilio" ? "twilio" : "meta";
+
+    if (provider === "twilio") {
+      const { twilioAccountSid, twilioAuthToken, twilioWhatsAppNumber } = req.body;
+      if (!twilioAccountSid || !String(twilioAccountSid).trim()) {
+        return res.status(400).json({ success: false, error: "Twilio Account SID is required." });
+      }
+      if (!twilioAuthToken || !String(twilioAuthToken).trim()) {
+        return res.status(400).json({ success: false, error: "Twilio Auth Token is required." });
+      }
+      if (!twilioWhatsAppNumber || !String(twilioWhatsAppNumber).trim()) {
+        return res.status(400).json({ success: false, error: "Twilio WhatsApp-enabled number is required." });
+      }
+
+      const sid = String(twilioAccountSid).trim();
+      const token = String(twilioAuthToken).trim();
+      const basicAuth = Buffer.from(`${sid}:${token}`).toString("base64");
+
+      try {
+        const response = await fetch(
+          `https://api.twilio.com/${TWILIO_API_VERSION}/Accounts/${encodeURIComponent(sid)}.json`,
+          { method: "GET", headers: { Authorization: `Basic ${basicAuth}` } }
+        );
+        const data: any = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          return res.json({
+            success: false,
+            status: "error",
+            error: data?.message || `Twilio API returned HTTP ${response.status}.`,
+          });
+        }
+        if (data.status && data.status !== "active") {
+          return res.json({
+            success: false,
+            status: "error",
+            error: `This Twilio account is "${data.status}", not active.`,
+          });
+        }
+
+        return res.json({
+          success: true,
+          status: "connected",
+          displayPhoneNumber: String(twilioWhatsAppNumber).trim(),
+          verifiedName: data.friendly_name || sid,
+          verifiedAt: new Date().toISOString(),
+        });
+      } catch (networkErr: any) {
+        return res.json({
+          success: false,
+          status: "error",
+          error: networkErr.message || "Failed to reach the Twilio API.",
+        });
+      }
+    }
+
+    // provider === "meta"
     const { accessToken, phoneNumberId } = req.body;
 
     if (!accessToken || !accessToken.trim()) {
@@ -3158,19 +3225,101 @@ app.post("/api/whatsapp/verify", async (req, res) => {
 });
 
 // 6. Send a WhatsApp message -- free text (within the 24h window) or a
-// pre-approved template (any time).
+// pre-approved template (any time) -- via either provider.
 app.post("/api/whatsapp/send-message", async (req, res) => {
   try {
-    const { accessToken, phoneNumberId, to, body, templateName, templateLanguage, templateParams } = req.body;
+    const provider = req.body.provider === "twilio" ? "twilio" : "meta";
+    const { to, body, templateName, templateLanguage, templateParams } = req.body;
 
+    if (!to || !String(to).trim()) {
+      return res.status(400).json({ success: false, error: "Recipient WhatsApp number is required." });
+    }
+
+    if (provider === "twilio") {
+      const { twilioAccountSid, twilioAuthToken, twilioWhatsAppNumber } = req.body;
+      if (!twilioAccountSid || !String(twilioAccountSid).trim()) {
+        return res.status(400).json({ success: false, error: "Twilio Account SID is required." });
+      }
+      if (!twilioAuthToken || !String(twilioAuthToken).trim()) {
+        return res.status(400).json({ success: false, error: "Twilio Auth Token is required." });
+      }
+      if (!twilioWhatsAppNumber || !String(twilioWhatsAppNumber).trim()) {
+        return res.status(400).json({ success: false, error: "Twilio WhatsApp-enabled number is required." });
+      }
+      // Twilio template sends go through the Content API (ContentSid +
+      // ContentVariables) rather than Meta's inline template object --
+      // templateName here is treated as that Content SID.
+      if (!templateName && (!body || !String(body).trim())) {
+        return res.status(400).json({ success: false, error: "Message body is required for a free-text WhatsApp message." });
+      }
+
+      const sid = String(twilioAccountSid).trim();
+      const token = String(twilioAuthToken).trim();
+      const basicAuth = Buffer.from(`${sid}:${token}`).toString("base64");
+      const cleanTo = String(to).trim().replace(/[^\d+]/g, "");
+      const fromNumber = String(twilioWhatsAppNumber).trim().replace(/[^\d+]/g, "");
+
+      const form = new URLSearchParams();
+      form.set("To", `whatsapp:${cleanTo}`);
+      form.set("From", `whatsapp:${fromNumber}`);
+      if (templateName && String(templateName).trim()) {
+        form.set("ContentSid", String(templateName).trim());
+        if (Array.isArray(templateParams) && templateParams.length > 0) {
+          const vars: Record<string, string> = {};
+          templateParams.forEach((p: string, i: number) => {
+            vars[String(i + 1)] = String(p);
+          });
+          form.set("ContentVariables", JSON.stringify(vars));
+        }
+      } else {
+        form.set("Body", String(body));
+      }
+
+      try {
+        const response = await fetch(
+          `https://api.twilio.com/${TWILIO_API_VERSION}/Accounts/${encodeURIComponent(sid)}/Messages.json`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Basic ${basicAuth}`,
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: form.toString(),
+          }
+        );
+        const data: any = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          // Twilio error 63016 is "outside the WhatsApp session window" --
+          // the same platform rule Meta enforces as 131047.
+          const outsideWindow = data?.code === 63016;
+          return res.status(200).json({
+            success: false,
+            error: data?.message || `Twilio API returned HTTP ${response.status}.`,
+            outsideWindow,
+          });
+        }
+
+        return res.json({
+          success: true,
+          messageId: data.sid,
+          sentAt: new Date().toISOString(),
+        });
+      } catch (networkErr: any) {
+        return res.status(200).json({
+          success: false,
+          error: networkErr.message || "Failed to reach the Twilio API.",
+        });
+      }
+    }
+
+    // provider === "meta"
+    const { accessToken, phoneNumberId } = req.body;
     if (!accessToken || !accessToken.trim()) {
       return res.status(400).json({ success: false, error: "Meta access token is required." });
     }
     if (!phoneNumberId || !phoneNumberId.trim()) {
       return res.status(400).json({ success: false, error: "WhatsApp Phone Number ID is required." });
-    }
-    if (!to || !String(to).trim()) {
-      return res.status(400).json({ success: false, error: "Recipient WhatsApp number is required." });
     }
 
     // WhatsApp numbers are sent to the Graph API in E.164 without a leading "+".

@@ -13,6 +13,34 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-09-25
+### Added
+- **Customer interaction history in Company 360's Timeline.** The Activity
+  Timeline tab now has "All Activity / Emails Sent / WhatsApp Sent" filter
+  pills with live counts, and Email/WhatsApp entries in the feed get their
+  own icon and color so real sent messages stand out from calls, notes, and
+  other manually logged activity. Filtering to a channel with nothing sent
+  yet shows a clear empty state instead of a blank feed.
+- **Twilio as a second WhatsApp provider.** Settings > WhatsApp Business now
+  has a Meta Cloud API / Twilio switch. Twilio authenticates with an
+  Account SID + Auth Token and sends from a WhatsApp-enabled Twilio number
+  (sandbox or approved production number); free-text sends work the same
+  24-hour-window rule as Meta, and template sends use a Twilio Content SID
+  (Content API) in place of Meta's named/versioned templates. Both
+  `/api/whatsapp/verify` and `/api/whatsapp/send-message` branch on the
+  saved `provider`, and the "outside the messaging window" detection
+  understands each provider's own error code (Meta 131047, Twilio 63016).
+  `TenantWhatsAppConfig` gained `provider`, `twilioAccountSid`,
+  `twilioAuthToken`, and `twilioWhatsAppNumber` -- stored in the same
+  `whatsapp_config` jsonb column from v1.18.0, no new migration needed.
+- **Social media links on Leads.** Quick Create > Lead now has a repeatable
+  "Social Media" section -- pick a platform (Instagram, Facebook, LinkedIn,
+  X/Twitter, TikTok, or Other) and paste a URL, add as many as you like.
+  Saved links show as small clickable platform icons on both the Leads
+  Kanban card and the Leads table. `Lead.socialLinks?: SocialLink[]` is
+  intentionally open-ended (free-text platform) so "any other" social site
+  works without a code change.
+
 ## [1.18.2] - 2026-09-25
 ### Changed
 - **Email quick actions now open AarPex's own Compose Email popup, not the

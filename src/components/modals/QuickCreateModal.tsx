@@ -50,6 +50,7 @@ export const QuickCreateModal: React.FC = () => {
   const [leadIndustry, setLeadIndustry] = useState(INDUSTRIES[0]);
   const [leadIndustryCustom, setLeadIndustryCustom] = useState("");
   const [leadClientCategory, setLeadClientCategory] = useState("");
+  const [leadSocialLinks, setLeadSocialLinks] = useState<{ platform: string; url: string }[]>([]);
 
   // Deal State
   const [dealName, setDealName] = useState("");
@@ -146,6 +147,9 @@ export const QuickCreateModal: React.FC = () => {
         phone: leadPhone,
         industry: leadIndustry === "Other" ? leadIndustryCustom.trim() || "Other" : leadIndustry,
         clientCategory: leadClientCategory || undefined,
+        socialLinks: leadSocialLinks
+          .filter((s) => s.url.trim())
+          .map((s, i) => ({ id: `soc_${Date.now()}_${i}`, platform: s.platform, url: s.url.trim() })),
         country: "United States",
         city: "",
         estimatedValue: Number(leadEstimatedValue) || 0,
@@ -400,6 +404,71 @@ export const QuickCreateModal: React.FC = () => {
                     className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"
                   />
                 </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-medium text-slate-700">
+                    Social Media <span className="text-slate-400 font-normal">(optional)</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setLeadSocialLinks((prev) => [...prev, { platform: "Instagram", url: "" }])
+                    }
+                    className="text-[11px] text-indigo-600 hover:text-indigo-700 font-semibold flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add link
+                  </button>
+                </div>
+                {leadSocialLinks.length === 0 ? (
+                  <div className="text-[11px] text-slate-400">
+                    Add Instagram, Facebook, or any other social profile link.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {leadSocialLinks.map((link, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <select
+                          value={link.platform}
+                          onChange={(e) =>
+                            setLeadSocialLinks((prev) =>
+                              prev.map((l, i) => (i === idx ? { ...l, platform: e.target.value } : l))
+                            )
+                          }
+                          className="w-32 px-2 py-1.5 border border-slate-300 rounded-lg bg-white text-xs"
+                        >
+                          <option>Instagram</option>
+                          <option>Facebook</option>
+                          <option>LinkedIn</option>
+                          <option>X / Twitter</option>
+                          <option>TikTok</option>
+                          <option>Other</option>
+                        </select>
+                        <input
+                          type="url"
+                          value={link.url}
+                          onChange={(e) =>
+                            setLeadSocialLinks((prev) =>
+                              prev.map((l, i) => (i === idx ? { ...l, url: e.target.value } : l))
+                            )
+                          }
+                          placeholder="https://instagram.com/handle"
+                          className="flex-1 px-3 py-1.5 border border-slate-300 rounded-lg text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setLeadSocialLinks((prev) => prev.filter((_, i) => i !== idx))}
+                          className="p-1.5 text-slate-400 hover:text-rose-500 rounded transition-colors"
+                          title="Remove"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
