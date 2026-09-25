@@ -19,7 +19,6 @@ import {
   Users2,
   Link2,
   MessageSquare,
-  PhoneCall,
   Instagram,
   Facebook,
   Linkedin,
@@ -28,7 +27,6 @@ import {
 } from "lucide-react";
 import { LeadConvertModal } from "../modals/LeadConvertModal";
 import { LeadImportModal } from "../leads/LeadImportModal";
-import { LeadAIAnalysisModal } from "../leads/LeadAIAnalysisModal";
 
 // Lead has no standalone "rating" field — temperature is derived from the
 // real leadScore (0-100) it does have, rather than a separate value that
@@ -61,6 +59,9 @@ export const LeadsView: React.FC = () => {
     syncAllLeadsToCompaniesAndContacts,
     openWhatsAppComposer,
     openEmailComposer,
+    setSelectedLeadId,
+    convertingLeadId,
+    setConvertingLeadId,
   } = useCRM();
 
   const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
@@ -68,8 +69,7 @@ export const LeadsView: React.FC = () => {
   const [isImportOpen, setImportOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [ratingFilter, setRatingFilter] = useState<string>("All");
-  const [convertingLead, setConvertingLead] = useState<Lead | null>(null);
-  const [analyzingLead, setAnalyzingLead] = useState<Lead | null>(null);
+  const convertingLead = leads.find((l) => l.id === convertingLeadId) || null;
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [syncResultMsg, setSyncResultMsg] = useState<string | null>(null);
 
@@ -268,9 +268,13 @@ export const LeadsView: React.FC = () => {
                       >
                         <div className="flex items-start justify-between">
                           <div>
-                            <div className="font-bold text-slate-900 text-xs leading-snug">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedLeadId(lead.id)}
+                              className="font-bold text-slate-900 text-xs leading-snug hover:text-indigo-600 hover:underline text-left"
+                            >
                               {lead.name}
-                            </div>
+                            </button>
                             <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
                               <Building2 className="w-3 h-3 text-slate-400" />
                               <span className="font-medium">{lead.company}</span>
@@ -333,9 +337,9 @@ export const LeadsView: React.FC = () => {
                         <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                           <div className="flex items-center gap-1">
                             <button
-                              onClick={() => setAnalyzingLead(lead)}
+                              onClick={() => setSelectedLeadId(lead.id)}
                               className="px-2 py-0.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded text-[10px] font-bold border border-indigo-200 flex items-center gap-1"
-                              title="Analyze with Aargard Business Intelligence Construct"
+                              title="Open profile & AI analysis"
                             >
                               <Sparkles className="w-2.5 h-2.5" />
                               <span>Analyze</span>
@@ -371,19 +375,9 @@ export const LeadsView: React.FC = () => {
                               </button>
                             )}
 
-                            {lead.phone && (
-                              <a
-                                href={`sms:${lead.phone}`}
-                                className="p-1 bg-slate-50 text-slate-500 hover:bg-slate-100 rounded border border-slate-200"
-                                title="Text message"
-                              >
-                                <PhoneCall className="w-2.5 h-2.5" />
-                              </a>
-                            )}
-
                             {lead.status !== "Converted" && (
                               <button
-                                onClick={() => setConvertingLead(lead)}
+                                onClick={() => setConvertingLeadId(lead.id)}
                                 className="px-2 py-0.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded text-[10px] font-bold border border-emerald-200 flex items-center gap-1"
                                 title="Convert to Company & Deal"
                               >
@@ -449,7 +443,13 @@ export const LeadsView: React.FC = () => {
               {filteredLeads.map((lead) => (
                 <tr key={lead.id} className="hover:bg-slate-50/60 transition-colors">
                   <td className="p-3">
-                    <div className="font-bold text-slate-900">{lead.name}</div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedLeadId(lead.id)}
+                      className="font-bold text-slate-900 hover:text-indigo-600 hover:underline text-left block"
+                    >
+                      {lead.name}
+                    </button>
                     <div className="text-slate-500 text-[11px] flex items-center gap-1.5">
                       <span>{lead.company} • {lead.jobTitle}</span>
                       {(lead.linkedCompanyId || lead.convertedCompanyId) && (
@@ -519,9 +519,9 @@ export const LeadsView: React.FC = () => {
                   <td className="p-3 text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       <button
-                        onClick={() => setAnalyzingLead(lead)}
+                        onClick={() => setSelectedLeadId(lead.id)}
                         className="px-2.5 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded text-xs font-semibold border border-indigo-200 flex items-center gap-1"
-                        title="Analyze with Aargard Business Intelligence Construct"
+                        title="Open profile & AI analysis"
                       >
                         <Sparkles className="w-3 h-3" />
                         <span>Analyze</span>
@@ -540,18 +540,9 @@ export const LeadsView: React.FC = () => {
                           <MessageSquare className="w-3 h-3" />
                         </button>
                       )}
-                      {lead.phone && (
-                        <a
-                          href={`sms:${lead.phone}`}
-                          className="p-1.5 bg-slate-50 text-slate-500 hover:bg-slate-100 rounded border border-slate-200"
-                          title="Text message"
-                        >
-                          <PhoneCall className="w-3 h-3" />
-                        </a>
-                      )}
                       {lead.status !== "Converted" && (
                         <button
-                          onClick={() => setConvertingLead(lead)}
+                          onClick={() => setConvertingLeadId(lead.id)}
                           className="px-2.5 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded text-xs font-semibold border border-emerald-200"
                         >
                           Convert Lead
@@ -570,7 +561,7 @@ export const LeadsView: React.FC = () => {
       {convertingLead && (
         <LeadConvertModal
           lead={convertingLead}
-          onClose={() => setConvertingLead(null)}
+          onClose={() => setConvertingLeadId(null)}
         />
       )}
 
@@ -579,14 +570,6 @@ export const LeadsView: React.FC = () => {
         isOpen={isImportOpen}
         onClose={() => setImportOpen(false)}
       />
-
-      {/* Aargard Business Intelligence Construct — AI Lead Analysis */}
-      {analyzingLead && (
-        <LeadAIAnalysisModal
-          lead={analyzingLead}
-          onClose={() => setAnalyzingLead(null)}
-        />
-      )}
     </div>
   );
 };

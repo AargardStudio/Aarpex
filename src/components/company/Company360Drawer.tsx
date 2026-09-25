@@ -71,6 +71,8 @@ export const Company360Drawer: React.FC = () => {
     updateLead,
     openWhatsAppComposer,
     openEmailComposer,
+    setSelectedContactId,
+    setSelectedLeadId,
   } = useCRM();
 
   const [activeTab, setActiveTab] = useState<
@@ -386,28 +388,19 @@ export const Company360Drawer: React.FC = () => {
                 </button>
               )}
               {company.phone && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openWhatsAppComposer({
-                        to: company.phone,
-                        companyId: company.id,
-                      })
-                    }
-                    className="p-2 rounded-lg bg-white border border-slate-200 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-300 transition-colors"
-                    title={`WhatsApp ${company.phone}`}
-                  >
-                    <MessageSquare className="w-4 h-4" />
-                  </button>
-                  <a
-                    href={`sms:${company.phone}`}
-                    className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300 transition-colors"
-                    title={`Text message ${company.phone}`}
-                  >
-                    <PhoneCall className="w-4 h-4" />
-                  </a>
-                </>
+                <button
+                  type="button"
+                  onClick={() =>
+                    openWhatsAppComposer({
+                      to: company.phone,
+                      companyId: company.id,
+                    })
+                  }
+                  className="p-2 rounded-lg bg-white border border-slate-200 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-300 transition-colors"
+                  title={`WhatsApp ${company.phone}`}
+                >
+                  <MessageSquare className="w-4 h-4" />
+                </button>
               )}
             </div>
 
@@ -634,9 +627,13 @@ export const Company360Drawer: React.FC = () => {
                       className="p-3 bg-slate-50/70 border border-slate-200 rounded-xl space-y-1.5"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-900 text-sm">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedContactId(cnt.id)}
+                          className="font-bold text-slate-900 text-sm hover:text-indigo-600 hover:underline text-left"
+                        >
                           {cnt.firstName} {cnt.lastName}
-                        </span>
+                        </button>
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-medium">
                           {cnt.status}
                         </span>
@@ -668,29 +665,20 @@ export const Company360Drawer: React.FC = () => {
                               <span>{cnt.phone}</span>
                             </div>
                             {(cnt.whatsapp || cnt.phone) && (
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    openWhatsAppComposer({
-                                      to: cnt.whatsapp || cnt.phone,
-                                      companyId: company.id,
-                                      contactId: cnt.id,
-                                    })
-                                  }
-                                  className="p-1 rounded text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
-                                  title="Send WhatsApp Message"
-                                >
-                                  <MessageSquare className="w-3 h-3" />
-                                </button>
-                                <a
-                                  href={`sms:${cnt.phone}`}
-                                  className="p-1 rounded text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-                                  title="Text message"
-                                >
-                                  <PhoneCall className="w-3 h-3" />
-                                </a>
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openWhatsAppComposer({
+                                    to: cnt.whatsapp || cnt.phone,
+                                    companyId: company.id,
+                                    contactId: cnt.id,
+                                  })
+                                }
+                                className="p-1 rounded text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
+                                title="Send WhatsApp Message"
+                              >
+                                <MessageSquare className="w-3 h-3" />
+                              </button>
                             )}
                           </div>
                         )}
@@ -1334,9 +1322,11 @@ export const Company360Drawer: React.FC = () => {
                     </p>
                   )}
                   {companyLeads.map((l) => (
-                    <div
+                    <button
+                      type="button"
                       key={l.id}
-                      className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between gap-3"
+                      onClick={() => setSelectedLeadId(l.id)}
+                      className="w-full p-3 bg-slate-50 hover:bg-indigo-50/60 rounded-xl border border-slate-200 hover:border-indigo-200 flex items-center justify-between gap-3 text-left transition-colors"
                     >
                       <div>
                         <div className="text-xs font-bold text-slate-800">{l.name}</div>
@@ -1347,7 +1337,7 @@ export const Company360Drawer: React.FC = () => {
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
                         {l.status}
                       </span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>

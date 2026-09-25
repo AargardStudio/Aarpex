@@ -114,6 +114,16 @@ interface CRMContextType {
   setSelectedCompanyId: (id: string | null) => void;
   selectedDealId: string | null;
   setSelectedDealId: (id: string | null) => void;
+  // Contact / Lead 360 profile drawers -- mirror selectedCompanyId, opened
+  // by clicking a contact/lead name anywhere in the app.
+  selectedContactId: string | null;
+  setSelectedContactId: (id: string | null) => void;
+  selectedLeadId: string | null;
+  setSelectedLeadId: (id: string | null) => void;
+  // Lifted out of LeadsView so the Lead Profile Drawer can trigger the
+  // same Convert-to-Company flow as the Leads list.
+  convertingLeadId: string | null;
+  setConvertingLeadId: (id: string | null) => void;
   dateRange: DateFilterRange;
   setDateRange: (range: DateFilterRange) => void;
   currentUser: User;
@@ -326,6 +336,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [settingsDeepLinkTab, setSettingsDeepLinkTab] = useState<string | null>(null);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [convertingLeadId, setConvertingLeadId] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateFilterRange>("This Year");
   const [isQuickCreateOpen, setQuickCreateOpen] = useState(false);
   const [quickCreateType, setQuickCreateType] = useState<"lead" | "contact" | "company" | "deal" | "invoice" | "payment" | "activity" | "task">("deal");
@@ -2605,6 +2618,12 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSelectedCompanyId,
         selectedDealId,
         setSelectedDealId,
+        selectedContactId,
+        setSelectedContactId,
+        selectedLeadId,
+        setSelectedLeadId,
+        convertingLeadId,
+        setConvertingLeadId,
         dateRange,
         setDateRange,
         currentUser,

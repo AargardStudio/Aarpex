@@ -13,6 +13,31 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-09-25
+
+### Added
+- **Contact Profile Drawer** — clicking a contact's name anywhere (Contacts
+  table, Company 360's Contacts list) now opens a full 360° profile:
+  contact details, an Activity tab (reusing the Email/WhatsApp channel-filter
+  timeline pattern), and an AI Analysis tab with qualification score, buyer
+  intent signals, risk factors, and a suggested opening line.
+- **Lead Profile Drawer** — clicking a lead's name (Kanban card, table row,
+  or Company 360's Leads list) opens the same 360° profile for leads: full
+  record details, social links, an Activity tab, and the AI analyzer now
+  embedded inline instead of a separate pop-up modal. The activity log is
+  linked by the lead's actual `leadId` instead of matching the lead's name
+  inside activity descriptions.
+- Both profile drawers surface prominent, well-lit Email and WhatsApp
+  acquisition buttons in the header, plus a "Planned next" banner pulled
+  from the most recent logged activity's next action.
+- Lead profile drawer includes a one-click "Convert to Company & Deal"
+  action, wired to the same Convert flow as the Leads list.
+
+### Changed
+- SMS/text-message quick-action buttons removed from Contacts, Leads
+  (Kanban + table), and Company 360 — Email and WhatsApp are the two
+  supported outreach channels for now.
+
 ## [1.19.0] - 2026-09-25
 ### Added
 - **Customer interaction history in Company 360's Timeline.** The Activity

@@ -23,6 +23,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.20.0",
+    date: "2026-09-25",
+    headline: "Contact & Lead Profiles, With AI Built In",
+    tagline: "Open a contact or lead and get everything in one place -- full details, activity history, and the AI analyzer, with Email and WhatsApp front and center.",
+    highlights: [
+      {
+        title: "Click any contact or lead to open their profile",
+        description: "New full 360° drawers for Contacts and Leads, matching Company 360 -- record details, a filterable activity timeline, and an AI Analysis tab, all in one place instead of scattered across a table and a pop-up.",
+      },
+      {
+        title: "AI analyzer moved inside the profile",
+        description: "Lead qualification (score, buyer-intent signals, risk factors, suggested opener) now runs right inside the Lead profile instead of a separate modal -- and Contacts get the same analysis too.",
+      },
+      {
+        title: "Clear Email & WhatsApp buttons, every time you open a record",
+        description: "Both new profiles lead with prominent Email and WhatsApp buttons plus a \"Planned next\" banner, so starting outreach is never more than one click from opening the record.",
+      },
+      {
+        title: "SMS quick actions removed for now",
+        description: "Text-message buttons are gone from Contacts, Leads, and Company 360 while we focus on Email and WhatsApp.",
+      },
+    ],
+  },
+  {
     version: "1.19.0",
     date: "2026-09-25",
     headline: "Interaction History, Twilio WhatsApp & Lead Socials",

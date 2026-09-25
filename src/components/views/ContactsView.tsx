@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { useCRM } from "../../context/CRMContext";
-import { Users, Plus, Search, Mail, Phone, Building2, ExternalLink, MessageSquare, PhoneCall } from "lucide-react";
+import { Users, Plus, Search, Mail, Phone, Building2, ExternalLink, MessageSquare } from "lucide-react";
 
 export const ContactsView: React.FC = () => {
-  const { contacts, companies, setSelectedCompanyId, setQuickCreateOpen, setQuickCreateType, openWhatsAppComposer, openEmailComposer } = useCRM();
+  const { contacts, companies, setSelectedCompanyId, setSelectedContactId, setQuickCreateOpen, setQuickCreateType, openWhatsAppComposer, openEmailComposer } = useCRM();
   const [searchTerm, setSearchTerm] = useState("");
 
   const filteredContacts = contacts.filter((cnt) => {
@@ -100,9 +100,13 @@ export const ContactsView: React.FC = () => {
                 return (
                   <tr key={cnt.id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="p-3.5">
-                      <div className="font-bold text-slate-900">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedContactId(cnt.id)}
+                        className="font-bold text-slate-900 hover:text-indigo-600 hover:underline text-left"
+                      >
                         {cnt.firstName} {cnt.lastName}
-                      </div>
+                      </button>
                       <div className="text-[11px] text-slate-400">Rep: {cnt.salesperson}</div>
                     </td>
 
@@ -146,29 +150,20 @@ export const ContactsView: React.FC = () => {
                             <Phone className="w-3.5 h-3.5 text-slate-400" />
                             <span>{cnt.phone}</span>
                           </span>
-                          <span className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                openWhatsAppComposer({
-                                  to: cnt.whatsapp || cnt.phone,
-                                  companyId: cnt.companyId,
-                                  contactId: cnt.id,
-                                })
-                              }
-                              className="p-1 rounded text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
-                              title="Send WhatsApp Message"
-                            >
-                              <MessageSquare className="w-3.5 h-3.5" />
-                            </button>
-                            <a
-                              href={`sms:${cnt.phone}`}
-                              className="p-1 rounded text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-                              title="Text message"
-                            >
-                              <PhoneCall className="w-3.5 h-3.5" />
-                            </a>
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openWhatsAppComposer({
+                                to: cnt.whatsapp || cnt.phone,
+                                companyId: cnt.companyId,
+                                contactId: cnt.id,
+                              })
+                            }
+                            className="p-1 rounded text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
+                            title="Send WhatsApp Message"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          </button>
                         </span>
                       ) : (
                         <span className="text-slate-400">—</span>

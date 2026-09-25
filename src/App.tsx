@@ -24,6 +24,8 @@ import { ReportsView } from "./components/views/ReportsView";
 import { SettingsView } from "./components/views/SettingsView";
 import { KnowledgeBaseView } from "./components/views/KnowledgeBaseView";
 import { Company360Drawer } from "./components/company/Company360Drawer";
+import { ContactProfileDrawer } from "./components/contacts/ContactProfileDrawer";
+import { LeadProfileDrawer } from "./components/leads/LeadProfileDrawer";
 import { QuickCreateModal } from "./components/modals/QuickCreateModal";
 import { UserAccessControlModal } from "./components/auth/UserAccessControlModal";
 import { WorkspaceModal } from "./components/modals/WorkspaceModal";
@@ -159,6 +161,12 @@ const CRMMainContent: React.FC = () => {
 
       {/* Slide-over 360° Account Intelligence Drawer */}
       <Company360Drawer />
+
+      {/* Contact & Lead Profile Drawers -- same 360° pattern as Company,
+          scoped to a single person: full record info, AI analyzer inline,
+          and Email/WhatsApp acquisition actions in one place. */}
+      <ContactProfileDrawer />
+      <LeadProfileDrawer />
 
       {/* Global Quick Record Creation Modal */}
       <QuickCreateModal />
