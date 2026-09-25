@@ -94,6 +94,7 @@ export const SettingsView: React.FC = () => {
   const [currency, setCurrency] = useState(settings?.currency || "USD ($)");
   const [commissionRate, setCommissionRate] = useState(settings?.commissionRate || 10);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [deletingTenantId, setDeletingTenantId] = useState<string | null>(null);
 
   // Subscription & Tier Management State
   const [selectedTierId, setSelectedTierId] = useState<"Starter" | "Growth" | "Pro" | "Enterprise">(
@@ -877,15 +878,31 @@ export const SettingsView: React.FC = () => {
 
                       {tenants.length > 1 && !isActive && (
                         <button
-                          onClick={() => {
-                            if (confirm(`Are you sure you want to delete workspace "${tenant.name}"?`)) {
-                              deleteTenant(tenant.id);
+                          onClick={async () => {
+                            if (!confirm(`Are you sure you want to delete workspace "${tenant.name}"? This permanently deletes all of its data and cannot be undone.`)) {
+                              return;
+                            }
+                            setDeletingTenantId(tenant.id);
+                            try {
+                              const success = await deleteTenant(tenant.id);
+                              if (!success) {
+                                alert(
+                                  `Couldn't delete "${tenant.name}". You may not have admin rights on this workspace, or there was a connection problem -- please try again.`
+                                );
+                              }
+                            } finally {
+                              setDeletingTenantId(null);
                             }
                           }}
-                          className="p-1.5 text-slate-500 hover:text-rose-400 rounded transition-colors"
+                          disabled={deletingTenantId === tenant.id}
+                          className="p-1.5 text-slate-500 hover:text-rose-400 rounded transition-colors disabled:opacity-50"
                           title="Delete workspace"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          {deletingTenantId === tenant.id ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
                         </button>
                       )}
                     </div>

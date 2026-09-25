@@ -615,6 +615,37 @@ async function performTenantRowSync(tenant: Tenant): Promise<void> {
   }
 }
 
+/**
+ * Permanently deletes a tenant/workspace row in Supabase. RLS only allows
+ * this when the caller is an admin member of that tenant (see the
+ * tenants_delete policy in 0001_aarpex_schema.sql), and every CRM record
+ * table has `tenant_id ... references public.tenants(id) on delete
+ * cascade` -- so this one delete also removes all of that workspace's
+ * companies/contacts/leads/deals/etc. and its tenant_members rows.
+ *
+ * Returns true when Supabase isn't configured (nothing to delete server-side,
+ * local-only demo mode), so callers in that mode still proceed with a
+ * local-only delete exactly as before. Returns false on any real failure --
+ * callers MUST treat that as "not actually deleted" and keep the tenant in
+ * local state, otherwise it silently reappears on the next hydrate/reload
+ * (which is exactly the bug this function fixes).
+ */
+export async function deleteTenantServerSide(tenantId: string): Promise<boolean> {
+  if (!isSupabaseAuthConfigured()) return true;
+  try {
+    const supabase = getSupabaseAuthClient();
+    const { error } = await supabase.from("tenants").delete().eq("id", tenantId);
+    if (error) {
+      console.error("[tenantDataSync] deleteTenantServerSide failed:", error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("[tenantDataSync] deleteTenantServerSide failed:", err);
+    return false;
+  }
+}
+
 const DEFAULT_STRIPE_CONFIG: TenantStripeConfig = {
   isEnabled: false,
   publishableKey: "",

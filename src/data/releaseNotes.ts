@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.20.2",
+    date: "2026-09-25",
+    headline: "Deleted Workspaces Now Stay Deleted",
+    tagline: "Fixed a bug where deleting a workspace only hid it locally -- it would come right back the next time you signed in.",
+    highlights: [
+      {
+        title: "Workspace deletion is now permanent",
+        description: "Deleting a workspace removes it (and all of its data) from the database itself, instead of just removing it from your screen.",
+      },
+      {
+        title: "Clear feedback if a delete can't go through",
+        description: "If you're not an admin on that workspace, or the connection drops mid-delete, you'll see an error instead of the workspace silently reappearing later.",
+      },
+    ],
+  },
+  {
     version: "1.20.1",
     date: "2026-09-25",
     headline: "Know Exactly Who Your Campaign Actually Reached",

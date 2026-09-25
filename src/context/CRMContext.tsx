@@ -41,6 +41,7 @@ import {
   syncTenantRow,
   fetchTenantTable,
   createTenantWithOwner,
+  deleteTenantServerSide,
   fetchMyTenantsFull,
   savePendingTenantCreation,
   clearPendingTenantCreation,
@@ -157,7 +158,12 @@ interface CRMContextType {
   createTenant: (tenantData: Partial<Tenant>) => Tenant;
   loadSampleData: () => void;
   updateTenant: (tenantId: string, updates: Partial<Tenant>) => void;
-  deleteTenant: (tenantId: string) => void;
+  // Returns false when the server-side delete failed (e.g. not an admin of
+  // that workspace, or a network error) -- the tenant is deliberately left
+  // in place locally in that case rather than optimistically removed, since
+  // an optimistic removal is exactly what let a "deleted" workspace silently
+  // reappear on the next reload.
+  deleteTenant: (tenantId: string) => Promise<boolean>;
   isCreateTenantModalOpen: boolean;
   setCreateTenantModalOpen: (open: boolean) => void;
 
@@ -911,13 +917,24 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  const deleteTenant = (tenantId: string) => {
-    if (tenants.length <= 1) return;
+  const deleteTenant = async (tenantId: string): Promise<boolean> => {
+    if (tenants.length <= 1) return false;
+
+    // Delete the row in Supabase FIRST (every CRM table cascades off of
+    // it), and only remove it from local state once that actually
+    // succeeded. Previously this only ever updated local React state --
+    // the tenant row lived on in Supabase, so the very next hydrate
+    // (reload, re-sign-in, tab reopen) pulled it right back via
+    // fetchMyTenantsFull() and it reappeared as if nothing happened.
+    const deleted = await deleteTenantServerSide(tenantId);
+    if (!deleted) return false;
+
     const remaining = tenants.filter((t) => t.id !== tenantId);
     setTenants(remaining);
     if (activeTenantId === tenantId) {
       switchTenant(remaining[0].id);
     }
+    return true;
   };
 
   // Session bootstrap: require a real, currently-valid Supabase session

@@ -13,6 +13,23 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.20.2] - 2026-09-25
+
+### Fixed
+- **Deleting a workspace now actually deletes it.** `deleteTenant()`
+  previously only removed the workspace from local React state -- the row
+  in Supabase was never touched, so the next hydrate (page reload,
+  re-sign-in, reopening the app) pulled it right back in via
+  `fetchMyTenantsFull()` and it reappeared as if nothing happened.
+- Deleting a workspace now deletes its row in Supabase first (RLS already
+  restricted this to workspace admins; every CRM table cascades off the
+  tenant row, so this also removes all of that workspace's companies,
+  contacts, leads, deals, invoices, etc.) and only updates local state
+  once that actually succeeds.
+- If the server-side delete fails (not an admin, connection problem), the
+  workspace is now left in place with an error message instead of
+  disappearing from the UI and coming back later.
+
 ## [1.20.1] - 2026-09-25
 
 ### Fixed
