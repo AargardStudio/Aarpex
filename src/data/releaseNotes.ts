@@ -23,6 +23,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.18.2",
+    date: "2026-09-25",
+    headline: "Email Quick Actions Use AarPex's Own Composer",
+    tagline: "No more handing off to your device's mail app -- Email buttons now open the in-app Compose Email popup.",
+    highlights: [
+      {
+        title: "Stays inside AarPex",
+        description: "Clicking Email on a Company, Contact, or Lead now opens the same Compose Email popup used everywhere else -- prefilled with their address, sent through your connected mailbox, and logged to the record's activity timeline.",
+      },
+    ],
+  },
+  {
     version: "1.18.1",
     date: "2026-09-25",
     headline: "Email, WhatsApp & Text on Every Record",

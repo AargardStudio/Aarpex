@@ -43,6 +43,7 @@ export const LeadsView: React.FC = () => {
     setQuickCreateType,
     syncAllLeadsToCompaniesAndContacts,
     openWhatsAppComposer,
+    openEmailComposer,
   } = useCRM();
 
   const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
@@ -305,13 +306,18 @@ export const LeadsView: React.FC = () => {
                             </button>
 
                             {lead.email && (
-                              <a
-                                href={`mailto:${lead.email}`}
+                              <button
+                                onClick={() =>
+                                  openEmailComposer({
+                                    to: lead.email,
+                                    leadId: lead.id,
+                                  })
+                                }
                                 className="p-1 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded border border-indigo-200"
                                 title={`Email ${lead.email}`}
                               >
                                 <Mail className="w-2.5 h-2.5" />
-                              </a>
+                              </button>
                             )}
 
                             {(lead.whatsapp || lead.phone) && (
@@ -423,9 +429,17 @@ export const LeadsView: React.FC = () => {
                   </td>
                   <td className="p-3 text-slate-600 space-y-0.5">
                     {lead.email && (
-                      <a href={`mailto:${lead.email}`} className="text-indigo-600 hover:underline block">
+                      <button
+                        onClick={() =>
+                          openEmailComposer({
+                            to: lead.email,
+                            leadId: lead.id,
+                          })
+                        }
+                        className="text-indigo-600 hover:underline block text-left"
+                      >
                         {lead.email}
-                      </a>
+                      </button>
                     )}
                     {lead.phone && <div className="text-slate-500 text-[11px]">{lead.phone}</div>}
                   </td>

@@ -70,6 +70,7 @@ export const Company360Drawer: React.FC = () => {
     addLead,
     updateLead,
     openWhatsAppComposer,
+    openEmailComposer,
   } = useCRM();
 
   const [activeTab, setActiveTab] = useState<
@@ -365,13 +366,19 @@ export const Company360Drawer: React.FC = () => {
 
             <div className="flex items-center gap-1.5">
               {company.email && (
-                <a
-                  href={`mailto:${company.email}`}
+                <button
+                  type="button"
+                  onClick={() =>
+                    openEmailComposer({
+                      to: company.email,
+                      companyId: company.id,
+                    })
+                  }
                   className="p-2 rounded-lg bg-white border border-slate-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 transition-colors"
                   title={`Email ${company.email}`}
                 >
                   <Mail className="w-4 h-4" />
-                </a>
+                </button>
               )}
               {company.phone && (
                 <>
@@ -634,9 +641,19 @@ export const Company360Drawer: React.FC = () => {
                         {cnt.email && (
                           <div className="flex items-center gap-1.5">
                             <Mail className="w-3 h-3 text-slate-400" />
-                            <a href={`mailto:${cnt.email}`} className="hover:underline text-indigo-600">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openEmailComposer({
+                                  to: cnt.email,
+                                  companyId: company.id,
+                                  contactId: cnt.id,
+                                })
+                              }
+                              className="hover:underline text-indigo-600 text-left"
+                            >
                               {cnt.email}
-                            </a>
+                            </button>
                           </div>
                         )}
                         {cnt.phone && (

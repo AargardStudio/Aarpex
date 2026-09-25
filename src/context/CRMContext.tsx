@@ -174,6 +174,7 @@ interface CRMContextType {
     companyId?: string;
     contactId?: string;
     dealId?: string;
+    leadId?: string;
   };
   openEmailComposer: (props?: {
     to?: string;
@@ -183,6 +184,7 @@ interface CRMContextType {
     companyId?: string;
     contactId?: string;
     dealId?: string;
+    leadId?: string;
   }) => void;
 
   // WhatsApp Composer (send-to-lead/contact/company, mirrors Email Composer)
@@ -380,6 +382,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     companyId?: string;
     contactId?: string;
     dealId?: string;
+    leadId?: string;
   }>({});
 
   const openEmailComposer = (props?: {
@@ -390,6 +393,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     companyId?: string;
     contactId?: string;
     dealId?: string;
+    leadId?: string;
   }) => {
     setEmailComposeProps(props || {});
     setEmailComposeOpen(true);

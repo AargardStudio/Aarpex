@@ -13,6 +13,19 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.18.2] - 2026-09-25
+### Changed
+- **Email quick actions now open AarPex's own Compose Email popup, not the
+  device's default mail app.** The Email buttons/links added in v1.18.1 on
+  Company 360 (header + contacts list), the Contacts table, and Leads
+  (Kanban + table) previously used a plain `mailto:` link, which hands off
+  to whatever mail client is installed and skips AarPex's SMTP relay,
+  attachments, and activity logging entirely. They now open the same
+  in-app Compose Email modal used everywhere else, prefilled with the
+  record's email and (for a lead) logging the send back to that lead's
+  activity timeline -- `Activity.leadId` plumbing added end-to-end
+  (`emailComposeProps`, `EmailComposeModal`, `App.tsx`) to support it.
+
 ## [1.18.1] - 2026-09-25
 ### Added
 - **Email / WhatsApp / Text quick actions on every record you open.** Opening

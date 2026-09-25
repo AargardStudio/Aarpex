@@ -180,6 +180,7 @@ const CRMMainContent: React.FC = () => {
         companyId={emailComposeProps.companyId}
         contactId={emailComposeProps.contactId}
         dealId={emailComposeProps.dealId}
+        leadId={emailComposeProps.leadId}
       />
 
       {/* Global WhatsApp Send Composer Modal */}

@@ -33,6 +33,7 @@ interface EmailComposeModalProps {
   companyId?: string;
   contactId?: string;
   dealId?: string;
+  leadId?: string;
 }
 
 export const EmailComposeModal: React.FC<EmailComposeModalProps> = ({
@@ -45,6 +46,7 @@ export const EmailComposeModal: React.FC<EmailComposeModalProps> = ({
   companyId,
   contactId,
   dealId,
+  leadId,
 }) => {
   const { activeTenant, currentUser, addActivity, companies } = useCRM();
 
@@ -274,6 +276,7 @@ export const EmailComposeModal: React.FC<EmailComposeModalProps> = ({
           companyId: matchedComp,
           contactId,
           dealId,
+          leadId,
           date: new Date().toISOString().split("T")[0],
           time: new Date().toTimeString().slice(0, 5),
           user: currentUser?.name || "System",

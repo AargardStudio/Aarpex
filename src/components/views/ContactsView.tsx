@@ -3,7 +3,7 @@ import { useCRM } from "../../context/CRMContext";
 import { Users, Plus, Search, Mail, Phone, Building2, ExternalLink, MessageSquare, PhoneCall } from "lucide-react";
 
 export const ContactsView: React.FC = () => {
-  const { contacts, companies, setSelectedCompanyId, setQuickCreateOpen, setQuickCreateType, openWhatsAppComposer } = useCRM();
+  const { contacts, companies, setSelectedCompanyId, setQuickCreateOpen, setQuickCreateType, openWhatsAppComposer, openEmailComposer } = useCRM();
   const [searchTerm, setSearchTerm] = useState("");
 
   const filteredContacts = contacts.filter((cnt) => {
@@ -123,10 +123,20 @@ export const ContactsView: React.FC = () => {
                     </td>
 
                     <td className="p-3.5">
-                      <a href={`mailto:${cnt.email}`} className="text-slate-700 hover:text-indigo-600 flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openEmailComposer({
+                            to: cnt.email,
+                            companyId: cnt.companyId,
+                            contactId: cnt.id,
+                          })
+                        }
+                        className="text-slate-700 hover:text-indigo-600 flex items-center gap-1.5"
+                      >
                         <Mail className="w-3.5 h-3.5 text-slate-400" />
                         <span>{cnt.email}</span>
-                      </a>
+                      </button>
                     </td>
 
                     <td className="p-3.5 text-slate-600">
