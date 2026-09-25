@@ -363,6 +363,42 @@ export const Company360Drawer: React.FC = () => {
               </div>
             </div>
 
+            <div className="flex items-center gap-1.5">
+              {company.email && (
+                <a
+                  href={`mailto:${company.email}`}
+                  className="p-2 rounded-lg bg-white border border-slate-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 transition-colors"
+                  title={`Email ${company.email}`}
+                >
+                  <Mail className="w-4 h-4" />
+                </a>
+              )}
+              {company.phone && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openWhatsAppComposer({
+                        to: company.phone,
+                        companyId: company.id,
+                      })
+                    }
+                    className="p-2 rounded-lg bg-white border border-slate-200 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-300 transition-colors"
+                    title={`WhatsApp ${company.phone}`}
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                  </button>
+                  <a
+                    href={`sms:${company.phone}`}
+                    className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300 transition-colors"
+                    title={`Text message ${company.phone}`}
+                  >
+                    <PhoneCall className="w-4 h-4" />
+                  </a>
+                </>
+              )}
+            </div>
+
             <button
               id="btn-close-company-360"
               onClick={() => setSelectedCompanyId(null)}
@@ -610,20 +646,29 @@ export const Company360Drawer: React.FC = () => {
                               <span>{cnt.phone}</span>
                             </div>
                             {(cnt.whatsapp || cnt.phone) && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openWhatsAppComposer({
-                                    to: cnt.whatsapp || cnt.phone,
-                                    companyId: company.id,
-                                    contactId: cnt.id,
-                                  })
-                                }
-                                className="p-1 rounded text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
-                                title="Send WhatsApp Message"
-                              >
-                                <MessageSquare className="w-3 h-3" />
-                              </button>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openWhatsAppComposer({
+                                      to: cnt.whatsapp || cnt.phone,
+                                      companyId: company.id,
+                                      contactId: cnt.id,
+                                    })
+                                  }
+                                  className="p-1 rounded text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
+                                  title="Send WhatsApp Message"
+                                >
+                                  <MessageSquare className="w-3 h-3" />
+                                </button>
+                                <a
+                                  href={`sms:${cnt.phone}`}
+                                  className="p-1 rounded text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                                  title="Text message"
+                                >
+                                  <PhoneCall className="w-3 h-3" />
+                                </a>
+                              </div>
                             )}
                           </div>
                         )}

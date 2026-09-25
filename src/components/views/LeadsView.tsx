@@ -19,6 +19,7 @@ import {
   Users2,
   Link2,
   MessageSquare,
+  PhoneCall,
 } from "lucide-react";
 import { LeadConvertModal } from "../modals/LeadConvertModal";
 import { LeadImportModal } from "../leads/LeadImportModal";
@@ -303,6 +304,16 @@ export const LeadsView: React.FC = () => {
                               <span>Analyze</span>
                             </button>
 
+                            {lead.email && (
+                              <a
+                                href={`mailto:${lead.email}`}
+                                className="p-1 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded border border-indigo-200"
+                                title={`Email ${lead.email}`}
+                              >
+                                <Mail className="w-2.5 h-2.5" />
+                              </a>
+                            )}
+
                             {(lead.whatsapp || lead.phone) && (
                               <button
                                 onClick={() =>
@@ -316,6 +327,16 @@ export const LeadsView: React.FC = () => {
                               >
                                 <MessageSquare className="w-2.5 h-2.5" />
                               </button>
+                            )}
+
+                            {lead.phone && (
+                              <a
+                                href={`sms:${lead.phone}`}
+                                className="p-1 bg-slate-50 text-slate-500 hover:bg-slate-100 rounded border border-slate-200"
+                                title="Text message"
+                              >
+                                <PhoneCall className="w-2.5 h-2.5" />
+                              </a>
                             )}
 
                             {lead.status !== "Converted" && (
@@ -401,7 +422,11 @@ export const LeadsView: React.FC = () => {
                     </div>
                   </td>
                   <td className="p-3 text-slate-600 space-y-0.5">
-                    {lead.email && <div className="text-indigo-600">{lead.email}</div>}
+                    {lead.email && (
+                      <a href={`mailto:${lead.email}`} className="text-indigo-600 hover:underline block">
+                        {lead.email}
+                      </a>
+                    )}
                     {lead.phone && <div className="text-slate-500 text-[11px]">{lead.phone}</div>}
                   </td>
                   <td className="p-3">
@@ -432,6 +457,29 @@ export const LeadsView: React.FC = () => {
                         <Sparkles className="w-3 h-3" />
                         <span>Analyze</span>
                       </button>
+                      {(lead.whatsapp || lead.phone) && (
+                        <button
+                          onClick={() =>
+                            openWhatsAppComposer({
+                              to: lead.whatsapp || lead.phone,
+                              leadId: lead.id,
+                            })
+                          }
+                          className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded border border-emerald-200"
+                          title="Send WhatsApp Message"
+                        >
+                          <MessageSquare className="w-3 h-3" />
+                        </button>
+                      )}
+                      {lead.phone && (
+                        <a
+                          href={`sms:${lead.phone}`}
+                          className="p-1.5 bg-slate-50 text-slate-500 hover:bg-slate-100 rounded border border-slate-200"
+                          title="Text message"
+                        >
+                          <PhoneCall className="w-3 h-3" />
+                        </a>
+                      )}
                       {lead.status !== "Converted" && (
                         <button
                           onClick={() => setConvertingLead(lead)}

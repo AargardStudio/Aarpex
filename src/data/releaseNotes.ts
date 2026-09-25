@@ -23,6 +23,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.18.1",
+    date: "2026-09-25",
+    headline: "Email, WhatsApp & Text on Every Record",
+    tagline: "Open a company, contact, or lead and reach out in one click -- no more hunting for the right tab.",
+    highlights: [
+      {
+        title: "Quick actions right where you look",
+        description: "Opening a Company now shows Email, WhatsApp, and Text buttons in the header itself, plus the same three on every contact row, every Contacts table row, and every Lead card.",
+      },
+    ],
+  },
+  {
     version: "1.18.0",
     date: "2026-09-24",
     headline: "Send WhatsApp Messages from Leads & Contacts",

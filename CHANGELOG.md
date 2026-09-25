@@ -13,6 +13,18 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.18.1] - 2026-09-25
+### Added
+- **Email / WhatsApp / Text quick actions on every record you open.** Opening
+  a Company now shows Email, WhatsApp, and Text (SMS) buttons right in the
+  header, next to the close button, using the company's own phone/email --
+  no need to drill into a tab first. The same three actions were added to
+  each contact row inside a Company's Overview & Contacts tab, to every row
+  in the Contacts table, and to every Lead (both the Kanban card and the
+  table view) -- Email opens `mailto:`, Text opens `sms:`, and WhatsApp
+  opens the compose modal shipped in v1.18.0, prefilled with that record's
+  number.
+
 ## [1.18.0] - 2026-09-24
 ### Added
 - **WhatsApp Business integration (Meta Cloud API).** A workspace can now
