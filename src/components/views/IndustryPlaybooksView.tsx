@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { IndustryPlaybook, PreferredOutreachChannel } from "../../types";
 import { INDUSTRIES } from "../../data/industries";
+import { normalizeIndustry } from "../../lib/industryMatch";
 
 function csv(list: string[] | undefined): string {
   return (list || []).join(", ");
@@ -112,16 +113,16 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
 
   const duplicateIndustry =
     !editing &&
-    industryPlaybooks.some((p) => p.industry.trim().toLowerCase() === draft.industry.trim().toLowerCase());
+    industryPlaybooks.some((p) => normalizeIndustry(p.industry) === normalizeIndustry(draft.industry));
 
   // "Matching Businesses" -- every playbook already applies to every
   // Lead/Company whose Industry field matches this one, automatically and
   // invisibly. This surfaces exactly who that is right now (live, as the
   // Industry field above is edited) and lets specific businesses be opted
   // back out via a checkbox, without touching their Industry field.
-  const industryLc = draft.industry.trim().toLowerCase();
-  const matchingLeads = industryLc ? (leads || []).filter((l: any) => (l.industry || "").trim().toLowerCase() === industryLc) : [];
-  const matchingCompanies = industryLc ? (rawCompanies || []).filter((c: any) => (c.industry || "").trim().toLowerCase() === industryLc) : [];
+  const industryLc = normalizeIndustry(draft.industry);
+  const matchingLeads = industryLc ? (leads || []).filter((l: any) => normalizeIndustry(l.industry) === industryLc) : [];
+  const matchingCompanies = industryLc ? (rawCompanies || []).filter((c: any) => normalizeIndustry(c.industry) === industryLc) : [];
   const toggleExcludedLead = (id: string) => {
     setDraft((p) => {
       const cur = p.excludedLeadIds || [];
@@ -506,9 +507,9 @@ const PlaybookCard: React.FC<{ playbook: IndustryPlaybook; onEdit: () => void }>
   const { deleteIndustryPlaybook, leads, rawCompanies, products } = useCRM() as any;
   const linkedProduct = playbook.productId ? products.find((p: any) => p.id === playbook.productId) : null;
   const ChannelIcon = channelIcon(playbook.preferredChannel);
-  const industryLc = playbook.industry.trim().toLowerCase();
-  const matchingLeadCount = leads.filter((l: any) => (l.industry || "").trim().toLowerCase() === industryLc).length;
-  const matchingCompanyCount = (rawCompanies || []).filter((c: any) => (c.industry || "").trim().toLowerCase() === industryLc).length;
+  const industryLc = normalizeIndustry(playbook.industry);
+  const matchingLeadCount = leads.filter((l: any) => normalizeIndustry(l.industry) === industryLc).length;
+  const matchingCompanyCount = (rawCompanies || []).filter((c: any) => normalizeIndustry(c.industry) === industryLc).length;
   const excludedCount = (playbook.excludedLeadIds || []).length + (playbook.excludedCompanyIds || []).length;
   const matchCount = matchingLeadCount + matchingCompanyCount - excludedCount;
 

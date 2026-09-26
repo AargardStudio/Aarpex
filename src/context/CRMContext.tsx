@@ -71,6 +71,7 @@ import {
 import { defaultTenants } from "../data/tenantData";
 import { PLATFORM_PLAN, PLATFORM_TRIAL_DAYS, FOUNDER_EMAIL } from "../data/subscriptionPlans";
 import { apiFetch } from "../lib/apiClient";
+import { normalizeIndustry } from "../lib/industryMatch";
 
 // Local key for an in-progress "add another workspace" request (from
 // WorkspaceModal) that survives the full-page redirect to Stripe Checkout
@@ -801,7 +802,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const newActions: Omit<AgentAction, "id" | "createdAt" | "status">[] = [];
 
       for (const playbook of autoPlaybooks) {
-        const industryLc = playbook.industry.trim().toLowerCase();
+        const industryLc = normalizeIndustry(playbook.industry);
         const cadenceMs = Math.max(1, playbook.followUpFrequencyDays) * 86400000;
         // Resolve this playbook's optional Product/Service so every draft it
         // generates below is seeded with the same name/pitch context a
@@ -811,7 +812,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         // Follow-up due: leads
         const dueLeads = curLeads.filter((l) => {
-          if ((l.industry || "").trim().toLowerCase() !== industryLc) return false;
+          if (normalizeIndustry(l.industry) !== industryLc) return false;
           if ((playbook.excludedLeadIds || []).includes(l.id)) return false;
           if (!l.email) return false;
           if (l.status === "Converted" || l.status === "Lost") return false;
@@ -824,7 +825,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // most recent logged activity as the reference point)
         const dueContacts = curContacts.filter((c) => {
           const comp = curCompanies.find((co) => co.id === c.companyId);
-          if ((comp?.industry || "").trim().toLowerCase() !== industryLc) return false;
+          if (normalizeIndustry(comp?.industry) !== industryLc) return false;
           if (comp && (playbook.excludedCompanyIds || []).includes(comp.id)) return false;
           if (!c.email) return false;
           const lastActivity = curActivities
@@ -840,14 +841,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // plus anything this same scan has already queued, so a lead never
         // gets two summaries in one pass).
         const leadsNeedingSummary = curLeads.filter((l) => {
-          if ((l.industry || "").trim().toLowerCase() !== industryLc) return false;
+          if (normalizeIndustry(l.industry) !== industryLc) return false;
           if ((playbook.excludedLeadIds || []).includes(l.id)) return false;
           if (curKnowledge.some((k) => k.tags.includes("AI-Generated") && (k.linkedLeadIds || []).includes(l.id))) return false;
           return !kbUpserts.some((k) => (k.linkedLeadIds || []).includes(l.id));
         });
         const contactsNeedingSummary = curContacts.filter((c) => {
           const comp = curCompanies.find((co) => co.id === c.companyId);
-          if ((comp?.industry || "").trim().toLowerCase() !== industryLc) return false;
+          if (normalizeIndustry(comp?.industry) !== industryLc) return false;
           if (comp && (playbook.excludedCompanyIds || []).includes(comp.id)) return false;
           if (curKnowledge.some((k) => k.tags.includes("AI-Generated") && (k.linkedContactIds || []).includes(c.id))) return false;
           return !kbUpserts.some((k) => (k.linkedContactIds || []).includes(c.id));
@@ -998,7 +999,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (mailCfg?.email && mailCfg?.password && mailCfg?.imapHost) {
           const candidateLeads = curLeads.filter(
             (l) =>
-              (l.industry || "").trim().toLowerCase() === industryLc &&
+              normalizeIndustry(l.industry) === industryLc &&
               !(playbook.excludedLeadIds || []).includes(l.id) &&
               l.email &&
               l.status !== "Converted" &&
@@ -1007,7 +1008,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const candidateContacts = curContacts.filter((c) => {
             const comp = curCompanies.find((co) => co.id === c.companyId);
             return (
-              (comp?.industry || "").trim().toLowerCase() === industryLc &&
+              normalizeIndustry(comp?.industry) === industryLc &&
               !(comp && (playbook.excludedCompanyIds || []).includes(comp.id)) &&
               c.email
             );
@@ -2981,9 +2982,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // are skipped so toggling one off actually stops it from being applied.
   const getPlaybookForIndustry = (industry: string | undefined): IndustryPlaybook | undefined => {
     if (!industry) return undefined;
-    const normalized = industry.trim().toLowerCase();
+    const normalized = normalizeIndustry(industry);
     if (!normalized) return undefined;
-    return industryPlaybooks.find((p) => p.isActive && p.industry.trim().toLowerCase() === normalized);
+    return industryPlaybooks.find((p) => p.isActive && normalizeIndustry(p.industry) === normalized);
   };
 
   // Agent Approvals ------------------------------------------------------

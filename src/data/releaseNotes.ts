@@ -23,6 +23,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.28.1",
+    date: "2026-09-26",
+    headline: "Fixed: Businesses Not Matching Their Industry Playbook",
+    tagline: "A business could have the exact right Industry text and still be invisible to its Playbook, because of an invisible extra space you couldn't see on screen. That's fixed.",
+    highlights: [
+      {
+        title: "Invisible whitespace no longer breaks matching",
+        description: "A double space or stray extra space in an Industry value looked identical to the naked eye but could silently keep a Lead or Company out of its Playbook's Matching Businesses list and out of the AI agent's scan. Industry comparisons everywhere in AarPex now ignore this kind of extra whitespace, so businesses with a matching Industry always show up.",
+      },
+    ],
+  },
+  {
     version: "1.28.0",
     date: "2026-09-26",
     headline: "See Exactly Who Your Playbook Agent Is Working",

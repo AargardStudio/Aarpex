@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.28.1] - 2026-09-26
+
+### Fixed
+- Industry matching (Playbooks' "Matching Businesses" list, autonomous agent scanning, and the Industry Playbook lookup used on Lead/Contact profiles) now normalizes whitespace before comparing Industry text, not just trim + lowercase. Previously, a Lead or Company whose Industry contained a double space or other extra internal whitespace (invisible on screen -- HTML collapses it visually, so it looked identical to the Playbook's own Industry value) would silently fail to match and be excluded from its playbook. All industry comparisons across the app now go through one shared helper so this can't drift out of sync again.
+
 ## [1.28.0] - 2026-09-26
 
 ### Added
