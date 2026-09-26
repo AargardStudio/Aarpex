@@ -33,6 +33,7 @@ import {
   ProductAIInsight,
   KnowledgeBaseEntry,
   KnowledgeBaseCategory,
+  IndustryPlaybook,
 } from "../types";
 import { isSupabaseAuthConfigured, getSupabaseAuthClient } from "../config/supabaseAuthClient";
 import { getMailboxById } from "../lib/webmail";
@@ -101,7 +102,8 @@ export type NavView =
   | "Reports"
   | "Settings"
   | "CEO Notes"
-  | "Knowledge Base";
+  | "Knowledge Base"
+  | "Industry Playbooks";
 
 interface CRMContextType {
   // Navigation & Active selection
@@ -306,6 +308,18 @@ interface CRMContextType {
     url: string,
     category: KnowledgeBaseCategory
   ) => Promise<{ title: string; content: string; tags: string[]; sourceUrl: string }>;
+
+  // Industry Playbooks -- configurable, user-defined AI management profiles
+  // per industry (see IndustryPlaybook in types.ts). Drives email tone,
+  // qualification guidance, and follow-up cadence/channel wherever AI
+  // touches a lead/contact/company in that industry.
+  industryPlaybooks: IndustryPlaybook[];
+  addIndustryPlaybook: (
+    playbook: Omit<IndustryPlaybook, "id" | "createdAt" | "updatedAt" | "createdBy">
+  ) => IndustryPlaybook;
+  updateIndustryPlaybook: (id: string, updates: Partial<IndustryPlaybook>) => void;
+  deleteIndustryPlaybook: (id: string) => void;
+  getPlaybookForIndustry: (industry: string | undefined) => IndustryPlaybook | undefined;
 
   // Business Profile: AI analysis + manual call log riding on a Company record.
   runCompanyAIAnalysis: (companyId: string) => Promise<void>;
@@ -548,6 +562,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadTenantEntity("knowledgeBase", [] as KnowledgeBaseEntry[])
   );
 
+  const [industryPlaybooks, setIndustryPlaybooks] = useState<IndustryPlaybook[]>(() =>
+    loadTenantEntity("industryPlaybooks", [] as IndustryPlaybook[])
+  );
+
   // Every real tenant with Supabase configured mirrors its data to the
   // tenants' Postgres tables on every change. Guarded by !isBootstrapping
   // AND !isHydratingTenantData so the transient local state present before
@@ -631,6 +649,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (shouldSyncToSupabase) syncTenantTable("knowledge_base", activeTenantId, knowledgeBase);
   }, [knowledgeBase, activeTenantId]);
 
+  useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_industryPlaybooks`, JSON.stringify(industryPlaybooks));
+    if (shouldSyncToSupabase) syncTenantTable("industry_playbooks", activeTenantId, industryPlaybooks);
+  }, [industryPlaybooks, activeTenantId]);
+
   // Best-effort: flush any still-pending (debounced) Supabase table syncs
   // the moment the tab is hidden (switched away from, closed, or the
   // browser is closed) rather than only on an explicit "Sign out" click.
@@ -682,6 +705,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         emailCampaignsRes,
         productsRes,
         knowledgeBaseRes,
+        industryPlaybooksRes,
       ] = await Promise.all([
         fetchTenantTable<Company>("companies", activeTenantId),
         fetchTenantTable<Contact>("contacts", activeTenantId),
@@ -696,6 +720,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetchTenantTable<EmailCampaign>("email_campaigns", activeTenantId),
         fetchTenantTable<Product>("products", activeTenantId),
         fetchTenantTable<KnowledgeBaseEntry>("knowledge_base", activeTenantId),
+        fetchTenantTable<IndustryPlaybook>("industry_playbooks", activeTenantId),
       ]);
       if (cancelled) return;
       if (companiesRes) setRawCompanies(companiesRes);
@@ -711,6 +736,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (emailCampaignsRes) setEmailCampaigns(emailCampaignsRes);
       if (productsRes) setProducts(productsRes);
       if (knowledgeBaseRes) setKnowledgeBase(knowledgeBaseRes);
+      if (industryPlaybooksRes) setIndustryPlaybooks(industryPlaybooksRes);
       setIsHydratingTenantData(false);
     })();
     return () => {
@@ -737,6 +763,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(`crm_tenant_${activeTenantId}_emailCampaigns`, JSON.stringify(emailCampaigns));
     localStorage.setItem(`crm_tenant_${activeTenantId}_products`, JSON.stringify(products));
     localStorage.setItem(`crm_tenant_${activeTenantId}_knowledgeBase`, JSON.stringify(knowledgeBase));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_industryPlaybooks`, JSON.stringify(industryPlaybooks));
 
     // Every workspace starts genuinely empty except "pipelines" (a
     // structural default, not sample data) — see loadTenantEntity above.
@@ -765,6 +792,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEmailCampaigns(loadTarget("emailCampaigns", [] as EmailCampaign[]));
     setProducts(loadTarget("products", [] as Product[]));
     setKnowledgeBase(loadTarget("knowledgeBase", [] as KnowledgeBaseEntry[]));
+    setIndustryPlaybooks(loadTarget("industryPlaybooks", [] as IndustryPlaybook[]));
     setSelectedCompanyId(null);
     setSelectedDealId(null);
   };
@@ -2407,6 +2435,47 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setKnowledgeBase((prev) => prev.filter((entry) => entry.id !== id));
   };
 
+  // Industry Playbooks ---------------------------------------------------
+  const addIndustryPlaybook = (
+    playbookData: Omit<IndustryPlaybook, "id" | "createdAt" | "updatedAt" | "createdBy">
+  ): IndustryPlaybook => {
+    const newId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `pbk_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const now = new Date().toISOString();
+    const newPlaybook: IndustryPlaybook = {
+      ...playbookData,
+      id: newId,
+      talkingPoints: playbookData.talkingPoints || [],
+      painPoints: playbookData.painPoints || [],
+      createdBy: currentUser.name,
+      createdAt: now,
+      updatedAt: now,
+    };
+    setIndustryPlaybooks((prev) => [newPlaybook, ...prev]);
+    return newPlaybook;
+  };
+
+  const updateIndustryPlaybook = (id: string, updates: Partial<IndustryPlaybook>) => {
+    setIndustryPlaybooks((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p))
+    );
+  };
+
+  const deleteIndustryPlaybook = (id: string) => {
+    setIndustryPlaybooks((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  // Case-insensitive exact match on the industry name -- inactive playbooks
+  // are skipped so toggling one off actually stops it from being applied.
+  const getPlaybookForIndustry = (industry: string | undefined): IndustryPlaybook | undefined => {
+    if (!industry) return undefined;
+    const normalized = industry.trim().toLowerCase();
+    if (!normalized) return undefined;
+    return industryPlaybooks.find((p) => p.isActive && p.industry.trim().toLowerCase() === normalized);
+  };
+
   // AI-assisted setup: turns a plain-language description into a structured
   // draft the user reviews and edits before saving -- this never saves a
   // product on its own, it only returns fields for the create/edit form to
@@ -2766,6 +2835,12 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateKnowledgeBaseEntry,
         deleteKnowledgeBaseEntry,
         generateKnowledgeBaseDraftFromUrl,
+
+        industryPlaybooks,
+        addIndustryPlaybook,
+        updateIndustryPlaybook,
+        deleteIndustryPlaybook,
+        getPlaybookForIndustry,
 
         runCompanyAIAnalysis,
         addCallLogEntry,

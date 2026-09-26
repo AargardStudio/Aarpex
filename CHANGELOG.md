@@ -13,6 +13,46 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-09-26
+
+### Added
+- **Industry Playbooks** -- a new, fully configurable management view
+  (Intelligence section of the sidebar) for defining AI behavior per
+  industry: no fixed list, add as many as you sell into. Each playbook
+  controls three things at once, everywhere AI touches a matching
+  lead/contact/company:
+  - **Email tone & talking points** -- tone description, talking points,
+    common pain points, and objection-handling notes, fed into both the
+    bulk Email Marketing AI generator and the new single-recipient
+    personalized email generator.
+  - **Lead qualification guidance** -- free-text guidance fed into the
+    lead/contact AI Analysis prompt alongside the existing scoring logic.
+  - **Follow-up cadence & channel** -- a preferred outreach channel and
+    follow-up frequency/count the AI is asked to prefer.
+  - A playbook auto-applies by matching the `industry` field on a
+    Lead/Company (case-insensitive), no manual linking required.
+- **Individual lead/contact knowledge bases**, surfaced directly in the
+  Lead and Contact profile drawers under a new "Knowledge" tab -- built on
+  the existing Knowledge Base data model rather than a new one:
+  - **Manual notes** -- add free-text notes tied to that specific lead or
+    contact.
+  - **AI-Extracted Summary** -- one click summarizes the record's own
+    fields and full activity history into a dense knowledge entry,
+    refreshed in place (no duplicates) as new activity comes in.
+  - Both feed directly into that record's personalized email generation.
+- **Generate Personalized Email** -- a new single-recipient email
+  generator available from both the Lead and Contact AI Analysis tab,
+  distinct from bulk Email Marketing campaigns. Draws on the record's
+  individual knowledge base (manual + AI-extracted), its matching
+  Industry Playbook, and recent activity to draft one specific,
+  ready-to-send email (not a merge-tag template), which prefills the
+  existing email composer for review before sending.
+- Email Marketing campaign creation now auto-detects the dominant
+  industry among the selected audience and, when a matching Industry
+  Playbook exists, automatically applies its tone/talking points/pain
+  points to the AI-generated sequence -- with a manual override dropdown
+  if you'd rather pick a different playbook or none at all.
+
 ## [1.20.2] - 2026-09-25
 
 ### Fixed

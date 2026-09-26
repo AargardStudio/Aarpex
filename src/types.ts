@@ -420,6 +420,42 @@ export interface KnowledgeBaseEntry {
 }
 
 // ----------------------------------------------------------------------------
+// Industry Playbooks — configurable, user-defined AI management profiles per
+// industry (matches the freeform `industry` field on Lead/Company — see
+// src/data/industries.ts for the standard picklist, custom values still
+// work). One playbook per industry controls three things at once wherever
+// that industry's leads/contacts/companies are touched by AI:
+//   - email tone & talking points (bulk Email Marketing campaigns AND the
+//     single-recipient "Generate Personalized Email" feature)
+//   - lead qualification/scoring guidance (fed into /api/ai/lead-analysis)
+//   - follow-up cadence & preferred channel defaults
+// Not a hard-coded list of exactly N industries -- the user manages however
+// many they want from the Industry Playbooks view.
+// ----------------------------------------------------------------------------
+export type PreferredOutreachChannel = "Email" | "WhatsApp" | "Call" | "Mixed";
+
+export interface IndustryPlaybook {
+  id: string;
+  industry: string; // freeform, ideally matches src/data/industries.ts INDUSTRIES
+  isActive: boolean;
+  // Email tone & talking points
+  tone: string; // e.g. "Consultative and data-driven, minimal hype"
+  talkingPoints: string[]; // key value props / hooks to lean on
+  painPoints: string[]; // common pain points this industry has
+  objectionNotes?: string; // common objections + how to handle them
+  // Lead qualification / scoring guidance -- free-text guidance fed into the
+  // AI qualification prompt, not a rigid formula, so it stays flexible.
+  qualificationGuidance?: string;
+  // Follow-up cadence & channel defaults
+  preferredChannel: PreferredOutreachChannel;
+  followUpFrequencyDays: number;
+  followUpCount: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ----------------------------------------------------------------------------
 // Email Marketing — AI-generated outbound sequences targeting leads/contacts.
 // ----------------------------------------------------------------------------
 export type SalesTechnique = "Need-Based" | "Emotional" | "Problem-Solution";

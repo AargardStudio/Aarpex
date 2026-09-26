@@ -27,6 +27,7 @@ import {
   Shuffle,
   Package,
   Wand2,
+  BookMarked,
 } from "lucide-react";
 
 // ----------------------------------------------------------------------------
@@ -318,7 +319,7 @@ const CampaignCard: React.FC<{
 // New Campaign Wizard
 // ----------------------------------------------------------------------------
 const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const { leads, contacts, companies, products, activeTenant, currentUser, addEmailCampaign, addActivity } = useCRM();
+  const { leads, contacts, companies, products, industryPlaybooks, getPlaybookForIndustry, activeTenant, currentUser, addEmailCampaign, addActivity } = useCRM();
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [name, setName] = useState("");
@@ -326,6 +327,8 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   const [audienceSearch, setAudienceSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string>("");
+  const [selectedPlaybookId, setSelectedPlaybookId] = useState<string>("");
+  const [playbookManuallySet, setPlaybookManuallySet] = useState(false);
   const [selectedMailboxId, setSelectedMailboxId] = useState<string>(
     () => getMailboxById(activeTenant)?.id || ""
   );
@@ -348,6 +351,37 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
       setName(`${selectedProduct.name} — Outreach`);
     }
   };
+  // Industry-aware bulk generation: auto-detect the dominant industry among
+  // the currently selected audience and pre-select its playbook (if one
+  // exists), while still letting the user override the pick manually.
+  const dominantIndustry = useMemo(() => {
+    if (selectedIds.length === 0) return "";
+    const industries = selectedIds
+      .map((id) => {
+        if (audienceType === "Leads") {
+          return leads.find((l) => l.id === id)?.industry || "";
+        }
+        const contact = contacts.find((c) => c.id === id);
+        const comp = contact ? companies.find((co) => co.id === contact.companyId) : undefined;
+        return comp?.industry || "";
+      })
+      .filter(Boolean);
+    if (industries.length === 0) return "";
+    const counts = new Map<string, number>();
+    industries.forEach((ind) => counts.set(ind, (counts.get(ind) || 0) + 1));
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0][0];
+  }, [selectedIds, audienceType, leads, contacts, companies]);
+
+  React.useEffect(() => {
+    if (playbookManuallySet) return;
+    if (!dominantIndustry) return;
+    const match = getPlaybookForIndustry(dominantIndustry);
+    setSelectedPlaybookId(match?.id || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dominantIndustry]);
+
+  const selectedPlaybook = industryPlaybooks.find((p) => p.id === selectedPlaybookId) || null;
+
   const [frequency, setFrequency] = useState<EmailFrequency>("Weekly");
   const [customDays, setCustomDays] = useState(10);
   const [followUpCount, setFollowUpCount] = useState(2);
@@ -441,6 +475,15 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           senderCompany: activeTenant?.companyName || activeTenant?.name,
           productName: selectedProduct?.name,
           productPitch: selectedProduct?.pitch,
+          playbook: selectedPlaybook
+            ? {
+                industry: selectedPlaybook.industry,
+                tone: selectedPlaybook.tone,
+                talkingPoints: selectedPlaybook.talkingPoints,
+                painPoints: selectedPlaybook.painPoints,
+                objectionNotes: selectedPlaybook.objectionNotes,
+              }
+            : undefined,
         }),
       });
       const data = await res.json();
@@ -641,6 +684,38 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                         )
                       </button>
                     </div>
+                  )}
+                </div>
+              )}
+
+              {industryPlaybooks.length > 0 && (
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1.5 flex items-center gap-1.5">
+                    <BookMarked className="w-3.5 h-3.5 text-teal-400" />
+                    Industry Playbook <span className="text-slate-500 font-normal">(optional -- makes AI copy industry-aware)</span>
+                  </label>
+                  <select
+                    value={selectedPlaybookId}
+                    onChange={(e) => {
+                      setSelectedPlaybookId(e.target.value);
+                      setPlaybookManuallySet(true);
+                    }}
+                    className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+                  >
+                    <option value="">None — generic tone</option>
+                    {industryPlaybooks.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.industry}
+                      </option>
+                    ))}
+                  </select>
+                  {dominantIndustry && !playbookManuallySet && selectedPlaybook && (
+                    <p className="text-[10px] text-teal-400 mt-1">
+                      Auto-selected from your audience's dominant industry ({dominantIndustry}).
+                    </p>
+                  )}
+                  {selectedPlaybook && (
+                    <p className="text-[11px] text-slate-400 mt-1.5 line-clamp-2">{selectedPlaybook.tone}</p>
                   )}
                 </div>
               )}

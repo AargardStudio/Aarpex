@@ -23,6 +23,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.21.0",
+    date: "2026-09-26",
+    headline: "Industry Playbooks: AI That Knows Your Verticals",
+    tagline: "Configure how AI sells, qualifies, and follows up differently for every industry you work -- then let it write genuinely personalized emails per lead.",
+    highlights: [
+      {
+        title: "Industry Playbooks",
+        description: "A new Industry Playbooks page lets you define, for any industry you sell into, the email tone and talking points, lead qualification guidance, and follow-up cadence/channel AI should use -- no fixed list, add as many as you need.",
+      },
+      {
+        title: "Auto-applied everywhere",
+        description: "Playbooks apply automatically wherever a lead, contact, or company's Industry field matches -- bulk Email Marketing campaigns, AI Analysis scoring, and the new personalized email generator all pick it up on their own.",
+      },
+      {
+        title: "Individual lead & contact knowledge bases",
+        description: "A new \"Knowledge\" tab on every Lead and Contact profile holds manual notes plus a one-click AI-generated summary of that record's full history -- so your reps (and the AI) never start from scratch.",
+      },
+      {
+        title: "Generate Personalized Email",
+        description: "A new button on the AI Analysis tab drafts one specific, ready-to-send email for that exact lead or contact -- using their knowledge base, matching industry playbook, and recent activity -- and hands it straight to the email composer for review.",
+      },
+    ],
+  },
+  {
     version: "1.20.2",
     date: "2026-09-25",
     headline: "Deleted Workspaces Now Stay Deleted",

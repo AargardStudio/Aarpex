@@ -714,6 +714,7 @@ app.post("/api/ai/email-campaign", async (req, res) => {
       senderCompany,
       productName, // optional: the specific product/service this campaign is pitching
       productPitch, // optional: that product's marketing pitch, to seed the email copy
+      playbook, // optional: IndustryPlaybook fields for the audience's industry -- see src/types.ts
     } = req.body;
 
     const totalSteps = 1 + Math.max(0, Number(followUpCount) || 0);
@@ -756,10 +757,23 @@ app.post("/api/ai/email-campaign", async (req, res) => {
         }. Weave its concrete value into the opening and the call-to-action.`
       : "";
 
+    // Industry Playbook: when the audience is predominantly (or entirely) in
+    // one industry with a configured playbook, its tone/talking
+    // points/pain points override the generic technique-driven copy above --
+    // this is what makes bulk campaigns "industry-aware" per the Industry
+    // Playbooks feature.
+    const playbookLine = playbook
+      ? `\n\nIndustry Playbook for "${playbook.industry}" — follow this guidance closely, it overrides generic phrasing:
+- Tone to use: ${playbook.tone || "professional and direct"}
+- Talking points to weave in: ${(playbook.talkingPoints || []).join(", ") || "none specified"}
+- Common pain points in this industry to speak to: ${(playbook.painPoints || []).join(", ") || "none specified"}
+${playbook.objectionNotes ? `- Objection handling notes: ${playbook.objectionNotes}` : ""}`
+      : "";
+
     const prompt = `You are a world-class B2B email marketing strategist writing an outbound email SEQUENCE for ${senderCompany || "a B2B company"}.
 
 Audience: ${audienceCount || (audienceSample || []).length || "several"} ${audienceType === "Contacts" ? "existing contacts" : "sales leads"}.
-Sample of who's in this audience: ${sampleLine}${productLine}
+Sample of who's in this audience: ${sampleLine}${productLine}${playbookLine}
 
 Write a sequence of exactly ${totalSteps} email(s): step 1 is the initial outreach, steps 2+ are follow-ups spaced ${cadenceDays} day(s) apart (cadence: ${frequency || "Weekly"}).
 
@@ -828,7 +842,7 @@ Return pure JSON only, no markdown fences, in this exact shape:
 // plus whatever activity/notes history exists for it.
 app.post("/api/ai/lead-analysis", async (req, res) => {
   try {
-    const { lead, activities } = req.body;
+    const { lead, activities, playbook } = req.body;
     if (!lead) {
       return res.status(400).json({ error: "Lead data is required" });
     }
@@ -868,6 +882,16 @@ Lead Info:
 - Notes: ${lead.notes || "None"}
 - Tags: ${(lead.tags || []).join(", ") || "None"}
 - Recent Activities: ${(activities || []).slice(0, 5).map((a: any) => `${a.type}: ${a.description}`).join("; ") || "None recorded"}
+${
+  playbook
+    ? `
+Industry Playbook for "${playbook.industry}" — apply this guidance when scoring and recommending next steps:
+- Qualification guidance: ${playbook.qualificationGuidance || "None specified"}
+- Preferred outreach channel for this industry: ${playbook.preferredChannel || "Email"}
+- Standard follow-up cadence for this industry: every ${playbook.followUpFrequencyDays || 7} day(s), ${playbook.followUpCount ?? 2} follow-up(s) total
+Prefer this channel/cadence in your recommendations unless the lead's own data clearly suggests otherwise.`
+    : ""
+}
 
 Generate a JSON response:
 {
@@ -946,6 +970,149 @@ Return pure valid JSON only.`;
       source: "fallback",
       engine: "Aargard Business Intelligence Construct",
     });
+  }
+});
+
+// AI Personalized Email — single-recipient email generation (distinct from
+// the bulk Email Marketing campaign generator above). Draws on the
+// recipient's individual knowledge base entries (manual notes + prior
+// AI-extracted summaries), their matching Industry Playbook, and recent
+// activity to draft one specific, ready-to-send email rather than a
+// merge-tag template. Returned subject/body are meant to prefill the
+// EmailComposeModal for the rep to review before sending.
+app.post("/api/ai/personalized-email", async (req, res) => {
+  try {
+    const {
+      recipientName,
+      recipientCompany,
+      recipientJobTitle,
+      recipientIndustry,
+      knowledgeEntries, // string[] -- content of linked KnowledgeBaseEntry rows (manual + AI-extracted)
+      activities, // recent Activity rows for this lead/contact
+      playbook, // optional IndustryPlaybook for recipientIndustry
+      senderName,
+      senderCompany,
+      goal, // optional: what this specific email should accomplish, e.g. "book a demo call"
+    } = req.body;
+
+    if (!recipientName) {
+      return res.status(400).json({ error: "Recipient name is required" });
+    }
+
+    const firstName = String(recipientName).split(" ")[0] || "there";
+    const knowledgeLine =
+      (knowledgeEntries || []).length > 0
+        ? `\n\nWhat we know about ${recipientName} / ${recipientCompany || "their company"} (from our CRM's knowledge base — use this to make the email genuinely specific, not generic):\n${(knowledgeEntries || [])
+            .slice(0, 8)
+            .map((k: string, i: number) => `${i + 1}. ${k}`)
+            .join("\n")}`
+        : "";
+    const activityLine =
+      (activities || []).length > 0
+        ? `\n\nRecent activity history: ${(activities || [])
+            .slice(0, 5)
+            .map((a: any) => `${a.type}: ${a.description}`)
+            .join("; ")}`
+        : "";
+    const playbookLine = playbook
+      ? `\n\nIndustry Playbook for "${playbook.industry}" — follow this guidance:
+- Tone: ${playbook.tone || "professional and direct"}
+- Talking points to weave in: ${(playbook.talkingPoints || []).join(", ") || "none specified"}
+- Common pain points to speak to: ${(playbook.painPoints || []).join(", ") || "none specified"}
+${playbook.objectionNotes ? `- Objection handling notes: ${playbook.objectionNotes}` : ""}`
+      : "";
+
+    const fallbackSubject = `Quick idea for ${recipientCompany || firstName}`;
+    const fallbackBody = `Dear ${firstName},\n\nI wanted to reach out directly given your role${
+      recipientJobTitle ? ` as ${recipientJobTitle}` : ""
+    } at ${recipientCompany || "your company"}. ${
+      playbook?.painPoints?.[0] ? `Teams in ${playbook.industry} often deal with ${playbook.painPoints[0].toLowerCase()}, and that's exactly where we can help.` : "I think there's a strong fit worth a short conversation."
+    }\n\nWould you be open to a quick call this week?\n\nBest regards,\n${senderName || "Account Executive"}\n${senderCompany || ""}`;
+
+    const prompt = `You are an expert B2B sales rep at ${senderCompany || "our company"} writing ONE specific, personalized email to a single named recipient — not a template with merge tags. Write it as if you did real research on them.
+
+Recipient: ${recipientName}${recipientJobTitle ? `, ${recipientJobTitle}` : ""} at ${recipientCompany || "their company"}${recipientIndustry ? ` (industry: ${recipientIndustry})` : ""}.${knowledgeLine}${activityLine}${playbookLine}
+${goal ? `\n\nGoal of this specific email: ${goal}` : ""}
+
+Write a subject line and email body. Reference at least one concrete, specific detail from what we know about them if anything specific was provided above — avoid generic filler. Keep the body under 180 words, end with one clear call-to-action, and sign off with the sender's name and company.
+
+Return pure JSON only, no markdown fences, in this exact shape:
+{ "subject": "...", "body": "..." }`;
+
+    const rawAiText = await callGeminiSafe(prompt);
+    if (rawAiText) {
+      try {
+        const parsed = JSON.parse(rawAiText);
+        if (parsed.subject && parsed.body) {
+          return res.json({ subject: parsed.subject, body: parsed.body, source: "gemini" });
+        }
+      } catch {
+        // fall through to heuristic
+      }
+    }
+
+    return res.json({ subject: fallbackSubject, body: fallbackBody, source: "heuristic" });
+  } catch {
+    return res.json({
+      subject: "Quick idea for your team",
+      body: "Hi,\n\nI wanted to reach out about a way we could help your team. Would you be open to a short call this week?\n\nBest regards,\nSales Team",
+      source: "fallback",
+    });
+  }
+});
+
+// AI Lead/Contact Knowledge Summary — auto-extracts a knowledge base entry
+// from a lead/contact's own record + activity history, so the "individual
+// knowledge base" the AI later draws on doesn't rely purely on manual notes.
+// The caller stores the returned summary as a KnowledgeBaseEntry tagged
+// "AI-Generated" (see KnowledgeBaseEntry in src/types.ts) linked to that
+// record, replacing any prior AI-Generated entry for it on refresh.
+app.post("/api/ai/lead-knowledge-summary", async (req, res) => {
+  try {
+    const { name, company, jobTitle, industry, notes, tags, activities } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: "Name is required" });
+    }
+
+    const activityLines =
+      (activities || [])
+        .slice(0, 12)
+        .map((a: any) => `- [${a.date || ""}] ${a.type}: ${a.description}${a.outcome ? ` (outcome: ${a.outcome})` : ""}`)
+        .join("\n") || "No activity recorded yet.";
+
+    const fallbackSummary = `${name}${jobTitle ? ` (${jobTitle})` : ""} at ${company || "an unlisted company"}${
+      industry ? `, in the ${industry} industry` : ""
+    }. ${notes ? `Notes on file: ${notes}. ` : ""}${(tags || []).length > 0 ? `Tagged: ${(tags || []).join(", ")}. ` : ""}${
+      (activities || []).length > 0 ? `${activities.length} activity record(s) on file.` : "No activity recorded yet."
+    }`;
+
+    const prompt = `Summarize what we genuinely know about this CRM record into a short, dense knowledge-base entry a salesperson could quickly read before reaching out — not a generic restatement of the fields, but what actually stands out (buying signals, stated needs, objections raised, communication style, timing patterns).
+
+Record: ${name}${jobTitle ? `, ${jobTitle}` : ""} at ${company || "N/A"}${industry ? ` (${industry})` : ""}.
+Notes on file: ${notes || "None"}
+Tags: ${(tags || []).join(", ") || "None"}
+Activity history:
+${activityLines}
+
+Return pure JSON only, no markdown fences, in this exact shape:
+{ "summary": "..." }
+Keep "summary" under 120 words. If there's genuinely little to go on, say so plainly rather than padding.`;
+
+    const rawAiText = await callGeminiSafe(prompt);
+    if (rawAiText) {
+      try {
+        const parsed = JSON.parse(rawAiText);
+        if (parsed.summary) {
+          return res.json({ summary: parsed.summary, source: "gemini" });
+        }
+      } catch {
+        // fall through to heuristic
+      }
+    }
+
+    return res.json({ summary: fallbackSummary, source: "heuristic" });
+  } catch {
+    return res.json({ summary: "Unable to generate summary — insufficient data on file.", source: "fallback" });
   }
 });
 

@@ -17,6 +17,11 @@ import {
   Loader2,
   Pencil,
   Check,
+  BookMarked,
+  StickyNote,
+  Wand2,
+  RefreshCw,
+  Plus,
 } from "lucide-react";
 import { apiFetch } from "../../lib/apiClient";
 
@@ -52,13 +57,19 @@ export const ContactProfileDrawer: React.FC = () => {
     activities,
     addActivity,
     currentUser,
+    activeTenant,
     updateContact,
     openEmailComposer,
     openWhatsAppComposer,
     setSelectedCompanyId,
+    knowledgeBase,
+    addKnowledgeBaseEntry,
+    updateKnowledgeBaseEntry,
+    deleteKnowledgeBaseEntry,
+    getPlaybookForIndustry,
   } = useCRM();
 
-  const [activeTab, setActiveTab] = useState<"overview" | "timeline" | "ai">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "timeline" | "ai" | "knowledge">("overview");
   const [timelineChannelFilter, setTimelineChannelFilter] = useState<"all" | "Email" | "WhatsApp">("all");
   const [newActivityType, setNewActivityType] = useState<any>("Call");
   const [newActivityDesc, setNewActivityDesc] = useState("");
@@ -71,6 +82,11 @@ export const ContactProfileDrawer: React.FC = () => {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState(false);
 
+  const [manualNote, setManualNote] = useState("");
+  const [isRefreshingSummary, setIsRefreshingSummary] = useState(false);
+  const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
+  const [emailGenError, setEmailGenError] = useState(false);
+
   if (!selectedContactId) return null;
   const contact = contacts.find((c) => c.id === selectedContactId);
   if (!contact) return null;
@@ -80,6 +96,14 @@ export const ContactProfileDrawer: React.FC = () => {
     .filter((a) => a.contactId === contact.id)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const latestNextAction = contactActivities.find((a) => a.nextAction)?.nextAction;
+  const playbook = getPlaybookForIndustry(company?.industry);
+
+  // This contact's individual knowledge base -- manual notes + the
+  // AI-Generated auto-extracted summary (tagged so it's found and refreshed
+  // in place rather than piling up duplicates).
+  const linkedKnowledge = knowledgeBase.filter((k) => (k.linkedContactIds || []).includes(contact.id));
+  const aiSummaryEntry = linkedKnowledge.find((k) => k.tags.includes("AI-Generated"));
+  const manualKnowledge = linkedKnowledge.filter((k) => !k.tags.includes("AI-Generated"));
 
   const handleClose = () => setSelectedContactId(null);
 
@@ -126,6 +150,7 @@ export const ContactProfileDrawer: React.FC = () => {
             notes: contact.notes,
           },
           activities: contactActivities,
+          playbook,
         }),
       });
       const data = await res.json();
@@ -135,6 +160,96 @@ export const ContactProfileDrawer: React.FC = () => {
       setAnalysisError(true);
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  // Auto-extracted knowledge: summarizes the contact's own fields + activity
+  // history via AI, stored as a single AI-Generated KB entry updated in
+  // place on refresh rather than creating duplicates each time.
+  const handleRefreshKnowledgeSummary = async () => {
+    setIsRefreshingSummary(true);
+    try {
+      const res = await apiFetch("/api/ai/lead-knowledge-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: `${contact.firstName} ${contact.lastName}`.trim(),
+          company: company?.name,
+          jobTitle: contact.position,
+          industry: company?.industry,
+          notes: contact.notes,
+          tags: contact.tags,
+          activities: contactActivities,
+        }),
+      });
+      const data = await res.json();
+      if (aiSummaryEntry) {
+        updateKnowledgeBaseEntry(aiSummaryEntry.id, { content: data.summary });
+      } else {
+        addKnowledgeBaseEntry({
+          category: "company",
+          title: `${contact.firstName} ${contact.lastName} — AI Summary`,
+          content: data.summary,
+          tags: ["AI-Generated"],
+          linkedContactIds: [contact.id],
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsRefreshingSummary(false);
+    }
+  };
+
+  const handleAddManualNote = () => {
+    if (!manualNote.trim()) return;
+    addKnowledgeBaseEntry({
+      category: "company",
+      title: `Note on ${contact.firstName} ${contact.lastName}`,
+      content: manualNote.trim(),
+      tags: [],
+      linkedContactIds: [contact.id],
+    });
+    setManualNote("");
+  };
+
+  // Single-recipient personalized email -- distinct from bulk Email
+  // Marketing campaigns. Draws on this contact's individual knowledge base
+  // (manual + AI-extracted), its matching Industry Playbook, and recent
+  // activity, then prefills the result into the shared compose modal for
+  // the rep to review before sending.
+  const handleGeneratePersonalizedEmail = async () => {
+    setIsGeneratingEmail(true);
+    setEmailGenError(false);
+    try {
+      const res = await apiFetch("/api/ai/personalized-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipientName: `${contact.firstName} ${contact.lastName}`.trim(),
+          recipientCompany: company?.name,
+          recipientJobTitle: contact.position,
+          recipientIndustry: company?.industry,
+          knowledgeEntries: linkedKnowledge.map((k) => k.content),
+          activities: contactActivities,
+          playbook,
+          senderName: currentUser?.name,
+          senderCompany: activeTenant?.companyName || activeTenant?.name,
+        }),
+      });
+      const data = await res.json();
+      openEmailComposer({
+        to: contact.email,
+        subject: data.subject,
+        body: data.body,
+        companyId: contact.companyId,
+        contactId: contact.id,
+      });
+    } catch (err) {
+      console.error(err);
+      setEmailGenError(true);
+    } finally {
+      setIsGeneratingEmail(false);
     }
   };
 
@@ -234,6 +349,7 @@ export const ContactProfileDrawer: React.FC = () => {
             { id: "overview", label: "Overview", icon: Building2 },
             { id: "timeline", label: `Activity (${contactActivities.length})`, icon: CalendarCheck },
             { id: "ai", label: "AI Analysis", icon: Sparkles, badge: "AI" },
+            { id: "knowledge", label: `Knowledge (${linkedKnowledge.length})`, icon: BookMarked },
           ].map((tab) => {
             const Icon = tab.icon;
             const isSelected = activeTab === tab.id;
@@ -601,13 +717,113 @@ export const ContactProfileDrawer: React.FC = () => {
                       <div className="text-[11px] font-bold text-teal-300">Suggested Opening Line</div>
                       <p className="text-[11px] text-teal-100 italic leading-snug">"{result.suggestedOpeningLine}"</p>
                     </div>
+
+                    <div className="flex justify-end">
+                      <button
+                        onClick={handleGeneratePersonalizedEmail}
+                        disabled={isGeneratingEmail || !contact.email}
+                        title={!contact.email ? "This contact has no email on file" : undefined}
+                        className="px-3.5 py-1.5 bg-[#252a36] hover:bg-[#2f3544] disabled:opacity-50 text-white border border-[#3d4455] font-bold rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-sm"
+                      >
+                        <Wand2 className={`w-3.5 h-3.5 text-teal-400 ${isGeneratingEmail ? "animate-pulse" : ""}`} />
+                        <span>{isGeneratingEmail ? "Drafting…" : "Generate Personalized Email"}</span>
+                      </button>
+                    </div>
                   </div>
                 )}
 
                 {!isAnalyzing && !result && !analysisError && (
-                  <p className="text-[11px] text-slate-400">
-                    Run the analysis to get a qualification score, buyer-intent signals, and a recommended channel/opener for this contact.
+                  <div className="space-y-3">
+                    <p className="text-[11px] text-slate-400">
+                      Run the analysis to get a qualification score, buyer-intent signals, and a recommended channel/opener for this contact.
+                    </p>
+                    <button
+                      onClick={handleGeneratePersonalizedEmail}
+                      disabled={isGeneratingEmail || !contact.email}
+                      title={!contact.email ? "This contact has no email on file" : undefined}
+                      className="px-3.5 py-1.5 bg-[#252a36] hover:bg-[#2f3544] disabled:opacity-50 text-white border border-[#3d4455] font-bold rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-sm"
+                    >
+                      <Wand2 className={`w-3.5 h-3.5 text-teal-400 ${isGeneratingEmail ? "animate-pulse" : ""}`} />
+                      <span>{isGeneratingEmail ? "Drafting…" : "Generate Personalized Email"}</span>
+                    </button>
+                  </div>
+                )}
+                {emailGenError && (
+                  <p className="text-[11px] text-rose-400">Couldn't generate the email -- please try again.</p>
+                )}
+                {playbook && (
+                  <p className="text-[10px] text-slate-500">
+                    Using the "{playbook.industry}" industry playbook for tone, qualification, and channel guidance.
                   </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "knowledge" && (
+            <div className="space-y-5">
+              <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-500" /> AI-Extracted Summary
+                  </h3>
+                  <button
+                    onClick={handleRefreshKnowledgeSummary}
+                    disabled={isRefreshingSummary}
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isRefreshingSummary ? "animate-spin" : ""}`} />
+                    {isRefreshingSummary ? "Refreshing…" : aiSummaryEntry ? "Refresh" : "Generate"}
+                  </button>
+                </div>
+                {aiSummaryEntry ? (
+                  <p className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed">{aiSummaryEntry.content}</p>
+                ) : (
+                  <p className="text-xs text-slate-400">
+                    No AI summary yet -- generate one from this contact's own fields and activity history.
+                  </p>
+                )}
+              </div>
+
+              <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-2xs space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <StickyNote className="w-3.5 h-3.5 text-slate-400" /> Manual Notes
+                </h3>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Add a note only you know -- gets fed into personalized emails"
+                    value={manualNote}
+                    onChange={(e) => setManualNote(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddManualNote()}
+                    className="flex-1 px-3 py-1.5 border border-slate-300 rounded-lg text-xs"
+                  />
+                  <button
+                    onClick={handleAddManualNote}
+                    disabled={!manualNote.trim()}
+                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add
+                  </button>
+                </div>
+                {manualKnowledge.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-4">No manual notes yet for this contact.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {manualKnowledge.map((entry) => (
+                      <div key={entry.id} className="p-2.5 bg-slate-50/70 border border-slate-200 rounded-lg flex items-start justify-between gap-2">
+                        <p className="text-slate-700 text-xs leading-relaxed whitespace-pre-wrap">{entry.content}</p>
+                        <button
+                          onClick={() => deleteKnowledgeBaseEntry(entry.id)}
+                          className="text-slate-400 hover:text-rose-500 shrink-0"
+                          title="Delete note"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
