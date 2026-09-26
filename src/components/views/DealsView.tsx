@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useCRM } from "../../context/CRMContext";
 import { Deal, PipelineStage } from "../../types";
 import {
@@ -16,7 +16,9 @@ import {
   ChevronRight,
   MoreVertical,
   Calendar,
+  FileSpreadsheet,
 } from "lucide-react";
+import { EntityImportModal } from "../common/EntityImportModal";
 
 export const DealsView: React.FC = () => {
   const {
@@ -29,6 +31,7 @@ export const DealsView: React.FC = () => {
     setSelectedCompanyId,
     setQuickCreateOpen,
     setQuickCreateType,
+    pendingBulkImport,
   } = useCRM();
 
   const [selectedPipelineId, setSelectedPipelineId] = useState<string>(
@@ -36,6 +39,11 @@ export const DealsView: React.FC = () => {
   );
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDealForModal, setSelectedDealForModal] = useState<Deal | null>(null);
+  const [isImportOpen, setImportOpen] = useState(false);
+
+  useEffect(() => {
+    if (pendingBulkImport?.entity === "deal") setImportOpen(true);
+  }, [pendingBulkImport]);
 
   const activePipeline =
     pipelines.find((p) => p.id === selectedPipelineId) || pipelines[0];
@@ -116,6 +124,15 @@ export const DealsView: React.FC = () => {
           </div>
 
           <button
+            onClick={() => setImportOpen(true)}
+            className="px-3.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all"
+            title="Import or bulk-update deals from Excel or Google Sheets"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-500" />
+            <span>Import Deals</span>
+          </button>
+
+          <button
             onClick={() => {
               setQuickCreateType("deal");
               setQuickCreateOpen(true);
@@ -127,6 +144,8 @@ export const DealsView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      <EntityImportModal entity="deal" isOpen={isImportOpen} onClose={() => setImportOpen(false)} />
 
       {/* Visual Kanban Stages */}
       <div className="flex gap-4 overflow-x-auto pb-4 items-start custom-scrollbar">

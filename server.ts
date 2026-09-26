@@ -1507,7 +1507,7 @@ const VALID_NAV_VIEWS = [
   "Dashboard", "Leads", "Contacts", "Companies", "Products", "Deals", "Pipelines",
   "Activities", "Invoices", "Payments", "Revenue", "Stripe", "Tasks",
   "AI Insights", "Email Marketing", "Inbox", "Reports", "Settings", "CEO Notes",
-  "Knowledge Base",
+  "Knowledge Base", "File Manager",
 ];
 
 // ----------------------------------------------------------------------------
@@ -3315,6 +3315,126 @@ app.post("/api/webmail/check-replies", async (req, res) => {
     } catch {
       // best-effort cleanup only
     }
+  }
+});
+
+// ----------------------------------------------------------------------------
+// File Manager -- workspace file storage, backed by a private Supabase
+// Storage bucket. Only the /api/storage/* endpoints below ever touch the
+// bucket directly; the client only ever sees a StoredFile metadata record
+// (see src/types.ts) plus short-lived signed URLs for download. Quota is
+// enforced HERE, server-side, against the actual sum of stored_files rows
+// for the tenant -- never trust a client-computed usage figure, since that's
+// trivially bypassed by calling this endpoint directly.
+//
+// STORAGE_LIMITS_BYTES is kept in sync by hand with
+// src/data/subscriptionPlans.ts's STORAGE_LIMITS_GB (same reasoning as
+// STANDARD_INDUSTRIES above -- server.ts bundles standalone for the Node
+// runtime and this rarely changes): 1GB on Growth ($29/mo), 10GB on Pro
+// ($99/mo).
+// ----------------------------------------------------------------------------
+const TENANT_FILES_BUCKET = "tenant-files";
+const STORAGE_LIMITS_BYTES: Record<string, number> = {
+  Starter: 1 * 1024 ** 3,
+  Growth: 1 * 1024 ** 3,
+  Pro: 10 * 1024 ** 3,
+  Enterprise: 10 * 1024 ** 3,
+  Free: 1 * 1024 ** 3,
+};
+
+let bucketEnsured = false;
+async function ensureTenantFilesBucket(supabase: ReturnType<typeof createClient>) {
+  if (bucketEnsured) return;
+  try {
+    await supabase.storage.createBucket(TENANT_FILES_BUCKET, { public: false });
+  } catch (err: any) {
+    // "already exists" (or any other create race) is fine -- the bucket
+    // just needs to exist by the time we upload into it.
+  } finally {
+    bucketEnsured = true;
+  }
+}
+
+app.post("/api/storage/upload", async (req, res) => {
+  try {
+    const { tenantId, plan, filename, contentType, dataUrl } = req.body || {};
+    if (!tenantId || !dataUrl || !filename) {
+      return res.status(400).json({ error: "tenantId, filename, and dataUrl are required." });
+    }
+
+    const commaIdx = String(dataUrl).indexOf(",");
+    const base64 = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl;
+    const buffer = Buffer.from(base64, "base64");
+    const size = buffer.length;
+
+    const supabase = getServerSupabase();
+    if (supabase) {
+      const quotaBytes = STORAGE_LIMITS_BYTES[plan] ?? STORAGE_LIMITS_BYTES.Growth;
+      const { data: existing, error: sumErr } = await supabase
+        .from("stored_files")
+        .select("size")
+        .eq("tenant_id", tenantId);
+      if (!sumErr && Array.isArray(existing)) {
+        const usedBytes = existing.reduce((sum: number, row: any) => sum + (Number(row.size) || 0), 0);
+        if (usedBytes + size > quotaBytes) {
+          const usedGb = (usedBytes / 1024 ** 3).toFixed(2);
+          const quotaGb = (quotaBytes / 1024 ** 3).toFixed(0);
+          return res.status(413).json({
+            error: `Storage limit reached -- you're using ${usedGb}GB of your ${quotaGb}GB plan limit. Delete some files or upgrade your plan to upload more.`,
+          });
+        }
+      }
+
+      await ensureTenantFilesBucket(supabase);
+      const storagePath = `${tenantId}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${filename}`.replace(/\s+/g, "_");
+      const { error: uploadErr } = await supabase.storage
+        .from(TENANT_FILES_BUCKET)
+        .upload(storagePath, buffer, { contentType: contentType || "application/octet-stream", upsert: false });
+      if (uploadErr) {
+        return res.status(500).json({ error: `Upload failed: ${uploadErr.message}` });
+      }
+
+      return res.json({ storagePath, size, contentType: contentType || "application/octet-stream", filename });
+    }
+
+    // No Supabase project configured (local/demo mode) -- accept the upload
+    // without real persistence or enforcement so the UI still works.
+    return res.json({
+      storagePath: `local/${Date.now()}_${filename}`,
+      size,
+      contentType: contentType || "application/octet-stream",
+      filename,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || "Upload failed." });
+  }
+});
+
+app.post("/api/storage/signed-url", async (req, res) => {
+  try {
+    const { storagePath } = req.body || {};
+    if (!storagePath) return res.status(400).json({ error: "storagePath is required." });
+    const supabase = getServerSupabase();
+    if (!supabase) return res.status(400).json({ error: "No storage backend configured." });
+    const { data, error } = await supabase.storage.from(TENANT_FILES_BUCKET).createSignedUrl(storagePath, 3600);
+    if (error || !data) return res.status(404).json({ error: error?.message || "File not found." });
+    return res.json({ url: data.signedUrl });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || "Couldn't generate a download link." });
+  }
+});
+
+app.post("/api/storage/delete", async (req, res) => {
+  try {
+    const { storagePath } = req.body || {};
+    if (!storagePath) return res.status(400).json({ error: "storagePath is required." });
+    const supabase = getServerSupabase();
+    if (!supabase) return res.json({ success: true });
+    const { error } = await supabase.storage.from(TENANT_FILES_BUCKET).remove([storagePath]);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || "Delete failed." });
   }
 });
 

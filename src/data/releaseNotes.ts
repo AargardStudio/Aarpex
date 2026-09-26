@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.25.0",
+    date: "2026-09-26",
+    headline: "A File Manager for Your Whole Workspace",
+    tagline: "Upload, organize, and reuse files across the CRM -- drop them straight into your Knowledge Base or use a spreadsheet to bulk-update records, all backed by real, quota-tracked storage.",
+    highlights: [
+      {
+        title: "File Manager with real storage",
+        description: "Upload, download, search, and delete files from a new File Manager page. A usage bar shows exactly how much of your plan's storage (1GB on Growth, 10GB on Pro) you've used.",
+      },
+      {
+        title: "Drop a file into your Knowledge Base",
+        description: "One click turns any uploaded file into a Knowledge Base entry -- text files bring their content with them, everything else still becomes a linked, searchable reference.",
+      },
+      {
+        title: "Bulk-update records from a spreadsheet",
+        description: "Contacts, Companies, and Deals now get the same Excel/Google Sheets import + column-mapping wizard Leads already had -- plus a new \"Update existing records\" mode that alters records already in your CRM by matching a key column, not just creating new ones.",
+      },
+    ],
+  },
+  {
     version: "1.24.0",
     date: "2026-09-26",
     headline: "Talk to Your Agents",

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useCRM } from "../../context/CRMContext";
 import { Company, CustomerStatus } from "../../types";
 import {
@@ -14,7 +14,9 @@ import {
   Sparkles,
   ChevronRight,
   ExternalLink,
+  FileSpreadsheet,
 } from "lucide-react";
+import { EntityImportModal } from "../common/EntityImportModal";
 
 export const CompaniesView: React.FC = () => {
   const {
@@ -22,10 +24,16 @@ export const CompaniesView: React.FC = () => {
     setSelectedCompanyId,
     setQuickCreateOpen,
     setQuickCreateType,
+    pendingBulkImport,
   } = useCRM();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [isImportOpen, setImportOpen] = useState(false);
+
+  useEffect(() => {
+    if (pendingBulkImport?.entity === "company") setImportOpen(true);
+  }, [pendingBulkImport]);
 
   const filteredCompanies = companies.filter((c) => {
     const matchesSearch =
@@ -114,17 +122,29 @@ export const CompaniesView: React.FC = () => {
           </select>
         </div>
 
-        <button
-          onClick={() => {
-            setQuickCreateType("company");
-            setQuickCreateOpen(true);
-          }}
-          className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm self-end sm:self-auto"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Add Company</span>
-        </button>
+        <div className="flex items-center gap-2 self-end sm:self-auto">
+          <button
+            onClick={() => setImportOpen(true)}
+            className="px-3.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm"
+            title="Import or bulk-update companies from Excel or Google Sheets"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-500" />
+            <span>Import Companies</span>
+          </button>
+          <button
+            onClick={() => {
+              setQuickCreateType("company");
+              setQuickCreateOpen(true);
+            }}
+            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Company</span>
+          </button>
+        </div>
       </div>
+
+      <EntityImportModal entity="company" isOpen={isImportOpen} onClose={() => setImportOpen(false)} />
 
       {/* Data Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">

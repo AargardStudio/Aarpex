@@ -1,10 +1,17 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useCRM } from "../../context/CRMContext";
-import { Users, Plus, Search, Mail, Phone, Building2, ExternalLink, MessageSquare } from "lucide-react";
+import { Users, Plus, Search, Mail, Phone, Building2, ExternalLink, MessageSquare, FileSpreadsheet } from "lucide-react";
+import { EntityImportModal } from "../common/EntityImportModal";
 
 export const ContactsView: React.FC = () => {
-  const { contacts, companies, setSelectedCompanyId, setSelectedContactId, setQuickCreateOpen, setQuickCreateType, openWhatsAppComposer, openEmailComposer } = useCRM();
+  const { contacts, companies, setSelectedCompanyId, setSelectedContactId, setQuickCreateOpen, setQuickCreateType, openWhatsAppComposer, openEmailComposer, pendingBulkImport } = useCRM();
   const [searchTerm, setSearchTerm] = useState("");
+  const [isImportOpen, setImportOpen] = useState(false);
+
+  // File Manager's "Use for bulk update/create" hands off here for contacts.
+  useEffect(() => {
+    if (pendingBulkImport?.entity === "contact") setImportOpen(true);
+  }, [pendingBulkImport]);
 
   const filteredContacts = contacts.filter((cnt) => {
     const comp = companies.find((c) => c.id === cnt.companyId);
@@ -67,17 +74,29 @@ export const ContactsView: React.FC = () => {
           />
         </div>
 
-        <button
-          onClick={() => {
-            setQuickCreateType("contact");
-            setQuickCreateOpen(true);
-          }}
-          className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm self-end sm:self-auto"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Add Contact</span>
-        </button>
+        <div className="flex items-center gap-2 self-end sm:self-auto">
+          <button
+            onClick={() => setImportOpen(true)}
+            className="px-3.5 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm"
+            title="Import or bulk-update contacts from Excel or Google Sheets"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-500" />
+            <span>Import Contacts</span>
+          </button>
+          <button
+            onClick={() => {
+              setQuickCreateType("contact");
+              setQuickCreateOpen(true);
+            }}
+            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Contact</span>
+          </button>
+        </div>
       </div>
+
+      <EntityImportModal entity="contact" isOpen={isImportOpen} onClose={() => setImportOpen(false)} />
 
       {/* Contacts Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">

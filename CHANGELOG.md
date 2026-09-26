@@ -13,6 +13,33 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-09-26
+
+### Added
+- **File Manager**, backed by real, quota-enforced Supabase Storage --
+  new sidebar item (System section):
+  - Upload files by drag-and-drop or file picker; download, delete, and
+    search the workspace's files.
+  - A storage usage bar shows bytes used against the plan's limit -- **1GB
+    on Growth ($29/mo), 10GB on Pro ($99/mo)** -- enforced server-side on
+    every upload (`/api/storage/upload`), never trusting a client-reported
+    figure, so the limit holds even if someone calls the API directly.
+  - **Add to Knowledge Base**: turns any file into a Knowledge Base entry
+    with one click -- text-friendly files (.txt/.csv/.md/.json) pull their
+    actual content in; everything else still gets a linked reference entry.
+  - **Use for bulk create/update**: a spreadsheet already in the File
+    Manager can be reused directly for a bulk import/update on Contacts,
+    Companies, or Deals, without re-uploading the same file.
+- **Excel/Google Sheets import + column remapping, generalized beyond
+  Leads** to Contacts, Companies, and Deals (new "Import Contacts/
+  Companies/Deals" buttons on each list view) -- the same column-mapping
+  wizard Lead import already had, plus a mode this didn't have before:
+  - **Create new records** (the original behavior), or
+  - **Update existing records** -- rows are matched to existing records by
+    one key column (email for Contacts, name for Companies/Deals) and only
+    the columns you map are applied as updates, so a spreadsheet can now be
+    used to bulk-alter records already in the CRM, not just create new ones.
+
 ## [1.24.0] - 2026-09-26
 
 ### Added

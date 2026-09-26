@@ -32,6 +32,7 @@ import {
   BookOpen,
   BookMarked,
   Bot,
+  FolderOpen,
 } from "lucide-react";
 import { ROLE_LABELS, UserRole } from "../../types";
 
@@ -64,6 +65,7 @@ export const Sidebar: React.FC = () => {
     knowledgeBase,
     industryPlaybooks,
     agentActions,
+    storedFiles,
     setCreateTenantModalOpen,
     setAuthPageOpen,
     setAuthPageMode,
@@ -130,6 +132,7 @@ export const Sidebar: React.FC = () => {
       category: "Marketing",
     },
 
+    { name: "File Manager", icon: FolderOpen, badge: storedFiles?.length || undefined, category: "System" },
     { name: "Reports", icon: BarChart3, category: "System" },
     { name: "Settings", icon: Settings, category: "System" },
   ];

@@ -25,6 +25,7 @@ import { SettingsView } from "./components/views/SettingsView";
 import { KnowledgeBaseView } from "./components/views/KnowledgeBaseView";
 import { IndustryPlaybooksView } from "./components/views/IndustryPlaybooksView";
 import { AgentApprovalsView } from "./components/views/AgentApprovalsView";
+import { FileManagerView } from "./components/views/FileManagerView";
 import { Company360Drawer } from "./components/company/Company360Drawer";
 import { ContactProfileDrawer } from "./components/contacts/ContactProfileDrawer";
 import { LeadProfileDrawer } from "./components/leads/LeadProfileDrawer";
@@ -133,6 +134,8 @@ const CRMMainContent: React.FC = () => {
         return <IndustryPlaybooksView />;
       case "agentapprovals":
         return <AgentApprovalsView />;
+      case "filemanager":
+        return <FileManagerView />;
       case "inbox":
         return <InboxView />;
       case "reports":

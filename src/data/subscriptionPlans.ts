@@ -138,6 +138,23 @@ export function generatePendingReferenceId(): string {
   return `pend_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/**
+ * File Manager storage quota per plan, in whole gigabytes -- 1GB on Growth
+ * ($29/mo), 10GB on Pro ($99/mo). Enforced server-side in /api/storage/upload
+ * (never trust a client-computed check alone); Starter/Enterprise are kept at
+ * parity with their nearest visible tier even though both stay hidden.
+ */
+export const STORAGE_LIMITS_GB: Record<SubscriptionPlan["id"], number> = {
+  Starter: 1,
+  Growth: 1,
+  Pro: 10,
+  Enterprise: 10,
+};
+
+export const STORAGE_LIMITS_BYTES: Record<SubscriptionPlan["id"], number> = Object.fromEntries(
+  Object.entries(STORAGE_LIMITS_GB).map(([id, gb]) => [id, gb * 1024 ** 3])
+) as Record<SubscriptionPlan["id"], number>;
+
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
     id: "Starter",
@@ -172,6 +189,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       "Create subscription & one-time pricing for your customers",
       "Multi-currency billing (USD, EUR, GBP)",
       "Hostinger Webmail & SMTP integration",
+      "1GB of file storage",
       "Priority customer support",
     ],
   },
@@ -192,6 +210,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       "Analysis Manager — a searchable history of every AI analysis you've run",
       "Workspace Knowledge Base to ground AI answers in your own material",
       "Higher AI usage credit limits",
+      "10GB of file storage",
       "Up to 10 team members",
     ],
   },

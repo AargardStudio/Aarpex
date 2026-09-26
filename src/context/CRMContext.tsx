@@ -36,7 +36,10 @@ import {
   IndustryPlaybook,
   AgentAction,
   AgentActionStatus,
+  StoredFile,
+  StoredFileSource,
 } from "../types";
+import { STORAGE_LIMITS_BYTES } from "../data/subscriptionPlans";
 import { isSupabaseAuthConfigured, getSupabaseAuthClient } from "../config/supabaseAuthClient";
 import { getMailboxById } from "../lib/webmail";
 import {
@@ -106,7 +109,8 @@ export type NavView =
   | "CEO Notes"
   | "Knowledge Base"
   | "Industry Playbooks"
-  | "Agent Approvals";
+  | "Agent Approvals"
+  | "File Manager";
 
 interface CRMContextType {
   // Navigation & Active selection
@@ -331,6 +335,36 @@ interface CRMContextType {
   resolveAgentAction: (id: string, status: AgentActionStatus, updates?: Partial<AgentAction>) => void;
   deleteAgentAction: (id: string) => void;
   approveAndSendAgentAction: (id: string, overrides?: { subject?: string; body?: string }) => Promise<boolean>;
+
+  // File Manager -- workspace file storage, backed by a Supabase Storage
+  // bucket (see server.ts's /api/storage/* endpoints). storageUsedBytes/
+  // storageLimitBytes are derived, not stored, so they can never drift from
+  // the actual storedFiles list; the server independently re-enforces the
+  // same limit on every upload regardless of what the client reports.
+  storedFiles: StoredFile[];
+  storageUsedBytes: number;
+  storageLimitBytes: number;
+  uploadStoredFile: (
+    file: File,
+    opts: {
+      source: StoredFileSource;
+      linkedLeadId?: string;
+      linkedContactId?: string;
+      linkedCompanyId?: string;
+      linkedDealId?: string;
+    }
+  ) => Promise<StoredFile>;
+  deleteStoredFile: (id: string) => Promise<void>;
+  getStoredFileUrl: (id: string) => Promise<string | null>;
+  // Cross-view handoff: File Manager sets this when the user picks "Use for
+  // bulk update/create" on a file, then navigates to the matching entity's
+  // list view -- that view's EntityImportModal picks it up on mount (if its
+  // own entity matches) and clears it, pre-loading the parsed rows instead
+  // of asking the user to upload the same file again.
+  pendingBulkImport: { entity: "contact" | "company" | "deal"; rows: any[]; headers: string[]; filename: string } | null;
+  setPendingBulkImport: (
+    value: { entity: "contact" | "company" | "deal"; rows: any[]; headers: string[]; filename: string } | null
+  ) => void;
 
   // Business Profile: AI analysis + manual call log riding on a Company record.
   runCompanyAIAnalysis: (companyId: string) => Promise<void>;
@@ -581,6 +615,12 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadTenantEntity("agentActions", [] as AgentAction[])
   );
 
+  const [storedFiles, setStoredFiles] = useState<StoredFile[]>(() =>
+    loadTenantEntity("storedFiles", [] as StoredFile[])
+  );
+
+  const [pendingBulkImport, setPendingBulkImport] = useState<CRMContextType["pendingBulkImport"]>(null);
+
   // Every real tenant with Supabase configured mirrors its data to the
   // tenants' Postgres tables on every change. Guarded by !isBootstrapping
   // AND !isHydratingTenantData so the transient local state present before
@@ -673,6 +713,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(`crm_tenant_${activeTenantId}_agentActions`, JSON.stringify(agentActions));
     if (shouldSyncToSupabase) syncTenantTable("agent_actions", activeTenantId, agentActions);
   }, [agentActions, activeTenantId]);
+
+  useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_storedFiles`, JSON.stringify(storedFiles));
+    if (shouldSyncToSupabase) syncTenantTable("stored_files", activeTenantId, storedFiles);
+  }, [storedFiles, activeTenantId]);
 
   // ------------------------------------------------------------------------
   // Autonomous agent scan -- for any Industry Playbook with autoRunEnabled,
@@ -1105,6 +1150,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         knowledgeBaseRes,
         industryPlaybooksRes,
         agentActionsRes,
+        storedFilesRes,
       ] = await Promise.all([
         fetchTenantTable<Company>("companies", activeTenantId),
         fetchTenantTable<Contact>("contacts", activeTenantId),
@@ -1121,6 +1167,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetchTenantTable<KnowledgeBaseEntry>("knowledge_base", activeTenantId),
         fetchTenantTable<IndustryPlaybook>("industry_playbooks", activeTenantId),
         fetchTenantTable<AgentAction>("agent_actions", activeTenantId),
+        fetchTenantTable<StoredFile>("stored_files", activeTenantId),
       ]);
       if (cancelled) return;
       if (companiesRes) setRawCompanies(companiesRes);
@@ -1138,6 +1185,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (knowledgeBaseRes) setKnowledgeBase(knowledgeBaseRes);
       if (industryPlaybooksRes) setIndustryPlaybooks(industryPlaybooksRes);
       if (agentActionsRes) setAgentActions(agentActionsRes);
+      if (storedFilesRes) setStoredFiles(storedFilesRes);
       setIsHydratingTenantData(false);
     })();
     return () => {
@@ -1166,6 +1214,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(`crm_tenant_${activeTenantId}_knowledgeBase`, JSON.stringify(knowledgeBase));
     localStorage.setItem(`crm_tenant_${activeTenantId}_industryPlaybooks`, JSON.stringify(industryPlaybooks));
     localStorage.setItem(`crm_tenant_${activeTenantId}_agentActions`, JSON.stringify(agentActions));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_storedFiles`, JSON.stringify(storedFiles));
 
     // Every workspace starts genuinely empty except "pipelines" (a
     // structural default, not sample data) — see loadTenantEntity above.
@@ -1196,6 +1245,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setKnowledgeBase(loadTarget("knowledgeBase", [] as KnowledgeBaseEntry[]));
     setIndustryPlaybooks(loadTarget("industryPlaybooks", [] as IndustryPlaybook[]));
     setAgentActions(loadTarget("agentActions", [] as AgentAction[]));
+    setStoredFiles(loadTarget("storedFiles", [] as StoredFile[]));
     setSelectedCompanyId(null);
     setSelectedDealId(null);
   };
@@ -2977,6 +3027,111 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // File Manager ----------------------------------------------------------
+  // storageUsedBytes is derived from the live storedFiles list, never a
+  // separately-tracked counter, so it can never drift out of sync with what
+  // the list actually shows -- the server independently re-sums the same
+  // way (against the database, not this client state) before enforcing the
+  // quota on every upload, so a stale/tampered client value here can never
+  // let an upload through that shouldn't be.
+  const storageUsedBytes = storedFiles.reduce((sum, f) => sum + (f.size || 0), 0);
+  const storageLimitBytes = STORAGE_LIMITS_BYTES[activeTenant?.plan || "Growth"] ?? STORAGE_LIMITS_BYTES.Growth;
+
+  const addStoredFile = (data: Omit<StoredFile, "id" | "createdAt">): StoredFile => {
+    const newId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `file_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const newFile: StoredFile = { ...data, id: newId, createdAt: new Date().toISOString() };
+    setStoredFiles((prev) => [newFile, ...prev]);
+    return newFile;
+  };
+
+  // Reads the file, uploads it to the tenant's Storage bucket (the server
+  // enforces the plan's quota there -- see /api/storage/upload -- and
+  // throws with a clear message if it would be exceeded), then records the
+  // metadata via the normal synced CRUD path above.
+  const uploadStoredFile = async (
+    file: File,
+    opts: {
+      source: StoredFileSource;
+      linkedLeadId?: string;
+      linkedContactId?: string;
+      linkedCompanyId?: string;
+      linkedDealId?: string;
+    }
+  ): Promise<StoredFile> => {
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error("Couldn't read that file."));
+      reader.readAsDataURL(file);
+    });
+
+    const res = await apiFetch("/api/storage/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tenantId: activeTenantId,
+        plan: activeTenant?.plan || "Growth",
+        filename: file.name,
+        contentType: file.type || "application/octet-stream",
+        dataUrl,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      throw new Error(data.error || "Upload failed.");
+    }
+
+    return addStoredFile({
+      filename: data.filename || file.name,
+      contentType: data.contentType || file.type || "application/octet-stream",
+      size: data.size ?? file.size,
+      storagePath: data.storagePath,
+      source: opts.source,
+      linkedLeadId: opts.linkedLeadId,
+      linkedContactId: opts.linkedContactId,
+      linkedCompanyId: opts.linkedCompanyId,
+      linkedDealId: opts.linkedDealId,
+      uploadedBy: currentUser?.name || "Unknown",
+    });
+  };
+
+  const deleteStoredFile = async (id: string): Promise<void> => {
+    const target = storedFiles.find((f) => f.id === id);
+    if (!target) return;
+    try {
+      await apiFetch("/api/storage/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storagePath: target.storagePath }),
+      });
+    } catch (err) {
+      console.error("[deleteStoredFile] bucket delete failed:", err);
+      // Still remove the metadata row -- an orphaned bucket object is far
+      // less harmful than a file the user can no longer see or manage.
+    }
+    setStoredFiles((prev) => prev.filter((f) => f.id !== id));
+  };
+
+  const getStoredFileUrl = async (id: string): Promise<string | null> => {
+    const target = storedFiles.find((f) => f.id === id);
+    if (!target) return null;
+    try {
+      const res = await apiFetch("/api/storage/signed-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storagePath: target.storagePath }),
+      });
+      const data = await res.json();
+      return data.url || null;
+    } catch (err) {
+      console.error("[getStoredFileUrl] failed:", err);
+      return null;
+    }
+  };
+
   // AI-assisted setup: turns a plain-language description into a structured
   // draft the user reviews and edits before saving -- this never saves a
   // product on its own, it only returns fields for the create/edit form to
@@ -3348,6 +3503,15 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resolveAgentAction,
         deleteAgentAction,
         approveAndSendAgentAction,
+
+        storedFiles,
+        storageUsedBytes,
+        storageLimitBytes,
+        uploadStoredFile,
+        deleteStoredFile,
+        getStoredFileUrl,
+        pendingBulkImport,
+        setPendingBulkImport,
 
         runCompanyAIAnalysis,
         addCallLogEntry,

@@ -414,9 +414,38 @@ export interface KnowledgeBaseEntry {
   // Set when this entry was drafted (or last re-drafted) from a webpage via
   // "Generate from a link" -- shown as provenance, never required.
   sourceUrl?: string;
+  // Set when this entry was created from a file in the File Manager --
+  // lets the Knowledge Base view link back to (and re-open) the original.
+  linkedFileId?: string;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// ----------------------------------------------------------------------------
+// File Manager -- workspace file storage, backed by a Supabase Storage
+// bucket (see server.ts's /api/storage/* endpoints). Only file METADATA is
+// synced through the normal TenantTable mechanism, same as every other
+// entity; the actual bytes live in the bucket at `storagePath`, fetched via
+// a short-lived signed URL rather than embedded in this record. `size` (in
+// bytes) is what's summed to enforce each plan's storage quota -- see
+// STORAGE_LIMITS_BYTES in src/data/subscriptionPlans.ts.
+// ----------------------------------------------------------------------------
+export type StoredFileSource = "manual_upload" | "email_attachment" | "import" | "other";
+
+export interface StoredFile {
+  id: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  storagePath: string;
+  source: StoredFileSource;
+  linkedLeadId?: string;
+  linkedContactId?: string;
+  linkedCompanyId?: string;
+  linkedDealId?: string;
+  uploadedBy: string;
+  createdAt: string;
 }
 
 // ----------------------------------------------------------------------------
