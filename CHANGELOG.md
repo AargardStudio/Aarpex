@@ -13,6 +13,12 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-09-26
+
+### Added
+- Industry Playbooks can now be tied to a specific Product/Service (optional, same picker style as the Email Marketing campaign wizard). The linked product's name shows on the playbook's card.
+- When a playbook has a linked product, every follow-up, reply, and negotiation draft its autonomous agent generates now centers on that specific product/pitch instead of speaking generically -- matching how a manually-built campaign already seeds its copy from a chosen product.
+
 ## [1.26.1] - 2026-09-26
 
 ### Added

@@ -17,6 +17,7 @@ import {
   Bot,
   Percent,
   ShieldAlert,
+  Package,
 } from "lucide-react";
 import { IndustryPlaybook, PreferredOutreachChannel } from "../../types";
 import { INDUSTRIES } from "../../data/industries";
@@ -44,6 +45,7 @@ const channelIcon = (channel: PreferredOutreachChannel) => {
 const emptyDraft = (): Omit<IndustryPlaybook, "id" | "createdAt" | "updatedAt" | "createdBy"> => ({
   industry: INDUSTRIES[0],
   isActive: true,
+  productId: undefined,
   tone: "",
   talkingPoints: [],
   painPoints: [],
@@ -68,12 +70,13 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
   editing,
   onClose,
 }) => {
-  const { addIndustryPlaybook, updateIndustryPlaybook, industryPlaybooks } = useCRM();
+  const { addIndustryPlaybook, updateIndustryPlaybook, industryPlaybooks, products } = useCRM();
   const [draft, setDraft] = useState<Omit<IndustryPlaybook, "id" | "createdAt" | "updatedAt" | "createdBy">>(
     editing
       ? {
           industry: editing.industry,
           isActive: editing.isActive,
+          productId: editing.productId,
           tone: editing.tone,
           talkingPoints: editing.talkingPoints,
           painPoints: editing.painPoints,
@@ -179,6 +182,30 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
                 {draft.isActive ? "Active" : "Inactive"}
               </button>
             </div>
+
+            {products.length > 0 && (
+              <div className="sm:col-span-2">
+                <label className="block text-slate-300 font-semibold mb-1 flex items-center gap-1.5">
+                  <Package className="w-3.5 h-3.5 text-teal-400" />
+                  Product / Service <span className="text-slate-500 font-normal">(optional)</span>
+                </label>
+                <select
+                  value={draft.productId || ""}
+                  onChange={(e) => setDraft((p) => ({ ...p, productId: e.target.value || undefined }))}
+                  className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+                >
+                  <option value="">None -- general outreach</option>
+                  {products.map((prod) => (
+                    <option key={prod.id} value={prod.id}>
+                      {prod.name} ({prod.type})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-slate-500 mt-1">
+                  When set, this product's name and pitch are fed into every follow-up, reply, and offer this playbook's agent drafts.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Email tone & talking points */}
@@ -369,7 +396,8 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
 };
 
 const PlaybookCard: React.FC<{ playbook: IndustryPlaybook; onEdit: () => void }> = ({ playbook, onEdit }) => {
-  const { deleteIndustryPlaybook, leads, rawCompanies } = useCRM() as any;
+  const { deleteIndustryPlaybook, leads, rawCompanies, products } = useCRM() as any;
+  const linkedProduct = playbook.productId ? products.find((p: any) => p.id === playbook.productId) : null;
   const ChannelIcon = channelIcon(playbook.preferredChannel);
   const matchCount =
     leads.filter((l: any) => (l.industry || "").trim().toLowerCase() === playbook.industry.trim().toLowerCase()).length +
@@ -412,6 +440,13 @@ const PlaybookCard: React.FC<{ playbook: IndustryPlaybook; onEdit: () => void }>
           </button>
         </div>
       </div>
+
+      {linkedProduct && (
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-500/10 border border-teal-500/30 text-teal-300 w-fit">
+          <Package className="w-3 h-3" />
+          {linkedProduct.name}
+        </span>
+      )}
 
       {playbook.tone && <p className="text-xs text-slate-300 leading-relaxed">{playbook.tone}</p>}
 

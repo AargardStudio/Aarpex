@@ -467,6 +467,12 @@ export interface IndustryPlaybook {
   id: string;
   industry: string; // freeform, ideally matches src/data/industries.ts INDUSTRIES
   isActive: boolean;
+  // Optional Product/Service this playbook is pitching -- when set, its
+  // name and pitch are fed into the AI as extra context for every
+  // auto-drafted follow-up/reply/negotiation offer this playbook's agent
+  // generates, the same way a campaign's Product/Service picker seeds its
+  // generated email copy.
+  productId?: string;
   // Email tone & talking points
   tone: string; // e.g. "Consultative and data-driven, minimal hype"
   talkingPoints: string[]; // key value props / hooks to lean on

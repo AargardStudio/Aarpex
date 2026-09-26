@@ -743,6 +743,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     knowledgeBase,
     activeTenant,
     currentUser,
+    products,
   });
   useEffect(() => {
     agentScanStateRef.current = {
@@ -755,6 +756,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       knowledgeBase,
       activeTenant,
       currentUser,
+      products,
     };
   });
 
@@ -772,6 +774,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         knowledgeBase: curKnowledge,
         activeTenant: curTenant,
         currentUser: curUser,
+        products: curProducts,
       } = agentScanStateRef.current;
 
       const autoPlaybooks = curPlaybooks.filter((p) => p.isActive && p.autoRunEnabled);
@@ -800,6 +803,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       for (const playbook of autoPlaybooks) {
         const industryLc = playbook.industry.trim().toLowerCase();
         const cadenceMs = Math.max(1, playbook.followUpFrequencyDays) * 86400000;
+        // Resolve this playbook's optional Product/Service so every draft it
+        // generates below is seeded with the same name/pitch context a
+        // manually-built Email Marketing campaign gets from its own
+        // Product/Service picker.
+        const playbookProduct = playbook.productId ? curProducts.find((prod) => prod.id === playbook.productId) : undefined;
 
         // Follow-up due: leads
         const dueLeads = curLeads.filter((l) => {
@@ -917,6 +925,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 recipientIndustry: lead.industry,
                 activities: leadActs,
                 playbook,
+                productName: playbookProduct?.name,
+                productPitch: playbookProduct?.pitch,
                 senderName: curUser?.name,
                 senderCompany: curTenant?.companyName || curTenant?.name,
                 goal: `Send a follow-up -- it's been ${playbook.followUpFrequencyDays}+ days since last contact with no response.`,
@@ -953,6 +963,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 recipientIndustry: comp?.industry,
                 activities: contactActs,
                 playbook,
+                productName: playbookProduct?.name,
+                productPitch: playbookProduct?.pitch,
                 senderName: curUser?.name,
                 senderCompany: curTenant?.companyName || curTenant?.name,
                 goal: `Send a follow-up -- it's been ${playbook.followUpFrequencyDays}+ days since last contact with no response.`,
@@ -1026,6 +1038,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                       recipientIndustry: playbook.industry,
                       activities: curActivities.filter((a) => (isLead ? a.leadId === record.id : a.contactId === record.id)),
                       playbook,
+                      productName: playbookProduct?.name,
+                      productPitch: playbookProduct?.pitch,
                       senderName: curUser?.name,
                       senderCompany: curTenant?.companyName || curTenant?.name,
                       goal: "They just replied in our inbox -- draft a warm, specific reply that keeps the conversation moving forward.",

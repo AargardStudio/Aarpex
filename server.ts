@@ -990,6 +990,8 @@ app.post("/api/ai/personalized-email", async (req, res) => {
       knowledgeEntries, // string[] -- content of linked KnowledgeBaseEntry rows (manual + AI-extracted)
       activities, // recent Activity rows for this lead/contact
       playbook, // optional IndustryPlaybook for recipientIndustry
+      productName, // optional: the specific product/service to center this email on (from the playbook's Product/Service picker)
+      productPitch, // optional: that product's marketing pitch
       senderName,
       senderCompany,
       goal, // optional: what this specific email should accomplish, e.g. "book a demo call"
@@ -1021,6 +1023,11 @@ app.post("/api/ai/personalized-email", async (req, res) => {
 - Common pain points to speak to: ${(playbook.painPoints || []).join(", ") || "none specified"}
 ${playbook.objectionNotes ? `- Objection handling notes: ${playbook.objectionNotes}` : ""}`
       : "";
+    const productLine = productName
+      ? `\n\nCenter this email specifically around the following product/service rather than speaking generically: "${productName}"${
+          productPitch ? `. Its marketing pitch: "${productPitch}"` : ""
+        }. Weave its concrete value into the body and the call-to-action.`
+      : "";
 
     const fallbackSubject = `Quick idea for ${recipientCompany || firstName}`;
     const fallbackBody = `Dear ${firstName},\n\nI wanted to reach out directly given your role${
@@ -1031,7 +1038,7 @@ ${playbook.objectionNotes ? `- Objection handling notes: ${playbook.objectionNot
 
     const prompt = `You are an expert B2B sales rep at ${senderCompany || "our company"} writing ONE specific, personalized email to a single named recipient — not a template with merge tags. Write it as if you did real research on them.
 
-Recipient: ${recipientName}${recipientJobTitle ? `, ${recipientJobTitle}` : ""} at ${recipientCompany || "their company"}${recipientIndustry ? ` (industry: ${recipientIndustry})` : ""}.${knowledgeLine}${activityLine}${playbookLine}
+Recipient: ${recipientName}${recipientJobTitle ? `, ${recipientJobTitle}` : ""} at ${recipientCompany || "their company"}${recipientIndustry ? ` (industry: ${recipientIndustry})` : ""}.${knowledgeLine}${activityLine}${playbookLine}${productLine}
 ${goal ? `\n\nGoal of this specific email: ${goal}` : ""}
 
 Write a subject line and email body. Reference at least one concrete, specific detail from what we know about them if anything specific was provided above — avoid generic filler. Keep the body under 180 words, end with one clear call-to-action, and sign off with the sender's name and company.

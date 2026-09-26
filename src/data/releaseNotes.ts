@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.27.0",
+    date: "2026-09-26",
+    headline: "Give Your Playbooks a Product to Sell",
+    tagline: "Industry Playbooks can now be pointed at a specific Product/Service, so every auto-drafted follow-up, reply, and offer that industry's agent writes centers on it -- not generic outreach.",
+    highlights: [
+      {
+        title: "Product/Service picker on Playbooks",
+        description: "Pick a Product/Service when creating or editing an Industry Playbook, the same way you already can on an Email Marketing campaign. It shows on the playbook's card once set.",
+      },
+      {
+        title: "Product-aware AI drafts",
+        description: "When a playbook has a linked product, its autonomous agent now weaves that product's name and pitch into every follow-up, reply, and negotiation offer it drafts for that industry.",
+      },
+    ],
+  },
+  {
     version: "1.26.1",
     date: "2026-09-26",
     headline: "A Getting Started Checklist, and a Comma Bug Squashed",
