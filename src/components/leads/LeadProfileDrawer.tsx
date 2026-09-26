@@ -31,6 +31,7 @@ import {
   Check,
 } from "lucide-react";
 import { apiFetch } from "../../lib/apiClient";
+import { INDUSTRIES } from "../../data/industries";
 
 interface AnalysisResult {
   qualificationScore: number;
@@ -107,6 +108,8 @@ export const LeadProfileDrawer: React.FC = () => {
   const [offerQueued, setOfferQueued] = useState(false);
   const [isEditingSummary, setIsEditingSummary] = useState(false);
   const [summaryDraft, setSummaryDraft] = useState("");
+  const [isEditingIndustry, setIsEditingIndustry] = useState(false);
+  const [industryDraft, setIndustryDraft] = useState("");
 
   if (!selectedLeadId) return null;
   const lead = leads.find((l) => l.id === selectedLeadId);
@@ -120,6 +123,21 @@ export const LeadProfileDrawer: React.FC = () => {
   const latestNextAction = leadActivities.find((a) => a.nextAction)?.nextAction || lead.nextFollowUp;
   const rating = getLeadRating(lead.leadScore);
   const playbook = getPlaybookForIndustry(lead.industry);
+
+  // Industry is the field Industry Playbooks match against to decide which
+  // leads their AI agent works -- there was previously no way to set or
+  // change it once a lead was created (only at "Add Lead" time), which made
+  // it impossible to move an existing lead into a playbook's industry
+  // without re-importing it via a spreadsheet. This makes it a normal
+  // editable field, right in the profile.
+  const handleStartEditIndustry = () => {
+    setIndustryDraft(lead.industry || "");
+    setIsEditingIndustry(true);
+  };
+  const handleSaveIndustry = () => {
+    if (industryDraft.trim()) updateLead(lead.id, { industry: industryDraft.trim() });
+    setIsEditingIndustry(false);
+  };
   const candidateProduct =
     products.find(
       (p) => p.status === "Active" && (p.targetCriteria.industries.length === 0 || p.targetCriteria.industries.includes(lead.industry))
@@ -488,7 +506,53 @@ export const LeadProfileDrawer: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[11px]">Industry</span>
-                    <span className="font-medium text-slate-800">{lead.industry || "—"}</span>
+                    {isEditingIndustry ? (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <input
+                          type="text"
+                          list="lead-industry-suggestions"
+                          autoFocus
+                          value={industryDraft}
+                          onChange={(e) => setIndustryDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveIndustry();
+                            if (e.key === "Escape") setIsEditingIndustry(false);
+                          }}
+                          placeholder="e.g. Healthcare & Wellness"
+                          className="w-36 px-1.5 py-0.5 border border-indigo-300 rounded text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        />
+                        <datalist id="lead-industry-suggestions">
+                          {INDUSTRIES.map((ind) => (
+                            <option key={ind} value={ind} />
+                          ))}
+                        </datalist>
+                        <button
+                          onClick={handleSaveIndustry}
+                          className="p-1 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                          title="Save"
+                        >
+                          <Check className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => setIsEditingIndustry(false)}
+                          className="p-1 rounded bg-slate-100 text-slate-500 hover:bg-slate-200"
+                          title="Cancel"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="font-medium text-slate-800 flex items-center gap-1.5 group/industry">
+                        {lead.industry || "—"}
+                        <button
+                          onClick={handleStartEditIndustry}
+                          className="opacity-0 group-hover/industry:opacity-100 text-slate-400 hover:text-indigo-600 transition-opacity"
+                          title="Edit industry -- match this to an Industry Playbook to include this lead in its AI agent"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[11px]">Source</span>

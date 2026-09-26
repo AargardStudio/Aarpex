@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.28.0",
+    date: "2026-09-26",
+    headline: "See Exactly Who Your Playbook Agent Is Working",
+    tagline: "Industry is now editable any time, and every Playbook shows the exact list of matching businesses it's about to work -- with a checkbox to leave any of them out.",
+    highlights: [
+      {
+        title: "Edit Industry any time",
+        description: "Leads and Companies now have an editable Industry field in their profile (pencil icon) -- no more needing a spreadsheet import to move an existing business into a playbook's industry.",
+      },
+      {
+        title: "Matching Businesses list",
+        description: "Every Industry Playbook now shows exactly which Leads and Companies it applies to, live, right inside its form -- uncheck any you want the AI agent to leave alone.",
+      },
+      {
+        title: "Clearer instructions",
+        description: "The Instructions page now spells out, step by step, that a Playbook has no separate audience-picker like a campaign -- it's driven entirely by the Industry field -- and exactly how to set one up.",
+      },
+    ],
+  },
+  {
     version: "1.27.0",
     date: "2026-09-26",
     headline: "Give Your Playbooks a Product to Sell",

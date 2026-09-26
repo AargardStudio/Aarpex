@@ -13,6 +13,13 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.28.0] - 2026-09-26
+
+### Added
+- Industry is now an editable field on existing Leads and Companies (previously only settable at creation time) -- click the pencil icon next to Industry in a Lead's or Company's profile to set or change it any time, no spreadsheet re-import required.
+- Industry Playbooks now show a "Matching Businesses" list right inside the create/edit form: every Lead and Company whose Industry currently matches, live, with a checkbox to opt specific ones out of that playbook's AI agent without changing their Industry field. Playbook cards now show how many are excluded.
+- Instructions page: rewrote the Industry Playbooks and "Running an AI-Agent-Managed Campaign" sections to explain, step by step, that a Playbook has no audience-picker screen like a campaign does -- it works by Industry-field matching -- and exactly how to get a business included (set its Industry, then optionally review it in the Playbook's Matching Businesses list).
+
 ## [1.27.0] - 2026-09-26
 
 ### Added

@@ -18,6 +18,7 @@ import {
   Percent,
   ShieldAlert,
   Package,
+  Users,
 } from "lucide-react";
 import { IndustryPlaybook, PreferredOutreachChannel } from "../../types";
 import { INDUSTRIES } from "../../data/industries";
@@ -46,6 +47,8 @@ const emptyDraft = (): Omit<IndustryPlaybook, "id" | "createdAt" | "updatedAt" |
   industry: INDUSTRIES[0],
   isActive: true,
   productId: undefined,
+  excludedLeadIds: [],
+  excludedCompanyIds: [],
   tone: "",
   talkingPoints: [],
   painPoints: [],
@@ -70,13 +73,15 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
   editing,
   onClose,
 }) => {
-  const { addIndustryPlaybook, updateIndustryPlaybook, industryPlaybooks, products } = useCRM();
+  const { addIndustryPlaybook, updateIndustryPlaybook, industryPlaybooks, products, leads, rawCompanies } = useCRM() as any;
   const [draft, setDraft] = useState<Omit<IndustryPlaybook, "id" | "createdAt" | "updatedAt" | "createdBy">>(
     editing
       ? {
           industry: editing.industry,
           isActive: editing.isActive,
           productId: editing.productId,
+          excludedLeadIds: editing.excludedLeadIds || [],
+          excludedCompanyIds: editing.excludedCompanyIds || [],
           tone: editing.tone,
           talkingPoints: editing.talkingPoints,
           painPoints: editing.painPoints,
@@ -108,6 +113,27 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
   const duplicateIndustry =
     !editing &&
     industryPlaybooks.some((p) => p.industry.trim().toLowerCase() === draft.industry.trim().toLowerCase());
+
+  // "Matching Businesses" -- every playbook already applies to every
+  // Lead/Company whose Industry field matches this one, automatically and
+  // invisibly. This surfaces exactly who that is right now (live, as the
+  // Industry field above is edited) and lets specific businesses be opted
+  // back out via a checkbox, without touching their Industry field.
+  const industryLc = draft.industry.trim().toLowerCase();
+  const matchingLeads = industryLc ? (leads || []).filter((l: any) => (l.industry || "").trim().toLowerCase() === industryLc) : [];
+  const matchingCompanies = industryLc ? (rawCompanies || []).filter((c: any) => (c.industry || "").trim().toLowerCase() === industryLc) : [];
+  const toggleExcludedLead = (id: string) => {
+    setDraft((p) => {
+      const cur = p.excludedLeadIds || [];
+      return { ...p, excludedLeadIds: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] };
+    });
+  };
+  const toggleExcludedCompany = (id: string) => {
+    setDraft((p) => {
+      const cur = p.excludedCompanyIds || [];
+      return { ...p, excludedCompanyIds: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] };
+    });
+  };
 
   const handleSave = () => {
     if (!draft.industry.trim() || duplicateIndustry) return;
@@ -204,6 +230,87 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
                 <p className="text-slate-500 mt-1">
                   When set, this product's name and pitch are fed into every follow-up, reply, and offer this playbook's agent drafts.
                 </p>
+              </div>
+            )}
+          </div>
+
+          {/* Matching Businesses -- this playbook's agent works EVERY
+              Lead/Company whose Industry matches the field above,
+              automatically. This makes that otherwise-invisible audience
+              visible and lets specific ones be opted out. */}
+          <div className="p-3.5 bg-[#121418] rounded-xl border border-[#2d323f] space-y-3">
+            <div className="flex items-center gap-1.5 text-teal-300 font-bold">
+              <Users className="w-3.5 h-3.5" />
+              Matching Businesses
+            </div>
+            <p className="text-slate-500">
+              This playbook's agent automatically works every Lead and Company below, because their Industry field matches "{draft.industry || "..."}" above.
+              Uncheck any you want to leave out. To add a business that isn't listed here, open it and set its Industry to match.
+            </p>
+
+            {matchingLeads.length === 0 && matchingCompanies.length === 0 ? (
+              <div className="p-3 bg-[#181b21] border border-[#2d323f] rounded-lg text-slate-500">
+                No leads or companies currently have this industry -- nothing for this playbook to work yet. Set a
+                lead's or company's Industry field to "{draft.industry || "this industry"}" from its profile to include it.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {matchingLeads.length > 0 && (
+                  <div>
+                    <div className="text-slate-400 font-semibold mb-1">
+                      Leads ({(matchingLeads.length - (draft.excludedLeadIds || []).length)}/{matchingLeads.length} included)
+                    </div>
+                    <div className="max-h-40 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                      {matchingLeads.map((l: any) => {
+                        const included = !(draft.excludedLeadIds || []).includes(l.id);
+                        return (
+                          <label
+                            key={l.id}
+                            className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-[#181b21] cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={included}
+                              onChange={() => toggleExcludedLead(l.id)}
+                              className="accent-teal-500"
+                            />
+                            <span className={included ? "text-slate-200" : "text-slate-500 line-through"}>
+                              {l.name} {l.company ? `(${l.company})` : ""}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {matchingCompanies.length > 0 && (
+                  <div>
+                    <div className="text-slate-400 font-semibold mb-1">
+                      Companies ({(matchingCompanies.length - (draft.excludedCompanyIds || []).length)}/{matchingCompanies.length} included)
+                    </div>
+                    <div className="max-h-40 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                      {matchingCompanies.map((c: any) => {
+                        const included = !(draft.excludedCompanyIds || []).includes(c.id);
+                        return (
+                          <label
+                            key={c.id}
+                            className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-[#181b21] cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={included}
+                              onChange={() => toggleExcludedCompany(c.id)}
+                              className="accent-teal-500"
+                            />
+                            <span className={included ? "text-slate-200" : "text-slate-500 line-through"}>
+                              {c.name}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -399,11 +506,11 @@ const PlaybookCard: React.FC<{ playbook: IndustryPlaybook; onEdit: () => void }>
   const { deleteIndustryPlaybook, leads, rawCompanies, products } = useCRM() as any;
   const linkedProduct = playbook.productId ? products.find((p: any) => p.id === playbook.productId) : null;
   const ChannelIcon = channelIcon(playbook.preferredChannel);
-  const matchCount =
-    leads.filter((l: any) => (l.industry || "").trim().toLowerCase() === playbook.industry.trim().toLowerCase()).length +
-    (rawCompanies || []).filter(
-      (c: any) => (c.industry || "").trim().toLowerCase() === playbook.industry.trim().toLowerCase()
-    ).length;
+  const industryLc = playbook.industry.trim().toLowerCase();
+  const matchingLeadCount = leads.filter((l: any) => (l.industry || "").trim().toLowerCase() === industryLc).length;
+  const matchingCompanyCount = (rawCompanies || []).filter((c: any) => (c.industry || "").trim().toLowerCase() === industryLc).length;
+  const excludedCount = (playbook.excludedLeadIds || []).length + (playbook.excludedCompanyIds || []).length;
+  const matchCount = matchingLeadCount + matchingCompanyCount - excludedCount;
 
   return (
     <div className="bg-[#181b21] rounded-2xl border border-[#2d323f] shadow-lg p-4 sm:p-5 space-y-3">
@@ -423,6 +530,7 @@ const PlaybookCard: React.FC<{ playbook: IndustryPlaybook; onEdit: () => void }>
           </div>
           <div className="text-[11px] text-slate-400 mt-0.5">
             {matchCount} matching lead/compan{matchCount === 1 ? "y" : "ies"} in your CRM
+            {excludedCount > 0 && ` (${excludedCount} excluded)`}
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">

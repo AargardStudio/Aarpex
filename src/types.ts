@@ -473,6 +473,14 @@ export interface IndustryPlaybook {
   // generates, the same way a campaign's Product/Service picker seeds its
   // generated email copy.
   productId?: string;
+  // By default this playbook's agent works EVERY Lead/Company whose
+  // Industry field matches `industry` above (case-insensitive). These are
+  // opt-outs on top of that automatic match -- ids listed here are excluded
+  // even though their industry matches, so you can see the full matching
+  // list when setting up the playbook and uncheck specific businesses you
+  // don't want the agent touching, without having to change their industry.
+  excludedLeadIds?: string[];
+  excludedCompanyIds?: string[];
   // Email tone & talking points
   tone: string; // e.g. "Consultative and data-driven, minimal hype"
   talkingPoints: string[]; // key value props / hooks to lean on

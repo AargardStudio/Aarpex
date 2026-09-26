@@ -812,6 +812,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Follow-up due: leads
         const dueLeads = curLeads.filter((l) => {
           if ((l.industry || "").trim().toLowerCase() !== industryLc) return false;
+          if ((playbook.excludedLeadIds || []).includes(l.id)) return false;
           if (!l.email) return false;
           if (l.status === "Converted" || l.status === "Lost") return false;
           const reference = l.lastContact ? new Date(l.lastContact).getTime() : new Date(l.createdDate || 0).getTime();
@@ -824,6 +825,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const dueContacts = curContacts.filter((c) => {
           const comp = curCompanies.find((co) => co.id === c.companyId);
           if ((comp?.industry || "").trim().toLowerCase() !== industryLc) return false;
+          if (comp && (playbook.excludedCompanyIds || []).includes(comp.id)) return false;
           if (!c.email) return false;
           const lastActivity = curActivities
             .filter((a) => a.contactId === c.id)
@@ -839,12 +841,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // gets two summaries in one pass).
         const leadsNeedingSummary = curLeads.filter((l) => {
           if ((l.industry || "").trim().toLowerCase() !== industryLc) return false;
+          if ((playbook.excludedLeadIds || []).includes(l.id)) return false;
           if (curKnowledge.some((k) => k.tags.includes("AI-Generated") && (k.linkedLeadIds || []).includes(l.id))) return false;
           return !kbUpserts.some((k) => (k.linkedLeadIds || []).includes(l.id));
         });
         const contactsNeedingSummary = curContacts.filter((c) => {
           const comp = curCompanies.find((co) => co.id === c.companyId);
           if ((comp?.industry || "").trim().toLowerCase() !== industryLc) return false;
+          if (comp && (playbook.excludedCompanyIds || []).includes(comp.id)) return false;
           if (curKnowledge.some((k) => k.tags.includes("AI-Generated") && (k.linkedContactIds || []).includes(c.id))) return false;
           return !kbUpserts.some((k) => (k.linkedContactIds || []).includes(c.id));
         });
@@ -993,11 +997,20 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const mailCfg = getMailboxById(curTenant);
         if (mailCfg?.email && mailCfg?.password && mailCfg?.imapHost) {
           const candidateLeads = curLeads.filter(
-            (l) => (l.industry || "").trim().toLowerCase() === industryLc && l.email && l.status !== "Converted" && l.status !== "Lost"
+            (l) =>
+              (l.industry || "").trim().toLowerCase() === industryLc &&
+              !(playbook.excludedLeadIds || []).includes(l.id) &&
+              l.email &&
+              l.status !== "Converted" &&
+              l.status !== "Lost"
           );
           const candidateContacts = curContacts.filter((c) => {
             const comp = curCompanies.find((co) => co.id === c.companyId);
-            return (comp?.industry || "").trim().toLowerCase() === industryLc && c.email;
+            return (
+              (comp?.industry || "").trim().toLowerCase() === industryLc &&
+              !(comp && (playbook.excludedCompanyIds || []).includes(comp.id)) &&
+              c.email
+            );
           });
           const addressToRecord = new Map<string, { type: "lead" | "contact"; record: any }>();
           candidateLeads.forEach((l) => addressToRecord.set(l.email.toLowerCase(), { type: "lead", record: l }));

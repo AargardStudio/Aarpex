@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { CustomerStatus, CallLogEntry } from "../../types";
 import { apiFetch } from "../../lib/apiClient";
+import { INDUSTRIES } from "../../data/industries";
 
 const CALL_OUTCOMES: CallLogEntry["outcome"][] = [
   "Connected",
@@ -83,6 +84,8 @@ export const Company360Drawer: React.FC = () => {
   const [isProfileAnalyzing, setIsProfileAnalyzing] = useState(false);
   const [isEditingPhone, setIsEditingPhone] = useState(false);
   const [phoneDraft, setPhoneDraft] = useState("");
+  const [isEditingIndustry, setIsEditingIndustry] = useState(false);
+  const [industryDraft, setIndustryDraft] = useState("");
   const [callDate, setCallDate] = useState(new Date().toISOString().split("T")[0]);
   const [callDuration, setCallDuration] = useState(5);
   const [callOutcome, setCallOutcome] = useState<CallLogEntry["outcome"]>("Connected");
@@ -153,6 +156,22 @@ export const Company360Drawer: React.FC = () => {
   const handleSavePhone = () => {
     updateCompany(company.id, { phone: phoneDraft.trim() });
     setIsEditingPhone(false);
+  };
+
+  // Industry is the field Industry Playbooks match against to decide which
+  // businesses their AI agent works -- there was previously no way to set
+  // or change it once a company was created (only at "Add Company" time),
+  // which made it impossible to move an existing company into a playbook's
+  // industry without re-importing it via a spreadsheet. This makes it a
+  // normal editable field like phone, right in the profile.
+  const handleStartEditIndustry = () => {
+    setIndustryDraft(company.industry || "");
+    setIsEditingIndustry(true);
+  };
+
+  const handleSaveIndustry = () => {
+    if (industryDraft.trim()) updateCompany(company.id, { industry: industryDraft.trim() });
+    setIsEditingIndustry(false);
   };
 
   const handleLogActivity = (e: React.FormEvent) => {
@@ -544,6 +563,56 @@ export const Company360Drawer: React.FC = () => {
                           onClick={handleStartEditPhone}
                           className="opacity-0 group-hover/phone:opacity-100 text-slate-400 hover:text-indigo-600 transition-opacity"
                           title="Edit phone number"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Industry</span>
+                    {isEditingIndustry ? (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <input
+                          type="text"
+                          list="company-industry-suggestions"
+                          autoFocus
+                          value={industryDraft}
+                          onChange={(e) => setIndustryDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveIndustry();
+                            if (e.key === "Escape") setIsEditingIndustry(false);
+                          }}
+                          placeholder="e.g. Healthcare & Wellness"
+                          className="w-36 px-1.5 py-0.5 border border-indigo-300 rounded text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        />
+                        <datalist id="company-industry-suggestions">
+                          {INDUSTRIES.map((ind) => (
+                            <option key={ind} value={ind} />
+                          ))}
+                        </datalist>
+                        <button
+                          onClick={handleSaveIndustry}
+                          className="p-1 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                          title="Save"
+                        >
+                          <Check className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => setIsEditingIndustry(false)}
+                          className="p-1 rounded bg-slate-100 text-slate-500 hover:bg-slate-200"
+                          title="Cancel"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="font-medium text-slate-800 flex items-center gap-1.5 group/industry">
+                        {company.industry || "Not set"}
+                        <button
+                          onClick={handleStartEditIndustry}
+                          className="opacity-0 group-hover/industry:opacity-100 text-slate-400 hover:text-indigo-600 transition-opacity"
+                          title="Edit industry -- match this to an Industry Playbook to include this company in its AI agent"
                         >
                           <Pencil className="w-3 h-3" />
                         </button>

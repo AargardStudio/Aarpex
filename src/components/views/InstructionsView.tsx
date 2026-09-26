@@ -126,18 +126,22 @@ const SECTIONS: Section[] = [
     icon: BookMarked,
     title: "Industry Playbooks",
     body: [
-      "A Playbook is a set of rules for one industry -- how often to follow up, what discount range is allowed, whether the AI can auto-run without you approving every message. Turn a playbook's auto-run on and the AI agent starts working that industry's leads on its own schedule, always queuing anything it drafts into Agent Approvals first.",
+      "A Playbook is a set of rules for one industry -- how often to follow up, what discount range is allowed, whether the AI can auto-run without you approving every message. Turn a playbook's auto-run on and the AI agent starts working that industry's leads/companies on its own schedule, always queuing anything it drafts into Agent Approvals first.",
+      "Important: a Playbook does NOT have a \"select businesses\" step like an Email Marketing campaign does. Instead, it automatically works every Lead and Company whose Industry field matches the Playbook's industry name exactly. Which businesses that includes is shown live inside the Playbook's own form, under \"Matching Businesses\" -- you can uncheck any specific one you don't want the agent touching, right there.",
+      "To put a business into a Playbook: open that Lead or Company's profile, find the Industry field (it has a small pencil icon next to it), and set it to match the Playbook's industry name. It'll then show up under that Playbook's \"Matching Businesses\" list automatically -- no separate step needed.",
     ],
   },
   {
     icon: Bot,
     title: "Running an AI-Agent-Managed Campaign",
     body: [
-      "This is how you let the AI work a group of leads or contacts on autopilot -- following up, replying, even offering discounts -- while you just approve what it drafts.",
+      "This is how you let the AI work a group of leads or companies on autopilot -- following up, replying, even offering discounts -- while you just approve what it drafts. Unlike an Email Marketing campaign, there's no audience-picker screen for this: the \"audience\" is simply every business tagged with the right Industry.",
     ],
     steps: [
-      "Open an Industry Playbook (or create one) for the industry you want the agent to handle. This is where you set the rules: how often to follow up, and whether/how much discount it's allowed to offer.",
-      "Turn the playbook's auto-run switch on. From that point, the agent works every lead/contact tagged with that industry on its own schedule -- no manual triggering needed. You can also toggle this from the floating AI chat bubble instead of clicking into the page.",
+      "Make sure the businesses you want included have the right Industry set. Open each Lead or Company's profile and set its Industry field (pencil icon next to it) to the exact industry name you'll use for the Playbook below. This is the step that's easy to miss -- without it, a business simply won't be worked by the agent.",
+      "Open an Industry Playbook for that same industry (or create one). This is where you set the rules: how often to follow up, and whether/how much discount it's allowed to offer.",
+      "Check the \"Matching Businesses\" list inside the Playbook form. It shows every Lead/Company that currently matches, live. Uncheck any specific ones you want to leave out -- everything else checked will be worked by the agent.",
+      "Turn the playbook's auto-run switch on. From that point, the agent works every included lead/company on its own schedule -- no manual triggering needed. You can also toggle this from the floating AI chat bubble instead of clicking into the page.",
       "Nothing sends automatically. Every draft the agent writes -- a follow-up, a reply, a negotiation offer -- lands in Agent Approvals first, along with its reasoning (e.g. \"no response in 8 days, playbook cadence is every 7\").",
       "Review and decide. Approve & Send if the draft looks right, or Reject if it doesn't -- you can do this from the Agent Approvals page, the Dashboard's Agent Approvals card, or the alert bell at the top of the screen.",
       "Keep a browser tab open. The agent currently scans for new work while a tab is open (roughly every 10 minutes) -- it isn't a fully server-side background process yet, so someone on the team needs AarPex open somewhere for it to keep running.",
