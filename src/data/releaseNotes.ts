@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.23.0",
+    date: "2026-09-26",
+    headline: "Your Agents Now Write Their Own Notes",
+    tagline: "Industry agents build each lead and contact's knowledge base on their own -- and you can fix anything they get wrong with a click.",
+    highlights: [
+      {
+        title: "Auto-generated knowledge bases",
+        description: "Turn on Auto-run for an industry and its agent now fills in the AI-Extracted Summary for every lead and contact that's missing one during its regular scan -- no more clicking \"Generate\" one record at a time.",
+      },
+      {
+        title: "Editable AI summaries",
+        description: "The AI-Extracted Summary on any Lead or Contact's Knowledge tab can now be edited directly -- click the pencil, fix what needs fixing, save. No full re-generation required.",
+      },
+    ],
+  },
+  {
     version: "1.22.0",
     date: "2026-09-26",
     headline: "10 Industries, 10 AI Agents -- All Waiting on Your Approval",

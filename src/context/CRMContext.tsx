@@ -694,6 +694,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     activities,
     industryPlaybooks,
     agentActions,
+    knowledgeBase,
     activeTenant,
     currentUser,
   });
@@ -705,6 +706,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       activities,
       industryPlaybooks,
       agentActions,
+      knowledgeBase,
       activeTenant,
       currentUser,
     };
@@ -721,12 +723,22 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activities: curActivities,
         industryPlaybooks: curPlaybooks,
         agentActions: curAgentActions,
+        knowledgeBase: curKnowledge,
         activeTenant: curTenant,
         currentUser: curUser,
       } = agentScanStateRef.current;
 
       const autoPlaybooks = curPlaybooks.filter((p) => p.isActive && p.autoRunEnabled);
       if (autoPlaybooks.length === 0) return;
+
+      // Auto-extracted knowledge base -- for industries running on autopilot,
+      // the agent builds each lead/contact's individual "AI-Extracted Summary"
+      // itself (same call the manual "Generate" button in the drawer's
+      // Knowledge tab makes) instead of waiting for someone to click it. Only
+      // fills in records that don't have one yet; a stale summary is still
+      // refreshed on demand via the manual button, and the user can always
+      // hand-edit the generated text afterward.
+      const kbUpserts: Omit<KnowledgeBaseEntry, "id" | "createdAt" | "updatedAt" | "createdBy">[] = [];
 
       const now = Date.now();
       const hasPendingOrRecent = (recipientEmail: string, type: string, cooldownMs: number) =>
@@ -766,6 +778,85 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (!reference || now - reference < cadenceMs) return false;
           return !hasPendingOrRecent(c.email, "follow_up", cadenceMs);
         });
+
+        // Leads/contacts in this industry that don't have an AI-Generated
+        // knowledge-base summary yet (checked against the live snapshot
+        // plus anything this same scan has already queued, so a lead never
+        // gets two summaries in one pass).
+        const leadsNeedingSummary = curLeads.filter((l) => {
+          if ((l.industry || "").trim().toLowerCase() !== industryLc) return false;
+          if (curKnowledge.some((k) => k.tags.includes("AI-Generated") && (k.linkedLeadIds || []).includes(l.id))) return false;
+          return !kbUpserts.some((k) => (k.linkedLeadIds || []).includes(l.id));
+        });
+        const contactsNeedingSummary = curContacts.filter((c) => {
+          const comp = curCompanies.find((co) => co.id === c.companyId);
+          if ((comp?.industry || "").trim().toLowerCase() !== industryLc) return false;
+          if (curKnowledge.some((k) => k.tags.includes("AI-Generated") && (k.linkedContactIds || []).includes(c.id))) return false;
+          return !kbUpserts.some((k) => (k.linkedContactIds || []).includes(c.id));
+        });
+
+        for (const lead of leadsNeedingSummary.slice(0, 3)) {
+          try {
+            const leadActs = curActivities.filter((a) => a.leadId === lead.id);
+            const res = await apiFetch("/api/ai/lead-knowledge-summary", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: lead.name,
+                company: lead.company,
+                jobTitle: lead.jobTitle,
+                industry: lead.industry,
+                notes: lead.notes,
+                tags: lead.tags,
+                activities: leadActs,
+              }),
+            });
+            const data = await res.json();
+            if (data.summary) {
+              kbUpserts.push({
+                category: "company",
+                title: `${lead.name} — AI Summary`,
+                content: data.summary,
+                tags: ["AI-Generated"],
+                linkedLeadIds: [lead.id],
+              });
+            }
+          } catch (err) {
+            console.error("[agent scan] knowledge summary failed for lead", lead.id, err);
+          }
+        }
+
+        for (const contact of contactsNeedingSummary.slice(0, 3)) {
+          try {
+            const comp = curCompanies.find((co) => co.id === contact.companyId);
+            const contactActs = curActivities.filter((a) => a.contactId === contact.id);
+            const res = await apiFetch("/api/ai/lead-knowledge-summary", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: `${contact.firstName} ${contact.lastName}`.trim(),
+                company: comp?.name,
+                jobTitle: contact.position,
+                industry: comp?.industry,
+                notes: contact.notes,
+                tags: [],
+                activities: contactActs,
+              }),
+            });
+            const data = await res.json();
+            if (data.summary) {
+              kbUpserts.push({
+                category: "company",
+                title: `${contact.firstName} ${contact.lastName} — AI Summary`,
+                content: data.summary,
+                tags: ["AI-Generated"],
+                linkedContactIds: [contact.id],
+              });
+            }
+          } catch (err) {
+            console.error("[agent scan] knowledge summary failed for contact", contact.id, err);
+          }
+        }
 
         for (const lead of dueLeads.slice(0, 5)) {
           try {
@@ -928,6 +1019,23 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 : `agt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
             status: "pending" as const,
             createdAt: new Date().toISOString(),
+          })),
+          ...prev,
+        ]);
+      }
+
+      if (kbUpserts.length > 0) {
+        const now = new Date().toISOString();
+        setKnowledgeBase((prev) => [
+          ...kbUpserts.map((entry) => ({
+            ...entry,
+            id:
+              typeof crypto !== "undefined" && "randomUUID" in crypto
+                ? crypto.randomUUID()
+                : `kb_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+            createdBy: "AI Agent",
+            createdAt: now,
+            updatedAt: now,
           })),
           ...prev,
         ]);

@@ -13,6 +13,19 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-09-26
+
+### Added
+- **Self-writing knowledge bases**: for any industry with Auto-run enabled,
+  the background agent now generates each lead's and contact's
+  AI-Extracted Summary itself -- the same summary that used to require a
+  manual "Generate" click -- filling in whichever records in that
+  industry don't have one yet during its periodic scan.
+- **Editable AI summaries**: the AI-Extracted Summary on every Lead and
+  Contact profile's Knowledge tab can now be hand-edited in place (a
+  pencil icon next to the existing Refresh button), so a rep can correct
+  or add detail without waiting on a full AI re-generation.
+
 ## [1.22.0] - 2026-09-26
 
 ### Added
