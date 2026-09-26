@@ -1507,7 +1507,7 @@ const VALID_NAV_VIEWS = [
   "Dashboard", "Leads", "Contacts", "Companies", "Products", "Deals", "Pipelines",
   "Activities", "Invoices", "Payments", "Revenue", "Stripe", "Tasks",
   "AI Insights", "Email Marketing", "Inbox", "Reports", "Settings", "CEO Notes",
-  "Knowledge Base", "File Manager",
+  "Knowledge Base", "File Manager", "Instructions",
 ];
 
 // ----------------------------------------------------------------------------

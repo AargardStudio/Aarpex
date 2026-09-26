@@ -33,6 +33,7 @@ import {
   BookMarked,
   Bot,
   FolderOpen,
+  LifeBuoy,
 } from "lucide-react";
 import { ROLE_LABELS, UserRole } from "../../types";
 
@@ -85,6 +86,7 @@ export const Sidebar: React.FC = () => {
 
   const navItems: NavItem[] = [
     { name: "Dashboard", icon: LayoutDashboard, category: "Core" },
+    { name: "Instructions", icon: LifeBuoy, category: "Core" },
     { name: "Leads", icon: UserCheck, badge: leads.filter((l) => l.status === "New").length || undefined, category: "Core" },
     { name: "Contacts", icon: Users, category: "Core" },
     { name: "Companies", icon: Building2, category: "Core" },

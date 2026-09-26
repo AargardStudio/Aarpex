@@ -13,6 +13,14 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.26.0] - 2026-09-26
+
+### Added
+- New "Instructions" page (sidebar, directly below Dashboard) -- a plain-language, expandable guide covering every section of AarPex: what it's for and how to use it. No jargon, written for a first-time user.
+- "Agent Approvals" section on the main Dashboard -- pending AI-drafted actions (follow-ups, replies, negotiation offers) now show right on the home screen with one-click Approve/Reject, in addition to the dedicated Agent Approvals page.
+- Pending Agent Approvals now count toward the header alert bell, with their own labeled section in the alerts dropdown (same click-to-navigate behavior as overdue invoices/urgent tasks).
+- Best-effort desktop notification: when the background AI agent scan drafts new actions, the browser's Notification API fires an alert (if the user has granted permission) so pending approvals aren't missed even when the AarPex tab isn't in view.
+
 ## [1.25.0] - 2026-09-26
 
 ### Added

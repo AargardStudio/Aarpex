@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.26.0",
+    date: "2026-09-26",
+    headline: "A Guide Built Right In, and Approvals You Can't Miss",
+    tagline: "A plain-language Instructions page for anyone new to AarPex, plus Agent Approvals surfaced on the Dashboard and pushed straight to your desktop.",
+    highlights: [
+      {
+        title: "Instructions page",
+        description: "A new, easy-to-read guide sits right below Dashboard in the sidebar -- click any topic to see, in plain English, what it does and how to use it.",
+      },
+      {
+        title: "Agent Approvals on the Dashboard",
+        description: "Pending AI-drafted follow-ups, replies, and offers now show up directly on your home screen -- approve or reject them in one click without leaving the Dashboard.",
+      },
+      {
+        title: "You won't miss a pending approval",
+        description: "New agent drafts now count toward the alert bell at the top of the screen and can trigger a desktop notification, even if you're not looking at the AarPex tab.",
+      },
+    ],
+  },
+  {
     version: "1.25.0",
     date: "2026-09-26",
     headline: "A File Manager for Your Whole Workspace",

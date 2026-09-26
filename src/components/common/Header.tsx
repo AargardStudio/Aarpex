@@ -23,6 +23,7 @@ import {
   LogIn,
   Menu,
   MessageSquare,
+  Bot,
 } from "lucide-react";
 import { DateFilterRange, ROLE_LABELS, UserRole } from "../../types";
 import { apiFetch } from "../../lib/apiClient";
@@ -40,6 +41,7 @@ export const Header: React.FC = () => {
     deals,
     invoices,
     tasks,
+    agentActions,
     currentUser,
     signOut,
     setAccessControlOpen,
@@ -69,9 +71,13 @@ export const Header: React.FC = () => {
     (t) => t.priority === "High" && t.status !== "Completed"
   );
   const atRiskCompanies = companies.filter((c) => c.status === "At Risk");
+  const pendingAgentActions = (agentActions || []).filter((a) => a.status === "pending");
 
   const totalAlerts =
-    overdueInvoices.length + highPriorityTasks.length + atRiskCompanies.length;
+    overdueInvoices.length +
+    highPriorityTasks.length +
+    atRiskCompanies.length +
+    pendingAgentActions.length;
 
   // Search matches
   const matchedCompanies = searchQuery
@@ -443,6 +449,31 @@ export const Header: React.FC = () => {
                         </div>
                         <div className="text-[11px] text-slate-400">
                           Due: {tsk.dueDate}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {pendingAgentActions.length > 0 && (
+                  <div className="pt-2">
+                    <div className="text-[10px] font-bold text-teal-400 uppercase tracking-wider px-2 py-0.5 flex items-center gap-1">
+                      <Bot className="w-3 h-3 text-teal-400" /> Agent Approvals ({pendingAgentActions.length})
+                    </div>
+                    {pendingAgentActions.slice(0, 3).map((act) => (
+                      <div
+                        key={act.id}
+                        onClick={() => {
+                          setActiveNav("Agent Approvals");
+                          setIsAlertsOpen(false);
+                        }}
+                        className="p-2 hover:bg-[#222630] rounded-lg cursor-pointer text-xs transition-colors"
+                      >
+                        <div className="font-medium text-white">
+                          {act.recipientName}
+                        </div>
+                        <div className="text-[11px] text-slate-400 truncate">
+                          {act.subject}
                         </div>
                       </div>
                     ))}

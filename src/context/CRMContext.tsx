@@ -110,7 +110,8 @@ export type NavView =
   | "Knowledge Base"
   | "Industry Playbooks"
   | "Agent Approvals"
-  | "File Manager";
+  | "File Manager"
+  | "Instructions";
 
 interface CRMContextType {
   // Navigation & Active selection
@@ -1067,6 +1068,33 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           })),
           ...prev,
         ]);
+
+        // Best-effort desktop notification -- the agent may draft these
+        // while the user isn't looking at the tab at all, so the in-app
+        // alert bell (Header.tsx) alone won't reach them. Never blocks or
+        // throws: browsers that don't support the API, or where permission
+        // was denied/not yet granted, just silently skip this.
+        try {
+          if (typeof window !== "undefined" && "Notification" in window) {
+            if (Notification.permission === "granted") {
+              new Notification(
+                newActions.length === 1
+                  ? "New agent approval waiting"
+                  : `${newActions.length} new agent approvals waiting`,
+                {
+                  body:
+                    newActions.length === 1
+                      ? `${newActions[0].recipientName}: ${newActions[0].subject}`
+                      : "Review them in Agent Approvals.",
+                }
+              );
+            } else if (Notification.permission !== "denied") {
+              Notification.requestPermission().catch(() => {});
+            }
+          }
+        } catch {
+          // Notifications are a nice-to-have -- never let this break the scan.
+        }
       }
 
       if (kbUpserts.length > 0) {

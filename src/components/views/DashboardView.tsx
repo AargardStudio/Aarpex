@@ -16,6 +16,9 @@ import {
   ChevronDown,
   ShieldCheck,
   Megaphone,
+  Bot,
+  Check,
+  X as XIcon,
 } from "lucide-react";
 import {
   BarChart,
@@ -45,6 +48,9 @@ export const DashboardView: React.FC = () => {
     setQuickCreateOpen,
     setQuickCreateType,
     loadSampleData,
+    agentActions,
+    approveAndSendAgentAction,
+    resolveAgentAction,
   } = useCRM();
 
   const [briefing, setBriefing] = useState<any>(null);
@@ -338,6 +344,70 @@ export const DashboardView: React.FC = () => {
 
       <CeoNotesWidget />
       </div>
+
+      {/* Agent Approvals -- pending AI-drafted actions (follow-ups, reply
+          drafts, negotiation offers) surfaced right on the dashboard so
+          they don't get missed inside a dedicated screen. */}
+      {(() => {
+        const pendingAgentActions = (agentActions || []).filter((a) => a.status === "pending");
+        if (pendingAgentActions.length === 0) return null;
+        return (
+          <div className="bg-[#181b21] rounded-2xl p-4 sm:p-5 border border-amber-800/40 shadow-lg text-white space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2.5">
+                <span className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
+                  <Bot className="w-3.5 h-3.5 text-amber-400" />
+                </span>
+                <h3 className="text-sm font-bold text-white">Agent Approvals</h3>
+                <span className="px-2 py-0.5 rounded-full bg-amber-950/60 border border-amber-500/40 text-amber-300 text-[10px] font-bold">
+                  {pendingAgentActions.length} pending
+                </span>
+              </div>
+              <button
+                onClick={() => setActiveNav("Agent Approvals")}
+                className="text-xs text-teal-400 hover:text-teal-300 font-semibold flex items-center gap-0.5"
+              >
+                Review All <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {pendingAgentActions.slice(0, 3).map((act) => (
+                <div
+                  key={act.id}
+                  className="p-3 bg-[#121418] border border-[#2d323f] rounded-xl flex items-start justify-between gap-3 text-xs"
+                >
+                  <div className="min-w-0">
+                    <div className="font-bold text-white truncate">{act.recipientName}</div>
+                    <div className="text-slate-400 text-[11px] truncate mt-0.5">{act.subject}</div>
+                    <div className="text-slate-500 text-[10px] mt-1 leading-snug">{act.reasoning}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => approveAndSendAgentAction(act.id)}
+                      title="Approve & Send"
+                      className="p-1.5 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/40 text-teal-300 transition-colors"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirm("Reject this action? It won't be sent.")) {
+                          resolveAgentAction(act.id, "rejected");
+                        }
+                      }}
+                      title="Reject"
+                      className="p-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 transition-colors"
+                    >
+                      <XIcon className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 8 Essential Executive KPIs in Sleek Graphite */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
