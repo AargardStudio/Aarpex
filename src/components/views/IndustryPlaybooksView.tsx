@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { IndustryPlaybook, PreferredOutreachChannel } from "../../types";
 import { INDUSTRIES } from "../../data/industries";
-import { normalizeIndustry } from "../../lib/industryMatch";
+import { normalizeIndustry, summarizeIndustryUsage, findCloseIndustryMatches, IndustryUsage } from "../../lib/industryMatch";
 
 function csv(list: string[] | undefined): string {
   return (list || []).join(", ");
@@ -123,6 +123,19 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
   const industryLc = normalizeIndustry(draft.industry);
   const matchingLeads = industryLc ? (leads || []).filter((l: any) => normalizeIndustry(l.industry) === industryLc) : [];
   const matchingCompanies = industryLc ? (rawCompanies || []).filter((c: any) => normalizeIndustry(c.industry) === industryLc) : [];
+
+  // Every distinct Industry value that actually exists on a real Lead or
+  // Company right now, with how many records use it. Powers "pick an
+  // existing industry" (guaranteed to match, since it's the same string)
+  // and the "did you mean" fallback below (see industryMatch.ts).
+  const existingIndustryUsages: IndustryUsage[] = summarizeIndustryUsage([
+    ...(leads || []).map((l: any) => l.industry),
+    ...(rawCompanies || []).map((c: any) => c.industry),
+  ]);
+  const closeIndustryMatches =
+    matchingLeads.length === 0 && matchingCompanies.length === 0
+      ? findCloseIndustryMatches(draft.industry, existingIndustryUsages)
+      : [];
   const toggleExcludedLead = (id: string) => {
     setDraft((p) => {
       const cur = p.excludedLeadIds || [];
@@ -192,6 +205,32 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
               <p className="text-slate-500 mt-1">
                 Match this to the Industry field on your Leads/Companies exactly so it auto-applies.
               </p>
+              {existingIndustryUsages.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-slate-500 mb-1">
+                    Or pick a value already used on your records (guaranteed to match exactly):
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {existingIndustryUsages.slice(0, 12).map((u) => {
+                      const isCurrent = normalizeIndustry(u.raw) === industryLc;
+                      return (
+                        <button
+                          key={u.raw}
+                          type="button"
+                          onClick={() => setDraft((p) => ({ ...p, industry: u.raw }))}
+                          className={`px-2 py-1 rounded-md border text-[11px] transition-colors ${
+                            isCurrent
+                              ? "bg-teal-500/15 border-teal-500/40 text-teal-300"
+                              : "bg-[#121418] border-[#2d323f] text-slate-400 hover:text-white hover:border-teal-500/40"
+                          }`}
+                        >
+                          {u.raw} <span className="opacity-60">({u.count})</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>
@@ -250,9 +289,32 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
             </p>
 
             {matchingLeads.length === 0 && matchingCompanies.length === 0 ? (
-              <div className="p-3 bg-[#181b21] border border-[#2d323f] rounded-lg text-slate-500">
-                No leads or companies currently have this industry -- nothing for this playbook to work yet. Set a
-                lead's or company's Industry field to "{draft.industry || "this industry"}" from its profile to include it.
+              <div className="p-3 bg-[#181b21] border border-[#2d323f] rounded-lg text-slate-500 space-y-2">
+                <p>
+                  No leads or companies currently have this industry -- nothing for this playbook to work yet. Set a
+                  lead's or company's Industry field to "{draft.industry || "this industry"}" from its profile to include it.
+                </p>
+                {closeIndustryMatches.length > 0 && (
+                  <div className="pt-2 border-t border-[#2d323f]">
+                    <p className="text-amber-400/90 mb-1.5">
+                      Close, but not an exact match -- these existing values are similar to what you typed (this is
+                      usually a stray space, a typo, or different capitalization/wording). Click one to use it exactly
+                      as stored:
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {closeIndustryMatches.map((u) => (
+                        <button
+                          key={u.raw}
+                          type="button"
+                          onClick={() => setDraft((p) => ({ ...p, industry: u.raw }))}
+                          className="px-2 py-1 rounded-md border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 text-[11px] font-mono"
+                        >
+                          "{u.raw}" <span className="opacity-70">({u.count})</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -13,6 +13,12 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.29.0] - 2026-09-26
+
+### Added
+- Industry Playbook form: a "pick a value already used on your records" quick-select under the Industry field, sourced live from your actual Leads/Companies. Clicking one fills the field with the exact stored string, so it's guaranteed to match -- no more retyping an industry from memory and hoping it lines up byte-for-byte.
+- When a typed Industry has zero matches, the Matching Businesses panel now checks for existing values that are close but not identical (a stray character, different wording/capitalization) and offers them as one-click "did you mean" suggestions, so a near-miss is fixable in one click instead of a guessing game.
+
 ## [1.28.1] - 2026-09-26
 
 ### Fixed

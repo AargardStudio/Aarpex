@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.29.0",
+    date: "2026-09-26",
+    headline: "Pick Your Playbook's Industry -- Don't Retype It",
+    tagline: "Industry Playbooks now let you click an industry that's already on your real records instead of retyping it, plus one-click \"did you mean\" fixes when nothing matches.",
+    highlights: [
+      {
+        title: "Click, don't retype",
+        description: "The Industry field now shows every distinct industry actually used on your Leads and Companies as clickable chips -- pick one and it's guaranteed to match exactly, since it's the same stored value.",
+      },
+      {
+        title: "\"Did you mean\" suggestions",
+        description: "If what you typed doesn't match anything yet, AarPex now checks for close existing values (a stray character or different wording) and lets you fix it in one click.",
+      },
+    ],
+  },
+  {
     version: "1.28.1",
     date: "2026-09-26",
     headline: "Fixed: Businesses Not Matching Their Industry Playbook",
