@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.22.0",
+    date: "2026-09-26",
+    headline: "10 Industries, 10 AI Agents -- All Waiting on Your Approval",
+    tagline: "Your Industry Playbooks can now work leads and negotiate deals on their own -- but nothing ever reaches a prospect without you saying yes first.",
+    highlights: [
+      {
+        title: "Auto-run agents per industry",
+        description: "Flip on \"Auto-run\" for any Industry Playbook and AarPex starts watching that industry's leads and contacts for overdue follow-ups and inbox replies, drafting proposed actions instead of just sitting idle.",
+      },
+      {
+        title: "Agent Approvals queue",
+        description: "A new page shows every drafted follow-up, reply, and negotiation offer waiting on you, with a live count badge in the sidebar -- approve & send, edit first, or reject, all in one place.",
+      },
+      {
+        title: "Negotiation with a hard ceiling",
+        description: "Set a max discount % per industry (0 turns it off) and hit \"Propose Offer\" on any lead or contact -- the AI drafts a specific price offer that can never exceed your configured ceiling, enforced on the server, not just asked of the AI.",
+      },
+    ],
+  },
+  {
     version: "1.21.0",
     date: "2026-09-26",
     headline: "Industry Playbooks: AI That Knows Your Verticals",

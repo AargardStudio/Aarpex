@@ -26,6 +26,7 @@ import {
   Wand2,
   RefreshCw,
   Plus,
+  Percent,
 } from "lucide-react";
 import { apiFetch } from "../../lib/apiClient";
 
@@ -81,6 +82,8 @@ export const LeadProfileDrawer: React.FC = () => {
     updateKnowledgeBaseEntry,
     deleteKnowledgeBaseEntry,
     getPlaybookForIndustry,
+    products,
+    addAgentAction,
   } = useCRM();
 
   const [activeTab, setActiveTab] = useState<"overview" | "timeline" | "ai" | "knowledge">("overview");
@@ -98,6 +101,8 @@ export const LeadProfileDrawer: React.FC = () => {
   const [isRefreshingSummary, setIsRefreshingSummary] = useState(false);
   const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
   const [emailGenError, setEmailGenError] = useState(false);
+  const [isProposingOffer, setIsProposingOffer] = useState(false);
+  const [offerQueued, setOfferQueued] = useState(false);
 
   if (!selectedLeadId) return null;
   const lead = leads.find((l) => l.id === selectedLeadId);
@@ -111,6 +116,10 @@ export const LeadProfileDrawer: React.FC = () => {
   const latestNextAction = leadActivities.find((a) => a.nextAction)?.nextAction || lead.nextFollowUp;
   const rating = getLeadRating(lead.leadScore);
   const playbook = getPlaybookForIndustry(lead.industry);
+  const candidateProduct =
+    products.find(
+      (p) => p.status === "Active" && (p.targetCriteria.industries.length === 0 || p.targetCriteria.industries.includes(lead.industry))
+    ) || products.find((p) => p.status === "Active") || null;
 
   // This lead's individual knowledge base -- both manually-added notes and
   // the AI-Generated auto-extracted summary (tagged so it can be found and
@@ -256,6 +265,56 @@ export const LeadProfileDrawer: React.FC = () => {
       setEmailGenError(true);
     } finally {
       setIsGeneratingEmail(false);
+    }
+  };
+
+  // Proposes a negotiation offer, capped by the industry playbook's
+  // maxDiscountPercent -- this never sends anything itself, it only queues
+  // a draft into Agent Approvals for review.
+  const handleProposeOffer = async () => {
+    if (!playbook || !candidateProduct) return;
+    setIsProposingOffer(true);
+    setOfferQueued(false);
+    try {
+      const res = await apiFetch("/api/ai/negotiation-offer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipientName: lead.name,
+          recipientCompany: lead.company,
+          recipientJobTitle: lead.jobTitle,
+          recipientIndustry: lead.industry,
+          productName: candidateProduct.name,
+          productPrice: candidateProduct.price,
+          productPricingModel: candidateProduct.pricingModel,
+          currency: candidateProduct.currency,
+          maxDiscountPercent: playbook.maxDiscountPercent,
+          negotiationGuidance: playbook.negotiationGuidance,
+          knowledgeEntries: linkedKnowledge.map((k) => k.content),
+          activities: leadActivities,
+          senderName: currentUser?.name,
+          senderCompany: activeTenant?.companyName || activeTenant?.name,
+        }),
+      });
+      const data = await res.json();
+      addAgentAction({
+        industry: lead.industry,
+        actionType: "negotiation_offer",
+        leadId: lead.id,
+        recipientName: lead.name,
+        recipientEmail: lead.email,
+        subject: data.subject,
+        body: data.body,
+        reasoning: `Manually proposed by ${currentUser?.name || "you"}.`,
+        proposedDiscountPercent: data.proposedDiscountPercent,
+        productId: candidateProduct.id,
+        triggerSource: "manual",
+      });
+      setOfferQueued(true);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsProposingOffer(false);
     }
   };
 
@@ -708,7 +767,17 @@ export const LeadProfileDrawer: React.FC = () => {
                       <p className="text-[11px] text-teal-100 italic leading-snug">"{result.suggestedOpeningLine}"</p>
                     </div>
 
-                    <div className="flex justify-end gap-2">
+                    <div className="flex justify-end gap-2 flex-wrap">
+                      {playbook && playbook.maxDiscountPercent > 0 && candidateProduct && (
+                        <button
+                          onClick={handleProposeOffer}
+                          disabled={isProposingOffer || !lead.email}
+                          className="px-3.5 py-1.5 bg-[#252a36] hover:bg-[#2f3544] disabled:opacity-50 text-white border border-[#3d4455] font-bold rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-sm"
+                        >
+                          <Percent className={`w-3.5 h-3.5 text-amber-400 ${isProposingOffer ? "animate-pulse" : ""}`} />
+                          <span>{isProposingOffer ? "Drafting…" : offerQueued ? "Offer Queued ✓" : "Propose Offer"}</span>
+                        </button>
+                      )}
                       <button
                         onClick={handleGeneratePersonalizedEmail}
                         disabled={isGeneratingEmail || !lead.email}
@@ -734,15 +803,27 @@ export const LeadProfileDrawer: React.FC = () => {
                     <p className="text-[11px] text-slate-400">
                       Run the analysis to get a qualification score, buyer-intent signals, and a recommended channel/opener for this lead.
                     </p>
-                    <button
-                      onClick={handleGeneratePersonalizedEmail}
-                      disabled={isGeneratingEmail || !lead.email}
-                      title={!lead.email ? "This lead has no email on file" : undefined}
-                      className="px-3.5 py-1.5 bg-[#252a36] hover:bg-[#2f3544] disabled:opacity-50 text-white border border-[#3d4455] font-bold rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-sm"
-                    >
-                      <Wand2 className={`w-3.5 h-3.5 text-teal-400 ${isGeneratingEmail ? "animate-pulse" : ""}`} />
-                      <span>{isGeneratingEmail ? "Drafting…" : "Generate Personalized Email"}</span>
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      {playbook && playbook.maxDiscountPercent > 0 && candidateProduct && (
+                        <button
+                          onClick={handleProposeOffer}
+                          disabled={isProposingOffer || !lead.email}
+                          className="px-3.5 py-1.5 bg-[#252a36] hover:bg-[#2f3544] disabled:opacity-50 text-white border border-[#3d4455] font-bold rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-sm"
+                        >
+                          <Percent className={`w-3.5 h-3.5 text-amber-400 ${isProposingOffer ? "animate-pulse" : ""}`} />
+                          <span>{isProposingOffer ? "Drafting…" : offerQueued ? "Offer Queued ✓" : "Propose Offer"}</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={handleGeneratePersonalizedEmail}
+                        disabled={isGeneratingEmail || !lead.email}
+                        title={!lead.email ? "This lead has no email on file" : undefined}
+                        className="px-3.5 py-1.5 bg-[#252a36] hover:bg-[#2f3544] disabled:opacity-50 text-white border border-[#3d4455] font-bold rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-sm"
+                      >
+                        <Wand2 className={`w-3.5 h-3.5 text-teal-400 ${isGeneratingEmail ? "animate-pulse" : ""}`} />
+                        <span>{isGeneratingEmail ? "Drafting…" : "Generate Personalized Email"}</span>
+                      </button>
+                    </div>
                   </div>
                 )}
                 {emailGenError && (

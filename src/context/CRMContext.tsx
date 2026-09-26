@@ -34,6 +34,8 @@ import {
   KnowledgeBaseEntry,
   KnowledgeBaseCategory,
   IndustryPlaybook,
+  AgentAction,
+  AgentActionStatus,
 } from "../types";
 import { isSupabaseAuthConfigured, getSupabaseAuthClient } from "../config/supabaseAuthClient";
 import { getMailboxById } from "../lib/webmail";
@@ -103,7 +105,8 @@ export type NavView =
   | "Settings"
   | "CEO Notes"
   | "Knowledge Base"
-  | "Industry Playbooks";
+  | "Industry Playbooks"
+  | "Agent Approvals";
 
 interface CRMContextType {
   // Navigation & Active selection
@@ -320,6 +323,14 @@ interface CRMContextType {
   updateIndustryPlaybook: (id: string, updates: Partial<IndustryPlaybook>) => void;
   deleteIndustryPlaybook: (id: string) => void;
   getPlaybookForIndustry: (industry: string | undefined) => IndustryPlaybook | undefined;
+
+  // Agent Approvals -- the human-in-the-loop queue every autonomous or
+  // negotiation action proposes into before anything reaches a prospect.
+  agentActions: AgentAction[];
+  addAgentAction: (action: Omit<AgentAction, "id" | "createdAt" | "status">) => AgentAction;
+  resolveAgentAction: (id: string, status: AgentActionStatus, updates?: Partial<AgentAction>) => void;
+  deleteAgentAction: (id: string) => void;
+  approveAndSendAgentAction: (id: string, overrides?: { subject?: string; body?: string }) => Promise<boolean>;
 
   // Business Profile: AI analysis + manual call log riding on a Company record.
   runCompanyAIAnalysis: (companyId: string) => Promise<void>;
@@ -566,6 +577,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadTenantEntity("industryPlaybooks", [] as IndustryPlaybook[])
   );
 
+  const [agentActions, setAgentActions] = useState<AgentAction[]>(() =>
+    loadTenantEntity("agentActions", [] as AgentAction[])
+  );
+
   // Every real tenant with Supabase configured mirrors its data to the
   // tenants' Postgres tables on every change. Guarded by !isBootstrapping
   // AND !isHydratingTenantData so the transient local state present before
@@ -654,6 +669,281 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (shouldSyncToSupabase) syncTenantTable("industry_playbooks", activeTenantId, industryPlaybooks);
   }, [industryPlaybooks, activeTenantId]);
 
+  useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_agentActions`, JSON.stringify(agentActions));
+    if (shouldSyncToSupabase) syncTenantTable("agent_actions", activeTenantId, agentActions);
+  }, [agentActions, activeTenantId]);
+
+  // ------------------------------------------------------------------------
+  // Autonomous agent scan -- for any Industry Playbook with autoRunEnabled,
+  // periodically (while AarPex is open in a browser tab) looks for leads and
+  // contacts that are due a follow-up, and checks the tenant's default
+  // mailbox for new replies, drafting a proposed action into the Agent
+  // Approvals queue for each. This is intentionally best-effort and
+  // client-driven (there's no server-side scheduler in this app) -- it only
+  // runs while someone has the tenant open, same as the existing manual
+  // "check replies" flow it reuses.
+  //
+  // A ref bag avoids re-registering the interval (and losing its cadence)
+  // every time any of this state changes -- the interval callback always
+  // reads the latest values off the ref.
+  const agentScanStateRef = React.useRef({
+    leads,
+    contacts,
+    rawCompanies,
+    activities,
+    industryPlaybooks,
+    agentActions,
+    activeTenant,
+    currentUser,
+  });
+  useEffect(() => {
+    agentScanStateRef.current = {
+      leads,
+      contacts,
+      rawCompanies,
+      activities,
+      industryPlaybooks,
+      agentActions,
+      activeTenant,
+      currentUser,
+    };
+  });
+
+  useEffect(() => {
+    if (!activeTenantId) return;
+
+    const runAgentScan = async () => {
+      const {
+        leads: curLeads,
+        contacts: curContacts,
+        rawCompanies: curCompanies,
+        activities: curActivities,
+        industryPlaybooks: curPlaybooks,
+        agentActions: curAgentActions,
+        activeTenant: curTenant,
+        currentUser: curUser,
+      } = agentScanStateRef.current;
+
+      const autoPlaybooks = curPlaybooks.filter((p) => p.isActive && p.autoRunEnabled);
+      if (autoPlaybooks.length === 0) return;
+
+      const now = Date.now();
+      const hasPendingOrRecent = (recipientEmail: string, type: string, cooldownMs: number) =>
+        curAgentActions.some(
+          (a) =>
+            a.recipientEmail.toLowerCase() === recipientEmail.toLowerCase() &&
+            a.actionType === type &&
+            (a.status === "pending" || now - new Date(a.createdAt).getTime() < cooldownMs)
+        );
+
+      const newActions: Omit<AgentAction, "id" | "createdAt" | "status">[] = [];
+
+      for (const playbook of autoPlaybooks) {
+        const industryLc = playbook.industry.trim().toLowerCase();
+        const cadenceMs = Math.max(1, playbook.followUpFrequencyDays) * 86400000;
+
+        // Follow-up due: leads
+        const dueLeads = curLeads.filter((l) => {
+          if ((l.industry || "").trim().toLowerCase() !== industryLc) return false;
+          if (!l.email) return false;
+          if (l.status === "Converted" || l.status === "Lost") return false;
+          const reference = l.lastContact ? new Date(l.lastContact).getTime() : new Date(l.createdDate || 0).getTime();
+          if (!reference || now - reference < cadenceMs) return false;
+          return !hasPendingOrRecent(l.email, "follow_up", cadenceMs);
+        });
+
+        // Follow-up due: contacts (via their company's industry, using their
+        // most recent logged activity as the reference point)
+        const dueContacts = curContacts.filter((c) => {
+          const comp = curCompanies.find((co) => co.id === c.companyId);
+          if ((comp?.industry || "").trim().toLowerCase() !== industryLc) return false;
+          if (!c.email) return false;
+          const lastActivity = curActivities
+            .filter((a) => a.contactId === c.id)
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+          const reference = lastActivity ? new Date(lastActivity.date).getTime() : new Date(c.createdAt || 0).getTime();
+          if (!reference || now - reference < cadenceMs) return false;
+          return !hasPendingOrRecent(c.email, "follow_up", cadenceMs);
+        });
+
+        for (const lead of dueLeads.slice(0, 5)) {
+          try {
+            const leadActs = curActivities.filter((a) => a.leadId === lead.id);
+            const res = await apiFetch("/api/ai/personalized-email", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                recipientName: lead.name,
+                recipientCompany: lead.company,
+                recipientJobTitle: lead.jobTitle,
+                recipientIndustry: lead.industry,
+                activities: leadActs,
+                playbook,
+                senderName: curUser?.name,
+                senderCompany: curTenant?.companyName || curTenant?.name,
+                goal: `Send a follow-up -- it's been ${playbook.followUpFrequencyDays}+ days since last contact with no response.`,
+              }),
+            });
+            const data = await res.json();
+            newActions.push({
+              industry: playbook.industry,
+              actionType: "follow_up",
+              leadId: lead.id,
+              recipientName: lead.name,
+              recipientEmail: lead.email,
+              subject: data.subject,
+              body: data.body,
+              reasoning: `No response in ${playbook.followUpFrequencyDays}+ days (playbook cadence for ${playbook.industry}).`,
+              triggerSource: "auto_followup",
+            });
+          } catch (err) {
+            console.error("[agent scan] follow-up draft failed for lead", lead.id, err);
+          }
+        }
+
+        for (const contact of dueContacts.slice(0, 5)) {
+          try {
+            const comp = curCompanies.find((co) => co.id === contact.companyId);
+            const contactActs = curActivities.filter((a) => a.contactId === contact.id);
+            const res = await apiFetch("/api/ai/personalized-email", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                recipientName: `${contact.firstName} ${contact.lastName}`.trim(),
+                recipientCompany: comp?.name,
+                recipientJobTitle: contact.position,
+                recipientIndustry: comp?.industry,
+                activities: contactActs,
+                playbook,
+                senderName: curUser?.name,
+                senderCompany: curTenant?.companyName || curTenant?.name,
+                goal: `Send a follow-up -- it's been ${playbook.followUpFrequencyDays}+ days since last contact with no response.`,
+              }),
+            });
+            const data = await res.json();
+            newActions.push({
+              industry: playbook.industry,
+              actionType: "follow_up",
+              contactId: contact.id,
+              recipientName: `${contact.firstName} ${contact.lastName}`.trim(),
+              recipientEmail: contact.email,
+              subject: data.subject,
+              body: data.body,
+              reasoning: `No response in ${playbook.followUpFrequencyDays}+ days (playbook cadence for ${playbook.industry}).`,
+              triggerSource: "auto_followup",
+            });
+          } catch (err) {
+            console.error("[agent scan] follow-up draft failed for contact", contact.id, err);
+          }
+        }
+
+        // Reply detection -- reuses the same IMAP check the manual Inbox
+        // "check replies" button uses, against this industry's candidate
+        // addresses, then drafts a proposed reply for any that wrote back.
+        const mailCfg = getMailboxById(curTenant);
+        if (mailCfg?.email && mailCfg?.password && mailCfg?.imapHost) {
+          const candidateLeads = curLeads.filter(
+            (l) => (l.industry || "").trim().toLowerCase() === industryLc && l.email && l.status !== "Converted" && l.status !== "Lost"
+          );
+          const candidateContacts = curContacts.filter((c) => {
+            const comp = curCompanies.find((co) => co.id === c.companyId);
+            return (comp?.industry || "").trim().toLowerCase() === industryLc && c.email;
+          });
+          const addressToRecord = new Map<string, { type: "lead" | "contact"; record: any }>();
+          candidateLeads.forEach((l) => addressToRecord.set(l.email.toLowerCase(), { type: "lead", record: l }));
+          candidateContacts.forEach((c) => addressToRecord.set(c.email.toLowerCase(), { type: "contact", record: c }));
+
+          if (addressToRecord.size > 0) {
+            try {
+              const res = await apiFetch("/api/webmail/check-replies", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  email: mailCfg.email,
+                  password: mailCfg.password,
+                  imapHost: mailCfg.imapHost,
+                  imapPort: mailCfg.imapPort,
+                  imapEncryption: mailCfg.imapEncryption,
+                  addresses: Array.from(addressToRecord.keys()),
+                }),
+              });
+              const data = await res.json();
+              const dayMs = 86400000;
+              for (const address of data.repliedEmails || []) {
+                if (hasPendingOrRecent(address, "email_reply", dayMs)) continue;
+                const match = addressToRecord.get(address.toLowerCase());
+                if (!match) continue;
+                const isLead = match.type === "lead";
+                const record = match.record;
+                const recipientName = isLead ? record.name : `${record.firstName} ${record.lastName}`.trim();
+                const comp = isLead ? undefined : curCompanies.find((co) => co.id === record.companyId);
+                try {
+                  const draftRes = await apiFetch("/api/ai/personalized-email", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      recipientName,
+                      recipientCompany: isLead ? record.company : comp?.name,
+                      recipientJobTitle: isLead ? record.jobTitle : record.position,
+                      recipientIndustry: playbook.industry,
+                      activities: curActivities.filter((a) => (isLead ? a.leadId === record.id : a.contactId === record.id)),
+                      playbook,
+                      senderName: curUser?.name,
+                      senderCompany: curTenant?.companyName || curTenant?.name,
+                      goal: "They just replied in our inbox -- draft a warm, specific reply that keeps the conversation moving forward.",
+                    }),
+                  });
+                  const draftData = await draftRes.json();
+                  newActions.push({
+                    industry: playbook.industry,
+                    actionType: "email_reply",
+                    leadId: isLead ? record.id : undefined,
+                    contactId: isLead ? undefined : record.id,
+                    recipientName,
+                    recipientEmail: address,
+                    subject: draftData.subject,
+                    body: draftData.body,
+                    reasoning: `Detected a reply from ${address} in the inbox.`,
+                    triggerSource: "auto_reply",
+                  });
+                } catch (err) {
+                  console.error("[agent scan] reply draft failed for", address, err);
+                }
+              }
+            } catch (err) {
+              console.error("[agent scan] check-replies failed:", err);
+            }
+          }
+        }
+      }
+
+      if (newActions.length > 0) {
+        setAgentActions((prev) => [
+          ...newActions.map((a) => ({
+            ...a,
+            id:
+              typeof crypto !== "undefined" && "randomUUID" in crypto
+                ? crypto.randomUUID()
+                : `agt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+            status: "pending" as const,
+            createdAt: new Date().toISOString(),
+          })),
+          ...prev,
+        ]);
+      }
+    };
+
+    // Run once shortly after mount/tenant switch, then on a slow interval --
+    // this hits AI + IMAP endpoints, so it deliberately doesn't run often.
+    const initialTimer = setTimeout(runAgentScan, 15000);
+    const interval = setInterval(runAgentScan, 10 * 60 * 1000);
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+    };
+  }, [activeTenantId]);
+
   // Best-effort: flush any still-pending (debounced) Supabase table syncs
   // the moment the tab is hidden (switched away from, closed, or the
   // browser is closed) rather than only on an explicit "Sign out" click.
@@ -706,6 +996,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         productsRes,
         knowledgeBaseRes,
         industryPlaybooksRes,
+        agentActionsRes,
       ] = await Promise.all([
         fetchTenantTable<Company>("companies", activeTenantId),
         fetchTenantTable<Contact>("contacts", activeTenantId),
@@ -721,6 +1012,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetchTenantTable<Product>("products", activeTenantId),
         fetchTenantTable<KnowledgeBaseEntry>("knowledge_base", activeTenantId),
         fetchTenantTable<IndustryPlaybook>("industry_playbooks", activeTenantId),
+        fetchTenantTable<AgentAction>("agent_actions", activeTenantId),
       ]);
       if (cancelled) return;
       if (companiesRes) setRawCompanies(companiesRes);
@@ -737,6 +1029,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (productsRes) setProducts(productsRes);
       if (knowledgeBaseRes) setKnowledgeBase(knowledgeBaseRes);
       if (industryPlaybooksRes) setIndustryPlaybooks(industryPlaybooksRes);
+      if (agentActionsRes) setAgentActions(agentActionsRes);
       setIsHydratingTenantData(false);
     })();
     return () => {
@@ -764,6 +1057,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(`crm_tenant_${activeTenantId}_products`, JSON.stringify(products));
     localStorage.setItem(`crm_tenant_${activeTenantId}_knowledgeBase`, JSON.stringify(knowledgeBase));
     localStorage.setItem(`crm_tenant_${activeTenantId}_industryPlaybooks`, JSON.stringify(industryPlaybooks));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_agentActions`, JSON.stringify(agentActions));
 
     // Every workspace starts genuinely empty except "pipelines" (a
     // structural default, not sample data) — see loadTenantEntity above.
@@ -793,6 +1087,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setProducts(loadTarget("products", [] as Product[]));
     setKnowledgeBase(loadTarget("knowledgeBase", [] as KnowledgeBaseEntry[]));
     setIndustryPlaybooks(loadTarget("industryPlaybooks", [] as IndustryPlaybook[]));
+    setAgentActions(loadTarget("agentActions", [] as AgentAction[]));
     setSelectedCompanyId(null);
     setSelectedDealId(null);
   };
@@ -2449,6 +2744,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: newId,
       talkingPoints: playbookData.talkingPoints || [],
       painPoints: playbookData.painPoints || [],
+      autoRunEnabled: playbookData.autoRunEnabled ?? false,
+      maxDiscountPercent: playbookData.maxDiscountPercent ?? 0,
       createdBy: currentUser.name,
       createdAt: now,
       updatedAt: now,
@@ -2474,6 +2771,102 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const normalized = industry.trim().toLowerCase();
     if (!normalized) return undefined;
     return industryPlaybooks.find((p) => p.isActive && p.industry.trim().toLowerCase() === normalized);
+  };
+
+  // Agent Approvals ------------------------------------------------------
+  // Every autonomous or negotiation action lands here first -- nothing is
+  // ever sent to a prospect without an explicit approve/edit-and-send from
+  // this queue (see approveAndSendAgentAction below).
+  const addAgentAction = (
+    actionData: Omit<AgentAction, "id" | "createdAt" | "status">
+  ): AgentAction => {
+    const newId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `agt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const newAction: AgentAction = {
+      ...actionData,
+      id: newId,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    };
+    setAgentActions((prev) => [newAction, ...prev]);
+    return newAction;
+  };
+
+  const resolveAgentAction = (id: string, status: AgentActionStatus, updates?: Partial<AgentAction>) => {
+    setAgentActions((prev) =>
+      prev.map((a) =>
+        a.id === id
+          ? {
+              ...a,
+              ...updates,
+              status,
+              resolvedAt: new Date().toISOString(),
+              resolvedBy: currentUser?.name,
+            }
+          : a
+      )
+    );
+  };
+
+  const deleteAgentAction = (id: string) => {
+    setAgentActions((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  // The one path that actually sends anything to a prospect from the Agent
+  // Approvals queue -- reuses the same webmail send endpoint the manual
+  // compose modal uses, then logs it to the record's activity timeline and
+  // marks the queued item approved. overrides lets the user edit the
+  // subject/body right before sending without a separate round-trip.
+  const approveAndSendAgentAction = async (
+    id: string,
+    overrides?: { subject?: string; body?: string }
+  ): Promise<boolean> => {
+    const action = agentActions.find((a) => a.id === id);
+    if (!action) return false;
+    const mailCfg = getMailboxById(activeTenant);
+    const subject = overrides?.subject ?? action.subject;
+    const body = overrides?.body ?? action.body;
+    try {
+      const res = await apiFetch("/api/webmail/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: mailCfg?.email || currentUser?.email || "",
+          displayName: mailCfg?.displayName || currentUser?.name || activeTenant?.name,
+          password: mailCfg?.password || "",
+          smtpHost: mailCfg?.smtpHost || "smtp.hostinger.com",
+          smtpPort: mailCfg?.smtpPort || 465,
+          smtpEncryption: mailCfg?.smtpEncryption || "SSL",
+          to: action.recipientEmail,
+          subject,
+          body,
+          attachments: [],
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        resolveAgentAction(id, "pending", { reasoning: `${action.reasoning} — last send attempt failed: ${data.error || "unknown error"}` });
+        return false;
+      }
+      addActivity({
+        type: "Email",
+        leadId: action.leadId,
+        contactId: action.contactId,
+        date: new Date().toISOString().split("T")[0],
+        time: new Date().toTimeString().slice(0, 5),
+        user: currentUser?.name || "Agent (approved)",
+        description: `${action.actionType === "negotiation_offer" ? "Sent negotiation offer" : action.actionType === "email_reply" ? "Replied" : "Sent follow-up"} "${subject}" to ${action.recipientEmail}`,
+        outcome: "Delivered",
+        nextAction: "Monitor for response",
+      });
+      resolveAgentAction(id, "approved", { subject, body });
+      return true;
+    } catch (err: any) {
+      resolveAgentAction(id, "pending", { reasoning: `${action.reasoning} — last send attempt failed: ${err.message || "network error"}` });
+      return false;
+    }
   };
 
   // AI-assisted setup: turns a plain-language description into a structured
@@ -2841,6 +3234,12 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateIndustryPlaybook,
         deleteIndustryPlaybook,
         getPlaybookForIndustry,
+
+        agentActions,
+        addAgentAction,
+        resolveAgentAction,
+        deleteAgentAction,
+        approveAndSendAgentAction,
 
         runCompanyAIAnalysis,
         addCallLogEntry,

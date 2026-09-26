@@ -13,6 +13,33 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-09-26
+
+### Added
+- **Autonomous agent behavior for Industry Playbooks**, gated entirely by a
+  new Agent Approvals queue -- nothing an agent drafts is ever sent to a
+  prospect without an explicit approval:
+  - Each playbook now has an **Auto-run** toggle. When on, AarPex
+    periodically scans that industry's leads/contacts (while the app is
+    open in a browser tab -- there's no server-side scheduler) for leads
+    overdue a follow-up (per the playbook's cadence) and for new inbox
+    replies (reusing the existing IMAP reply-check), drafting a proposed
+    follow-up or reply for each and queuing it for review.
+  - A new **Agent Approvals** page (Intelligence section) lists every
+    pending, approved, and rejected action with a live badge count. Each
+    item can be edited inline before sending, approved & sent immediately,
+    or rejected outright.
+- **Negotiation offers**, capped by a hard, server-enforced ceiling: each
+  playbook now sets a **max discount %** (0 disables negotiation entirely
+  for that industry) plus free-text negotiation guidance. A new "Propose
+  Offer" button on the Lead/Contact AI Analysis tab drafts a specific
+  discount/price offer -- anchored below the ceiling with room to
+  negotiate -- and queues it into Agent Approvals; the server clamps
+  whatever the AI proposes to the configured ceiling regardless of what
+  it returns.
+- Notifications: the sidebar's Agent Approvals badge shows the current
+  pending count so new drafted actions are never missed.
+
 ## [1.21.0] - 2026-09-26
 
 ### Added

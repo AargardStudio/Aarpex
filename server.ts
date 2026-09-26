@@ -1116,6 +1116,124 @@ Keep "summary" under 120 words. If there's genuinely little to go on, say so pla
   }
 });
 
+// AI Negotiation Offer — drafts a specific price/terms offer for one
+// recipient, gated by the Industry Playbook's maxDiscountPercent (a hard
+// ceiling the server itself enforces, not just a prompt instruction) so an
+// AI hallucination can never propose more than the workspace configured.
+// Like the other single-recipient generators, this only DRAFTS an offer --
+// it's queued into the Agent Approvals list by the caller, never sent
+// directly.
+app.post("/api/ai/negotiation-offer", async (req, res) => {
+  try {
+    const {
+      recipientName,
+      recipientCompany,
+      recipientJobTitle,
+      recipientIndustry,
+      productName,
+      productPrice,
+      productPricingModel,
+      currency,
+      maxDiscountPercent, // ceiling from the Industry Playbook -- enforced below
+      negotiationGuidance,
+      knowledgeEntries,
+      activities,
+      requestContext, // optional: what prompted this, e.g. "they asked for a lower price"
+      senderName,
+      senderCompany,
+    } = req.body;
+
+    if (!recipientName) {
+      return res.status(400).json({ error: "Recipient name is required" });
+    }
+
+    const ceiling = Math.max(0, Math.min(100, Number(maxDiscountPercent) || 0));
+    const firstName = String(recipientName).split(" ")[0] || "there";
+    const cur = currency || "USD";
+
+    // Heuristic anchor: open at roughly half the allowed ceiling rather
+    // than maxing it out immediately -- leaves room to actually negotiate.
+    const heuristicDiscount = ceiling > 0 ? Math.round(ceiling / 2) : 0;
+    const heuristicPrice =
+      typeof productPrice === "number" ? Math.round(productPrice * (1 - heuristicDiscount / 100)) : undefined;
+
+    const knowledgeLine =
+      (knowledgeEntries || []).length > 0
+        ? `\n\nWhat we know about ${recipientName} / ${recipientCompany || "their company"}:\n${(knowledgeEntries || [])
+            .slice(0, 8)
+            .map((k: string, i: number) => `${i + 1}. ${k}`)
+            .join("\n")}`
+        : "";
+    const activityLine =
+      (activities || []).length > 0
+        ? `\n\nRecent activity: ${(activities || []).slice(0, 5).map((a: any) => `${a.type}: ${a.description}`).join("; ")}`
+        : "";
+
+    const fallbackSubject = `A tailored offer for ${recipientCompany || firstName}`;
+    const fallbackBody = `Dear ${firstName},\n\nThanks for the conversation so far${
+      recipientCompany ? ` on behalf of ${recipientCompany}` : ""
+    }. ${
+      ceiling > 0 && heuristicPrice !== undefined
+        ? `I've put together a tailored offer: ${productName || "our solution"} at ${cur} ${heuristicPrice.toLocaleString()} (${heuristicDiscount}% off list), reflecting your specific situation.`
+        : `I've reviewed the details and wanted to follow up directly on next steps for ${productName || "our solution"}.`
+    }\n\nWould this work for you, or is there flexibility you need on timing or terms instead?\n\nBest regards,\n${senderName || "Account Executive"}\n${senderCompany || ""}`;
+
+    if (ceiling <= 0) {
+      // No discount authority configured for this industry -- draft a
+      // message that holds the line on price rather than inventing a
+      // number the workspace never authorized.
+      const holdLineBody = `Dear ${firstName},\n\n${
+        productName ? `${productName} is priced at ${cur} ${Number(productPrice || 0).toLocaleString()}${productPricingModel ? ` (${productPricingModel})` : ""}.` : "Here's where things stand on pricing."
+      } I'm not able to offer a discount on this, but I'd be glad to explore what's driving the ask -- timing, scope, or payment terms -- to see if there's another way to make this work for ${recipientCompany || "your team"}.\n\nBest regards,\n${senderName || "Account Executive"}\n${senderCompany || ""}`;
+      return res.json({
+        subject: fallbackSubject,
+        body: holdLineBody,
+        proposedDiscountPercent: 0,
+        source: "policy",
+      });
+    }
+
+    const prompt = `You are an experienced B2B sales negotiator at ${senderCompany || "our company"} drafting ONE specific negotiation email to a named prospect.
+
+Recipient: ${recipientName}${recipientJobTitle ? `, ${recipientJobTitle}` : ""} at ${recipientCompany || "their company"}${recipientIndustry ? ` (industry: ${recipientIndustry})` : ""}.
+Product/service: ${productName || "our solution"}, list price ${cur} ${Number(productPrice || 0).toLocaleString()}${productPricingModel ? ` (${productPricingModel})` : ""}.${knowledgeLine}${activityLine}
+${requestContext ? `\nContext for this offer: ${requestContext}` : ""}
+
+HARD RULE: you may NOT propose a discount greater than ${ceiling}% off list price under any circumstances, even if the prospect is pushing harder. Anchor lower than the ceiling when reasonable (e.g. propose half the ceiling first) so there's room to move if they push back, unless the context above indicates they've already pushed hard, in which case you may go closer to the ceiling.
+${negotiationGuidance ? `\nAdditional negotiation guidance for this industry: ${negotiationGuidance}` : ""}
+
+Write a subject and email body proposing a SPECIFIC discount percentage and resulting price (compute it correctly from the list price). Keep it under 160 words, professional, and end with a clear next step.
+
+Return pure JSON only, no markdown fences, in this exact shape:
+{ "subject": "...", "body": "...", "proposedDiscountPercent": number }`;
+
+    const rawAiText = await callGeminiSafe(prompt);
+    if (rawAiText) {
+      try {
+        const parsed = JSON.parse(rawAiText);
+        if (parsed.subject && parsed.body) {
+          // Enforce the ceiling server-side regardless of what the model
+          // returned -- this is the one number that must never be trusted
+          // blindly from an AI response.
+          const clampedDiscount = Math.max(0, Math.min(ceiling, Number(parsed.proposedDiscountPercent) || heuristicDiscount));
+          return res.json({ subject: parsed.subject, body: parsed.body, proposedDiscountPercent: clampedDiscount, source: "gemini" });
+        }
+      } catch {
+        // fall through to heuristic
+      }
+    }
+
+    return res.json({ subject: fallbackSubject, body: fallbackBody, proposedDiscountPercent: heuristicDiscount, source: "heuristic" });
+  } catch {
+    return res.json({
+      subject: "A quick note on pricing",
+      body: "Hi,\n\nWanted to follow up on pricing for your team. Let me know what would work best and I'll see what I can do.\n\nBest regards,\nSales Team",
+      proposedDiscountPercent: 0,
+      source: "fallback",
+    });
+  }
+});
+
 app.post("/api/ai/daily-briefing", async (req, res) => {
   try {
     const {

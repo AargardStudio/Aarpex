@@ -38,7 +38,8 @@ export type TenantTable =
   | "email_campaigns"
   | "products"
   | "knowledge_base"
-  | "industry_playbooks";
+  | "industry_playbooks"
+  | "agent_actions";
 
 // camelCase -> snake_case, applied to every key of every object.
 function toSnakeCase(key: string): string {

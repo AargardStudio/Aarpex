@@ -450,9 +450,61 @@ export interface IndustryPlaybook {
   preferredChannel: PreferredOutreachChannel;
   followUpFrequencyDays: number;
   followUpCount: number;
+  // Autonomous agent behavior -- when enabled, AarPex periodically scans
+  // this industry's leads/contacts (while the app is open) for due
+  // follow-ups and inbound replies and drafts proposed actions into the
+  // Agent Approvals queue for the user to approve/edit/reject. Nothing is
+  // ever sent without an explicit approval.
+  autoRunEnabled: boolean;
+  // Negotiation guardrails: the ceiling the agent may propose (0 disables
+  // price/terms negotiation entirely for this industry) and free-text
+  // guidance on acceptable terms (e.g. "annual prepay only", "no discount
+  // below $500 deals"). The agent never exceeds maxDiscountPercent.
+  maxDiscountPercent: number;
+  negotiationGuidance?: string;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// ----------------------------------------------------------------------------
+// Agent Approvals -- the human-in-the-loop queue every autonomous or
+// negotiation action from an Industry Playbook-enabled agent passes through.
+// Nothing an agent drafts is ever sent to a prospect until a user approves
+// it here (or edits it first). Populated either on-demand (a rep clicks
+// "Propose Offer" on a lead/contact) or by the periodic background scan for
+// industries with autoRunEnabled.
+// ----------------------------------------------------------------------------
+export type AgentActionType = "follow_up" | "email_reply" | "negotiation_offer";
+export type AgentActionStatus = "pending" | "approved" | "rejected";
+
+export interface AgentAction {
+  id: string;
+  industry: string;
+  actionType: AgentActionType;
+  leadId?: string;
+  contactId?: string;
+  recipientName: string;
+  recipientEmail: string;
+  subject: string;
+  body: string;
+  // Why the agent is proposing this -- shown to the user for context, e.g.
+  // "No response in 8 days (playbook cadence: every 7 days)" or "Detected a
+  // reply in the inbox on 2026-09-26".
+  reasoning: string;
+  // negotiation_offer only -- the specific discount being proposed, capped
+  // at the playbook's maxDiscountPercent at generation time.
+  proposedDiscountPercent?: number;
+  productId?: string;
+  // Best-effort snippet of the inbound message that triggered this (reply
+  // detection only) -- included so the user can see what they're actually
+  // responding to before approving.
+  triggerSnippet?: string;
+  status: AgentActionStatus;
+  triggerSource: "manual" | "auto_followup" | "auto_reply";
+  createdAt: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
 }
 
 // ----------------------------------------------------------------------------

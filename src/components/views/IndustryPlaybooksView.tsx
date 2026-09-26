@@ -14,6 +14,9 @@ import {
   MessagesSquare,
   Clock,
   Power,
+  Bot,
+  Percent,
+  ShieldAlert,
 } from "lucide-react";
 import { IndustryPlaybook, PreferredOutreachChannel } from "../../types";
 import { INDUSTRIES } from "../../data/industries";
@@ -49,6 +52,9 @@ const emptyDraft = (): Omit<IndustryPlaybook, "id" | "createdAt" | "updatedAt" |
   preferredChannel: "Email",
   followUpFrequencyDays: 7,
   followUpCount: 2,
+  autoRunEnabled: false,
+  maxDiscountPercent: 0,
+  negotiationGuidance: "",
 });
 
 // ----------------------------------------------------------------------------
@@ -76,6 +82,9 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
           preferredChannel: editing.preferredChannel,
           followUpFrequencyDays: editing.followUpFrequencyDays,
           followUpCount: editing.followUpCount,
+          autoRunEnabled: editing.autoRunEnabled,
+          maxDiscountPercent: editing.maxDiscountPercent,
+          negotiationGuidance: editing.negotiationGuidance || "",
         }
       : emptyDraft()
   );
@@ -265,6 +274,63 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
               </div>
             </div>
           </div>
+
+          {/* Autonomous agent + negotiation */}
+          <div className="p-3.5 bg-[#121418] rounded-xl border border-[#2d323f] space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-teal-300 font-bold">
+                <Bot className="w-3.5 h-3.5" />
+                Autonomous Agent
+              </div>
+              <button
+                type="button"
+                onClick={() => setDraft((p) => ({ ...p, autoRunEnabled: !p.autoRunEnabled }))}
+                className={`px-3 py-1.5 rounded-lg border font-bold flex items-center gap-1.5 transition-colors ${
+                  draft.autoRunEnabled
+                    ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
+                    : "bg-[#181b21] border-[#2d323f] text-slate-500"
+                }`}
+              >
+                <Power className="w-3.5 h-3.5" />
+                {draft.autoRunEnabled ? "Auto-run: On" : "Auto-run: Off"}
+              </button>
+            </div>
+            <p className="text-slate-500">
+              When on, AarPex periodically scans this industry's leads/contacts (while the app is open) for due
+              follow-ups and inbox replies, and drafts proposed actions into Agent Approvals for you to review --
+              nothing is ever sent without your approval.
+            </p>
+
+            <div className="pt-2 border-t border-[#2d323f]/80 space-y-2">
+              <label className="block text-slate-400 font-semibold mb-1 flex items-center gap-1">
+                <Percent className="w-3 h-3" /> Max discount the agent may propose
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={draft.maxDiscountPercent}
+                  onChange={(e) => setDraft((p) => ({ ...p, maxDiscountPercent: Math.max(0, Math.min(100, Number(e.target.value) || 0)) }))}
+                  className="w-24 px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+                />
+                <span className="text-slate-500">% off list price (0 = no negotiation authority for this industry)</span>
+              </div>
+              {draft.maxDiscountPercent > 0 && (
+                <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start gap-2 text-amber-200">
+                  <ShieldAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>This is a hard ceiling enforced by the server -- the agent can never propose more than this, but every offer still requires your approval before it's sent.</span>
+                </div>
+              )}
+              <textarea
+                rows={2}
+                value={draft.negotiationGuidance}
+                onChange={(e) => setDraft((p) => ({ ...p, negotiationGuidance: e.target.value }))}
+                placeholder={`Any other negotiation guidance, e.g. "annual prepay only", "no discount below $500 deals"`}
+                className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg resize-none focus:outline-none focus:border-teal-400"
+              />
+            </div>
+          </div>
         </div>
 
         <div className="px-6 py-3.5 border-t border-[#2d323f] bg-[#121418] flex justify-end gap-2">
@@ -341,7 +407,7 @@ const PlaybookCard: React.FC<{ playbook: IndustryPlaybook; onEdit: () => void }>
         </div>
       )}
 
-      <div className="flex items-center gap-3 pt-2 border-t border-[#2d323f] text-[11px] text-slate-400">
+      <div className="flex items-center gap-3 pt-2 border-t border-[#2d323f] text-[11px] text-slate-400 flex-wrap">
         <span className="flex items-center gap-1">
           <ChannelIcon className="w-3.5 h-3.5 text-teal-400" />
           {playbook.preferredChannel}
@@ -350,6 +416,18 @@ const PlaybookCard: React.FC<{ playbook: IndustryPlaybook; onEdit: () => void }>
           <Clock className="w-3.5 h-3.5 text-teal-400" />
           Every {playbook.followUpFrequencyDays}d &bull; {playbook.followUpCount} follow-ups
         </span>
+        {playbook.autoRunEnabled && (
+          <span className="flex items-center gap-1 text-emerald-300">
+            <Bot className="w-3.5 h-3.5" />
+            Auto-run on
+          </span>
+        )}
+        {playbook.maxDiscountPercent > 0 && (
+          <span className="flex items-center gap-1 text-amber-300">
+            <Percent className="w-3.5 h-3.5" />
+            Up to {playbook.maxDiscountPercent}% off
+          </span>
+        )}
       </div>
     </div>
   );
