@@ -1523,7 +1523,17 @@ const VALID_NAV_VIEWS = [
 // always shows every action to the user for explicit confirmation before
 // calling the corresponding CRUD function -- this endpoint only proposes.
 // ----------------------------------------------------------------------------
-const ACTION_ENTITIES = ["lead", "contact", "company", "deal", "task", "activity", "invoice"] as const;
+// "playbook" and "agent_action" extend chat control to the Industry
+// Playbook agents: toggling a playbook's auto-run/negotiation settings, and
+// approving/rejecting items already sitting in the Agent Approvals queue.
+// "negotiation_offer"/"personalized_email" let the chat trigger the same
+// single-recipient drafts the Lead/Contact drawers do -- both only ever
+// DRAFT (queued into Agent Approvals, or handed to the email composer), the
+// client still needs a separate send/approve step.
+const ACTION_ENTITIES = [
+  "lead", "contact", "company", "deal", "task", "activity", "invoice",
+  "playbook", "agent_action", "negotiation_offer", "personalized_email",
+] as const;
 type ActionEntity = (typeof ACTION_ENTITIES)[number];
 const ENTITY_ALLOWED_TYPES: Record<ActionEntity, Array<"create" | "update" | "delete">> = {
   lead: ["create", "update", "delete"],
@@ -1533,6 +1543,10 @@ const ENTITY_ALLOWED_TYPES: Record<ActionEntity, Array<"create" | "update" | "de
   task: ["create", "update", "delete"],
   activity: ["create", "delete"],
   invoice: ["create", "update", "delete"],
+  playbook: ["update"],
+  agent_action: ["update"],
+  negotiation_offer: ["create"],
+  personalized_email: ["create"],
 };
 
 // Best-effort "find this record by what the user called it" -- exact
@@ -1591,6 +1605,8 @@ app.post("/api/ai/chat-assistant", async (req, res) => {
     const tasks: Array<{ id: string; name: string }> = lk.tasks || [];
     const invoices: Array<{ id: string; name: string }> = lk.invoices || [];
     const pipelines: Array<{ id: string; name: string; stages: Array<{ id: string; name: string }> }> = lk.pipelines || [];
+    const playbooks: Array<{ id: string; name: string }> = lk.playbooks || [];
+    const agentActions: Array<{ id: string; name: string }> = lk.agentActions || [];
 
     const fallbackReply = fallbackNav
       ? `Opening ${fallbackNav} for you now.`
@@ -1644,6 +1660,8 @@ Deals: ${JSON.stringify(deals.map((d) => d.name)).slice(0, 4000)}
 Tasks: ${JSON.stringify(tasks.map((t) => t.name)).slice(0, 2000)}
 Invoices: ${JSON.stringify(invoices.map((i) => i.name)).slice(0, 2000)}
 Pipelines: ${JSON.stringify(pipelines.map((p) => ({ name: p.name, stages: p.stages.map((s) => s.name) })))}
+Industry Playbooks (agents): ${JSON.stringify(playbooks.map((p) => p.name)).slice(0, 2000)}
+Pending Agent Approvals (queued drafts awaiting your decision): ${JSON.stringify(agentActions.map((a) => a.name)).slice(0, 3000)}
 
 Recent conversation (oldest first):
 ${JSON.stringify((history || []).slice(-8))}
@@ -1655,11 +1673,12 @@ Reply conversationally and concisely (2-4 sentences, no bullet points). If the u
 If the user is asking you to CREATE, UPDATE, or DELETE something, populate "actions" (an array, empty if none). Each action:
 {
   "type": "create" | "update" | "delete",
-  "entity": "lead" | "contact" | "company" | "deal" | "task" | "activity" | "invoice",
+  "entity": "lead" | "contact" | "company" | "deal" | "task" | "activity" | "invoice" | "playbook" | "agent_action" | "negotiation_offer" | "personalized_email",
   "summary": "short human-readable one-line description of exactly what this will do, written for a confirmation prompt",
-  "target": string | null,       // REQUIRED for update/delete: the name of the existing record being changed, exactly as it appears in the lists above. null for create.
+  "target": string | null,       // REQUIRED for update/delete: the name of the existing record being changed, exactly as it appears in the lists above (an Industry Playbook's name is its industry; an Agent Approval's name is listed above too). null for create.
   "companyRef": string | null,   // for contact/deal/invoice/task/activity: the company name involved (existing, from the list above)
-  "contactRef": string | null,   // for deal/invoice/task/activity: the contact name involved, if any
+  "contactRef": string | null,   // for deal/invoice/task/activity/negotiation_offer/personalized_email: the contact name involved, if any
+  "leadRef": string | null,      // for negotiation_offer/personalized_email: the lead name involved, if any (use leadRef OR contactRef, never both)
   "dealRef": string | null,      // for invoice/task/activity: the deal name involved, if any
   "pipelineRef": string | null,  // for deal create/update: pipeline name, if specified
   "stageRef": string | null,     // for deal create/update: stage name within that pipeline, if specified
@@ -1677,6 +1696,10 @@ Field guidance per entity (only include what the user actually said or clearly i
 - task: title, dueDate (YYYY-MM-DD), priority ("Low"|"Medium"|"High"|"Urgent"), status ("To Do"|"In Progress"|"Completed"|"Cancelled"), notes (related company/contact/deal via companyRef/contactRef/dealRef)
 - activity: type ("Call"|"Meeting"|"Email"|"WhatsApp"|"Follow-up"|"Demo"|"Proposal"|"Note"), description, outcome, nextAction (related company/contact/deal via companyRef/contactRef/dealRef)
 - invoice: dueDate (YYYY-MM-DD), items (array of {description, quantity, unitPrice}), notes (company via companyRef required, contact/deal optional via contactRef/dealRef)
+- playbook (update only, target = the industry's playbook name from the list above): autoRunEnabled (boolean -- "turn on/off the agent" for that industry means this), maxDiscountPercent (number 0-100 -- "let it negotiate up to X%"), negotiationGuidance (string). Only include the field(s) the user actually asked to change.
+- agent_action (update only, target = the pending item's name from the list above): decision ("approve" | "reject") -- this is how the user approves/rejects/sends/dismisses a queued drafted follow-up, reply, or offer from the chat. "approve" sends it exactly as drafted; the user can't edit the text through chat, only approve or reject -- if they want it changed first, tell them to edit it from the Agent Approvals page instead of proposing an action.
+- negotiation_offer (create only): identify the recipient via leadRef OR contactRef (never both). Drafts a price/terms offer capped by that recipient's industry playbook and queues it into Agent Approvals -- it does not send anything.
+- personalized_email (create only): identify the recipient via leadRef OR contactRef (never both). Drafts a one-off personalized email for that recipient and hands it to the email composer for review -- it does not send anything.
 
 For update actions, put ONLY the fields being changed inside "fields". Never propose an action against a record that isn't in the lists above -- if the user references something that doesn't exist, say so in your reply instead and don't fabricate an action for it.
 
@@ -1709,6 +1732,8 @@ Return pure JSON only, no markdown fences: {"reply": string, "navigateTo": strin
                 : entity === "deal" ? byName(deals)
                 : entity === "task" ? byName(tasks)
                 : entity === "invoice" ? byName(invoices)
+                : entity === "playbook" ? byName(playbooks)
+                : entity === "agent_action" ? byName(agentActions)
                 : [];
               const resolved = resolveByName(list, a.target);
               if (!resolved.id) error = resolved.error || `Couldn't identify which ${entity} "${a.target}" refers to.`;
@@ -1725,6 +1750,11 @@ Return pure JSON only, no markdown fences: {"reply": string, "navigateTo": strin
             if (!error && a.contactRef) {
               const r = resolveByName(contacts, a.contactRef);
               if (r.id) params.contactId = r.id;
+              else if (r.error) error = r.error;
+            }
+            if (!error && a.leadRef) {
+              const r = resolveByName(leads, a.leadRef);
+              if (r.id) params.leadId = r.id;
               else if (r.error) error = r.error;
             }
             if (!error && a.dealRef) {
@@ -1753,6 +1783,12 @@ Return pure JSON only, no markdown fences: {"reply": string, "navigateTo": strin
             }
             if (!error && entity === "invoice" && a.type === "create" && !params.companyId) {
               error = `An invoice needs a company -- couldn't resolve "${a.companyRef || "unspecified"}".`;
+            }
+            if (!error && (entity === "negotiation_offer" || entity === "personalized_email") && !params.leadId && !params.contactId) {
+              error = `Couldn't identify who this is for -- needs a lead or contact.`;
+            }
+            if (!error && entity === "agent_action" && a.type === "update" && !["approve", "reject"].includes(fields.decision)) {
+              error = `Need a clear approve or reject decision.`;
             }
 
             const built: Record<string, any> =

@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.24.0",
+    date: "2026-09-26",
+    headline: "Talk to Your Agents",
+    tagline: "Control every Industry Playbook agent from the chat bubble -- toggle auto-run, approve or reject drafts, and trigger offers or emails, all with a confirm step before anything runs.",
+    highlights: [
+      {
+        title: "Playbook control from chat",
+        description: "Tell the Copilot to turn a playbook's Auto-run on or off, adjust its max discount %, or update negotiation guidance -- it proposes the change and waits for your confirm.",
+      },
+      {
+        title: "Approve or reject from chat",
+        description: "Reference any pending item in the Agent Approvals queue by name and approve (send) or reject it right from the chat bubble.",
+      },
+      {
+        title: "Trigger drafts by name",
+        description: "Ask the Copilot to propose an offer or draft a personalized email for a specific lead or contact -- it still only drafts: an offer lands in Agent Approvals, an email opens in the composer.",
+      },
+    ],
+  },
+  {
     version: "1.23.0",
     date: "2026-09-26",
     headline: "Your Agents Now Write Their Own Notes",

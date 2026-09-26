@@ -13,6 +13,22 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-09-26
+
+### Added
+- **Chat-controlled agents**: the Sales Intelligence Copilot (floating chat)
+  can now drive the Industry Playbook agent features directly, using the
+  same explicit propose-then-confirm safety pattern it already uses for
+  CRUD actions -- nothing runs until the user hits Confirm:
+  - Toggle a playbook's Auto-run, max discount %, or negotiation guidance
+    ("turn on the agent for Retail", "let SaaS negotiate up to 15% off").
+  - Approve or reject any item already sitting in the Agent Approvals
+    queue by name.
+  - Trigger a "Propose Offer" (negotiation) or "Generate Personalized
+    Email" for a named lead or contact -- both still only draft: an offer
+    is queued into Agent Approvals and an email opens in the composer,
+    neither is sent from chat.
+
 ## [1.23.0] - 2026-09-26
 
 ### Added

@@ -4,7 +4,9 @@ import { useCRM, NavView } from "../../context/CRMContext";
 import { apiFetch } from "../../lib/apiClient";
 import { InvoiceItem } from "../../types";
 
-type ActionEntity = "lead" | "contact" | "company" | "deal" | "task" | "activity" | "invoice";
+type ActionEntity =
+  | "lead" | "contact" | "company" | "deal" | "task" | "activity" | "invoice"
+  | "playbook" | "agent_action" | "negotiation_offer" | "personalized_email";
 type ActionType = "create" | "update" | "delete";
 
 interface ProposedAction {
@@ -14,7 +16,7 @@ interface ProposedAction {
   summary: string;
   params: any;
   error?: string;
-  status?: "pending" | "confirmed" | "dismissed" | "failed";
+  status?: "pending" | "applying" | "confirmed" | "dismissed" | "failed";
   resultText?: string;
 }
 
@@ -32,6 +34,10 @@ const ENTITY_LABEL: Record<ActionEntity, string> = {
   task: "Task",
   activity: "Activity",
   invoice: "Invoice",
+  playbook: "Industry Playbook",
+  agent_action: "Agent Approval",
+  negotiation_offer: "Negotiation Offer",
+  personalized_email: "Personalized Email",
 };
 
 const todayISO = () => new Date().toISOString().split("T")[0];
@@ -78,6 +84,16 @@ export const FloatingAIChat: React.FC = () => {
     updateInvoice,
     deleteInvoice,
     knowledgeBase,
+    industryPlaybooks,
+    updateIndustryPlaybook,
+    getPlaybookForIndustry,
+    agentActions,
+    approveAndSendAgentAction,
+    resolveAgentAction,
+    addAgentAction,
+    products,
+    activeTenant,
+    openEmailComposer,
   } = useCRM();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -131,6 +147,11 @@ export const FloatingAIChat: React.FC = () => {
     tasks: tasks.slice(0, 200).map((t) => ({ id: t.id, name: t.title })),
     invoices: invoices.slice(0, 200).map((i) => ({ id: i.id, name: i.invoiceNumber })),
     pipelines: pipelines.map((p) => ({ id: p.id, name: p.name, stages: p.stages.map((s) => ({ id: s.id, name: s.name })) })),
+    playbooks: industryPlaybooks.map((p) => ({ id: p.id, name: p.industry })),
+    agentActions: agentActions
+      .filter((a) => a.status === "pending")
+      .slice(0, 100)
+      .map((a) => ({ id: a.id, name: `${a.recipientName}: ${a.subject}` })),
   });
 
   // Ground the assistant in the workspace's own Knowledge Base instead of
@@ -216,7 +237,10 @@ export const FloatingAIChat: React.FC = () => {
   // Fills in the same sane defaults the Quick Create form uses for anything
   // the AI didn't specify, then calls the matching CRM context function.
   // Returns a short human-readable result string for the chat transcript.
-  const executeAction = (action: ProposedAction): string => {
+  // Async because the agent-control branches (negotiation offers,
+  // personalized emails, approving a queued action) hit the same AI/send
+  // endpoints the Lead/Contact drawers do, rather than a synchronous CRUD call.
+  const executeAction = async (action: ProposedAction): Promise<string> => {
     const p = action.params || {};
 
     if (action.entity === "lead") {
@@ -437,6 +461,124 @@ export const FloatingAIChat: React.FC = () => {
       }
     }
 
+    if (action.entity === "playbook") {
+      if (action.type === "update") {
+        const target = industryPlaybooks.find((pb) => pb.id === p.id);
+        updateIndustryPlaybook(p.id, p.updates || {});
+        return `Updated the "${target?.industry || "playbook"}" playbook.`;
+      }
+    }
+
+    if (action.entity === "agent_action") {
+      if (action.type === "update") {
+        const decision = (p.updates || {}).decision;
+        const target = agentActions.find((a) => a.id === p.id);
+        if (decision === "approve") {
+          const ok = await approveAndSendAgentAction(p.id);
+          return ok
+            ? `Approved and sent${target ? ` the ${target.actionType.replace("_", " ")} to ${target.recipientEmail}` : ""}.`
+            : `Approval failed to send -- it's still pending in Agent Approvals so you can retry.`;
+        }
+        if (decision === "reject") {
+          resolveAgentAction(p.id, "rejected");
+          return `Rejected${target ? ` the drafted ${target.actionType.replace("_", " ")} to ${target.recipientName}` : ""}.`;
+        }
+      }
+    }
+
+    if (action.entity === "negotiation_offer") {
+      if (action.type === "create") {
+        const lead = p.leadId ? leads.find((l) => l.id === p.leadId) : null;
+        const contact = p.contactId ? contacts.find((c) => c.id === p.contactId) : null;
+        if (!lead && !contact) return "Couldn't find that lead or contact.";
+        const company = contact ? companies.find((c) => c.id === contact.companyId) : null;
+        const recipientName = lead ? lead.name : `${contact!.firstName} ${contact!.lastName}`.trim();
+        const recipientIndustry = lead ? lead.industry : company?.industry || "";
+        const playbook = getPlaybookForIndustry(recipientIndustry);
+        const candidateProduct =
+          products.find(
+            (pr) => pr.status === "Active" && (pr.targetCriteria.industries.length === 0 || pr.targetCriteria.industries.includes(recipientIndustry))
+          ) || products.find((pr) => pr.status === "Active") || null;
+        if (!playbook || !playbook.maxDiscountPercent || !candidateProduct) {
+          return `Can't propose an offer -- ${!candidateProduct ? "no active product to offer" : "no negotiation authority set for this industry's playbook"}.`;
+        }
+        const res = await apiFetch("/api/ai/negotiation-offer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            recipientName,
+            recipientCompany: lead ? lead.company : company?.name,
+            recipientJobTitle: lead ? lead.jobTitle : contact!.position,
+            recipientIndustry,
+            productName: candidateProduct.name,
+            productPrice: candidateProduct.price,
+            productPricingModel: candidateProduct.pricingModel,
+            currency: candidateProduct.currency,
+            maxDiscountPercent: playbook.maxDiscountPercent,
+            negotiationGuidance: playbook.negotiationGuidance,
+            knowledgeEntries: knowledgeBase
+              .filter((k) => (lead ? (k.linkedLeadIds || []).includes(lead.id) : (k.linkedContactIds || []).includes(contact!.id)))
+              .map((k) => k.content),
+            senderName: currentUser?.name,
+            senderCompany: activeTenant?.companyName || activeTenant?.name,
+          }),
+        });
+        const data = await res.json();
+        addAgentAction({
+          industry: recipientIndustry,
+          actionType: "negotiation_offer",
+          leadId: lead?.id,
+          contactId: contact?.id,
+          recipientName,
+          recipientEmail: lead ? lead.email : contact!.email,
+          subject: data.subject,
+          body: data.body,
+          reasoning: `Proposed via chat by ${currentUser?.name || "you"}.`,
+          proposedDiscountPercent: data.proposedDiscountPercent,
+          productId: candidateProduct.id,
+          triggerSource: "manual",
+        });
+        return `Drafted a negotiation offer for ${recipientName} and queued it in Agent Approvals for your review.`;
+      }
+    }
+
+    if (action.entity === "personalized_email") {
+      if (action.type === "create") {
+        const lead = p.leadId ? leads.find((l) => l.id === p.leadId) : null;
+        const contact = p.contactId ? contacts.find((c) => c.id === p.contactId) : null;
+        if (!lead && !contact) return "Couldn't find that lead or contact.";
+        const company = contact ? companies.find((c) => c.id === contact.companyId) : null;
+        const recipientName = lead ? lead.name : `${contact!.firstName} ${contact!.lastName}`.trim();
+        const recipientIndustry = lead ? lead.industry : company?.industry || "";
+        const playbook = getPlaybookForIndustry(recipientIndustry);
+        const res = await apiFetch("/api/ai/personalized-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            recipientName,
+            recipientCompany: lead ? lead.company : company?.name,
+            recipientJobTitle: lead ? lead.jobTitle : contact!.position,
+            recipientIndustry,
+            knowledgeEntries: knowledgeBase
+              .filter((k) => (lead ? (k.linkedLeadIds || []).includes(lead.id) : (k.linkedContactIds || []).includes(contact!.id)))
+              .map((k) => k.content),
+            playbook,
+            senderName: currentUser?.name,
+            senderCompany: activeTenant?.companyName || activeTenant?.name,
+          }),
+        });
+        const data = await res.json();
+        openEmailComposer({
+          to: lead ? lead.email : contact!.email,
+          subject: data.subject,
+          body: data.body,
+          leadId: lead?.id,
+          contactId: contact?.id,
+        });
+        return `Drafted a personalized email for ${recipientName} -- opened it in the composer for your review.`;
+      }
+    }
+
     return "Nothing to do.";
   };
 
@@ -450,9 +592,10 @@ export const FloatingAIChat: React.FC = () => {
     );
   };
 
-  const handleConfirmAction = (action: ProposedAction) => {
+  const handleConfirmAction = async (action: ProposedAction) => {
+    updateActionInMessages(action.id, { status: "applying" });
     try {
-      const resultText = executeAction(action);
+      const resultText = await executeAction(action);
       updateActionInMessages(action.id, { status: "confirmed", resultText });
     } catch (err: any) {
       console.error("[FloatingAIChat] action failed:", err);
@@ -543,6 +686,13 @@ export const FloatingAIChat: React.FC = () => {
                               <Ban className="w-3 h-3" />
                               Dismiss
                             </button>
+                          </div>
+                        )}
+
+                        {a.status === "applying" && (
+                          <div className="mt-1.5 flex items-center gap-1.5 text-teal-300 font-semibold">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <span>Working...</span>
                           </div>
                         )}
 
