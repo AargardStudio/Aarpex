@@ -13,6 +13,15 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.26.1] - 2026-09-26
+
+### Added
+- "Getting Started" checklist on the main Dashboard -- a very simple, ordered step-by-step card (add a company, add a contact, create a deal, optionally turn on a playbook, allow notifications) with live checkmarks and a one-click link into the full Instructions page. Dismissible; remembered per browser.
+- Instructions page: new "Getting Started (baby steps)" section (opens first by default) and a new "Running an AI-Agent-Managed Campaign" section walking through Industry Playbooks -> auto-run -> Agent Approvals end to end.
+
+### Fixed
+- Industry Playbooks: the "Talking points" and "Common pain points" comma-separated inputs would silently eat the comma the moment you typed it, because the field's displayed value was being re-derived from the parsed array on every keystroke (which drops empty/trailing segments). These fields now keep their own raw text while typing and only sync to the underlying list, so commas type normally.
+
 ## [1.26.0] - 2026-09-26
 
 ### Added

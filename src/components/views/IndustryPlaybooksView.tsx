@@ -90,6 +90,18 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
   );
   const [isSaving, setIsSaving] = useState(false);
 
+  // Talking points / pain points are comma-separated text inputs backed by a
+  // string[] in draft. Deriving the input's `value` straight from
+  // csv(draft.talkingPoints) on every keystroke fights typing a comma: the
+  // instant you type "Fast," it gets parsed to ["Fast", ""], the empty
+  // trailing entry is filtered out, and the input snaps back to "Fast" --
+  // the comma you just typed visibly disappears. Keeping the raw text in
+  // its own state (only synced to draft.talkingPoints/painPoints as an
+  // array on every change, never fed back into the input's value) lets the
+  // user type freely, including trailing/consecutive commas.
+  const [talkingPointsText, setTalkingPointsText] = useState(() => csv(draft.talkingPoints));
+  const [painPointsText, setPainPointsText] = useState(() => csv(draft.painPoints));
+
   const duplicateIndustry =
     !editing &&
     industryPlaybooks.some((p) => p.industry.trim().toLowerCase() === draft.industry.trim().toLowerCase());
@@ -189,8 +201,11 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
               <label className="block text-slate-400 font-semibold mb-1">Talking points (comma-separated)</label>
               <input
                 type="text"
-                value={csv(draft.talkingPoints)}
-                onChange={(e) => setDraft((p) => ({ ...p, talkingPoints: fromCsv(e.target.value) }))}
+                value={talkingPointsText}
+                onChange={(e) => {
+                  setTalkingPointsText(e.target.value);
+                  setDraft((p) => ({ ...p, talkingPoints: fromCsv(e.target.value) }));
+                }}
                 placeholder="ROI within 90 days, compliance-ready, dedicated onboarding"
                 className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
               />
@@ -199,8 +214,11 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
               <label className="block text-slate-400 font-semibold mb-1">Common pain points (comma-separated)</label>
               <input
                 type="text"
-                value={csv(draft.painPoints)}
-                onChange={(e) => setDraft((p) => ({ ...p, painPoints: fromCsv(e.target.value) }))}
+                value={painPointsText}
+                onChange={(e) => {
+                  setPainPointsText(e.target.value);
+                  setDraft((p) => ({ ...p, painPoints: fromCsv(e.target.value) }));
+                }}
                 placeholder="Staff shortages, rising costs, manual scheduling"
                 className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
               />

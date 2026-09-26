@@ -19,6 +19,7 @@ import {
   Bot,
   Check,
   X as XIcon,
+  Rocket,
 } from "lucide-react";
 import {
   BarChart,
@@ -40,8 +41,10 @@ export const DashboardView: React.FC = () => {
     deals,
     invoices,
     companies,
+    contacts,
     tasks,
     pipelines,
+    industryPlaybooks,
     currentUser,
     setActiveNav,
     setSelectedCompanyId,
@@ -58,6 +61,44 @@ export const DashboardView: React.FC = () => {
   const [showAllUpdates, setShowAllUpdates] = useState(false);
   const latestRelease = RELEASE_NOTES[0];
   const olderReleases = RELEASE_NOTES.slice(1);
+
+  // Getting Started checklist -- dismissible once, remembered per browser.
+  // Never fails the page: localStorage can throw (private browsing, etc.),
+  // so every read/write here is best-effort.
+  const [isGettingStartedDismissed, setIsGettingStartedDismissed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("aarpex_getting_started_dismissed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const dismissGettingStarted = () => {
+    setIsGettingStartedDismissed(true);
+    try {
+      localStorage.setItem("aarpex_getting_started_dismissed", "1");
+    } catch {
+      // best-effort only
+    }
+  };
+  const hasNotificationsOn = (() => {
+    try {
+      return typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted";
+    } catch {
+      return false;
+    }
+  })();
+  const gettingStartedSteps = [
+    { label: "Add your first Company", done: companies.length > 0, nav: "Companies" as const },
+    { label: "Add a Contact", done: (contacts?.length || 0) > 0, nav: "Contacts" as const },
+    { label: "Create your first Deal", done: deals.length > 0, nav: "Deals" as const },
+    {
+      label: "Turn on an Industry Playbook (optional)",
+      done: (industryPlaybooks || []).some((p: any) => p.autoRunEnabled),
+      nav: "Industry Playbooks" as const,
+    },
+    { label: "Allow browser notifications", done: hasNotificationsOn, nav: null },
+  ];
+  const gettingStartedDoneCount = gettingStartedSteps.filter((s) => s.done).length;
 
   // Computed Metrics
   const openDeals = deals.filter((d) => d.status === "Open");
@@ -173,6 +214,76 @@ export const DashboardView: React.FC = () => {
 
   return (
     <div id="dashboard-view" className="space-y-4 sm:space-y-6 animate-in fade-in duration-200 text-slate-100">
+      {/* Getting Started -- very simple, ordered checklist for brand-new
+          users. Dismissible (remembered per browser); reappears for anyone
+          who hasn't dismissed it yet, regardless of how much data already
+          exists, since it doubles as a quick reference. */}
+      {!isGettingStartedDismissed && (
+        <div className="bg-[#181b21] rounded-2xl p-4 sm:p-5 border border-teal-800/40 shadow-lg text-white space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2.5">
+              <span className="w-7 h-7 rounded-lg bg-teal-500/15 border border-teal-500/30 flex items-center justify-center shrink-0">
+                <Rocket className="w-3.5 h-3.5 text-teal-400" />
+              </span>
+              <h3 className="text-sm font-bold text-white">Getting Started</h3>
+              <span className="px-2 py-0.5 rounded-full bg-[#252a36] border border-[#3d4455] text-teal-300 text-[10px] font-bold">
+                {gettingStartedDoneCount}/{gettingStartedSteps.length} done
+              </span>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                onClick={() => setActiveNav("Instructions")}
+                className="text-xs text-teal-400 hover:text-teal-300 font-semibold"
+              >
+                Full Guide
+              </button>
+              <button
+                onClick={dismissGettingStarted}
+                title="Dismiss"
+                className="p-1 rounded-md text-slate-500 hover:text-white hover:bg-[#222630] transition-colors"
+              >
+                <XIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-400">
+            New here? Do these in order -- each step only takes a minute.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+            {gettingStartedSteps.map((step, idx) => (
+              <button
+                key={step.label}
+                onClick={() => {
+                  if (step.done) return;
+                  if (step.nav) setActiveNav(step.nav);
+                  else setActiveNav("Instructions");
+                }}
+                className={`text-left p-3 rounded-xl border flex items-start gap-2.5 transition-colors ${
+                  step.done
+                    ? "bg-teal-950/20 border-teal-800/40"
+                    : "bg-[#121418] border-[#2d323f] hover:border-teal-500/40"
+                }`}
+              >
+                <span
+                  className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border ${
+                    step.done
+                      ? "bg-teal-500/20 border-teal-500/40 text-teal-300"
+                      : "bg-[#181b21] border-[#3d4455] text-slate-400"
+                  }`}
+                >
+                  {step.done ? <Check className="w-3 h-3" /> : idx + 1}
+                </span>
+                <span className={`text-xs leading-snug ${step.done ? "text-teal-200/80 line-through" : "text-slate-200 font-medium"}`}>
+                  {step.label}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Empty-state banner: offer sample data for brand-new, unpopulated workspaces */}
       {companies.length === 0 && (
         <div className="bg-teal-950/40 border border-teal-800/50 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

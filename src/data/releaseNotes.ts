@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.26.1",
+    date: "2026-09-26",
+    headline: "A Getting Started Checklist, and a Comma Bug Squashed",
+    tagline: "Brand-new baby steps right on your Dashboard, a full walkthrough of AI-managed campaigns, and a fix for playbook fields that were swallowing commas as you typed.",
+    highlights: [
+      {
+        title: "Getting Started checklist",
+        description: "A simple, ordered checklist now lives on the Dashboard -- add a company, add a contact, create a deal, and so on -- with live checkmarks as you complete each step.",
+      },
+      {
+        title: "How to run an AI-managed campaign",
+        description: "The Instructions page now walks through Industry Playbooks end to end: turning on auto-run, how Agent Approvals gates every send, and what to expect.",
+      },
+      {
+        title: "Fixed: commas in Playbook fields",
+        description: "Typing a comma in a Playbook's Talking Points or Pain Points field no longer vanishes the moment you type it.",
+      },
+    ],
+  },
+  {
     version: "1.26.0",
     date: "2026-09-26",
     headline: "A Guide Built Right In, and Approvals You Can't Miss",

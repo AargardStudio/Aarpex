@@ -18,15 +18,33 @@ import {
   Mail,
   Bell,
   Settings,
+  Rocket,
 } from "lucide-react";
 
 interface Section {
   icon: React.ElementType;
   title: string;
   body: string[];
+  steps?: string[];
 }
 
 const SECTIONS: Section[] = [
+  {
+    icon: Rocket,
+    title: "Getting Started (baby steps)",
+    body: [
+      "New to AarPex? Do these in order -- each one takes a couple of minutes and sets up the next.",
+    ],
+    steps: [
+      "Add your first Company. Go to Companies -> \"Add Company\" and enter one customer you already work with.",
+      "Add a Contact at that company. Go to Contacts -> \"Add Contact\" and link it to the company you just created.",
+      "Create a Deal. Go to Deals -> \"Add Deal\", pick the company, and enter a dollar value -- this is your first sales opportunity.",
+      "Turn on an Industry Playbook (optional). Go to Industry Playbooks, open one matching your industry, and switch on auto-run if you want the AI agent to draft follow-ups for you.",
+      "Allow browser notifications. When AarPex asks, click Allow -- this is how you'll be alerted the moment the AI drafts something that needs your approval.",
+      "Check Agent Approvals. If the AI has drafted anything, review it on the Dashboard or the Agent Approvals page before it sends.",
+      "Come back to this Instructions page any time you're unsure what a screen does.",
+    ],
+  },
   {
     icon: LayoutDashboard,
     title: "Dashboard",
@@ -109,6 +127,20 @@ const SECTIONS: Section[] = [
     title: "Industry Playbooks",
     body: [
       "A Playbook is a set of rules for one industry -- how often to follow up, what discount range is allowed, whether the AI can auto-run without you approving every message. Turn a playbook's auto-run on and the AI agent starts working that industry's leads on its own schedule, always queuing anything it drafts into Agent Approvals first.",
+    ],
+  },
+  {
+    icon: Bot,
+    title: "Running an AI-Agent-Managed Campaign",
+    body: [
+      "This is how you let the AI work a group of leads or contacts on autopilot -- following up, replying, even offering discounts -- while you just approve what it drafts.",
+    ],
+    steps: [
+      "Open an Industry Playbook (or create one) for the industry you want the agent to handle. This is where you set the rules: how often to follow up, and whether/how much discount it's allowed to offer.",
+      "Turn the playbook's auto-run switch on. From that point, the agent works every lead/contact tagged with that industry on its own schedule -- no manual triggering needed. You can also toggle this from the floating AI chat bubble instead of clicking into the page.",
+      "Nothing sends automatically. Every draft the agent writes -- a follow-up, a reply, a negotiation offer -- lands in Agent Approvals first, along with its reasoning (e.g. \"no response in 8 days, playbook cadence is every 7\").",
+      "Review and decide. Approve & Send if the draft looks right, or Reject if it doesn't -- you can do this from the Agent Approvals page, the Dashboard's Agent Approvals card, or the alert bell at the top of the screen.",
+      "Keep a browser tab open. The agent currently scans for new work while a tab is open (roughly every 10 minutes) -- it isn't a fully server-side background process yet, so someone on the team needs AarPex open somewhere for it to keep running.",
     ],
   },
   {
@@ -200,6 +232,18 @@ export const InstructionsView: React.FC = () => {
                       {p}
                     </p>
                   ))}
+                  {section.steps && (
+                    <ol className="space-y-1.5 pt-1">
+                      {section.steps.map((s, i) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-slate-300 leading-relaxed">
+                          <span className="shrink-0 mt-0.5 w-4 h-4 rounded-full bg-teal-500/20 border border-teal-500/40 text-teal-300 text-[10px] font-bold flex items-center justify-center">
+                            {i + 1}
+                          </span>
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
                 </div>
               )}
             </div>
