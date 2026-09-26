@@ -23,6 +23,18 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.30.1",
+    date: "2026-09-26",
+    headline: "Fixed: The Industry Picker Couldn't Find Your Industry",
+    tagline: "The \"pick an existing industry\" list now actually searches what you type, instead of only ever showing your biggest industries.",
+    highlights: [
+      {
+        title: "Type to search, not just browse the top 12",
+        description: "If you have hundreds of records under one industry (common after a bulk import), a smaller one you're looking for could be pushed out of view entirely. Typing now filters the list to matching values instead of only showing the highest-count ones.",
+      },
+    ],
+  },
+  {
     version: "1.30.0",
     date: "2026-09-26",
     headline: "Understand Your Playbooks at a Glance",

@@ -237,6 +237,19 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
     matchingLeads.length === 0 && matchingCompanies.length === 0
       ? findCloseIndustryMatches(draft.industry, existingIndustryUsages)
       : [];
+
+  // The "pick an existing value" chip list must actually be searchable by
+  // what's typed -- a plain top-12-by-count list silently hides a real,
+  // low-count industry (like two "Car Wash" companies) behind whatever
+  // industry has the most records overall (often a bulk-import default
+  // like "General"). Once something is typed, filter to values containing
+  // it (a real search) instead of ranking by volume; only fall back to
+  // "biggest buckets first" when the field is empty and there's nothing to
+  // search against yet.
+  const typedIndustry = draft.industry.trim().toLowerCase();
+  const industryChipCandidates = typedIndustry
+    ? existingIndustryUsages.filter((u) => u.raw.toLowerCase().includes(typedIndustry))
+    : existingIndustryUsages;
   const toggleExcludedLead = (id: string) => {
     setDraft((p) => {
       const cur = p.excludedLeadIds || [];
@@ -369,27 +382,38 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
               {existingIndustryUsages.length > 0 && (
                 <div className="mt-2">
                   <p className="text-slate-500 mb-1">
-                    Or pick a value already used on your records (guaranteed to match exactly):
+                    {typedIndustry
+                      ? `Values already on your records matching "${draft.industry}" (guaranteed to match exactly if you pick one):`
+                      : "Values already used on your records (guaranteed to match exactly if you pick one):"}
                   </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {existingIndustryUsages.slice(0, 12).map((u) => {
-                      const isCurrent = normalizeIndustry(u.raw) === industryLc;
-                      return (
-                        <button
-                          key={u.raw}
-                          type="button"
-                          onClick={() => setDraft((p) => ({ ...p, industry: u.raw }))}
-                          className={`px-2 py-1 rounded-md border text-[11px] transition-colors ${
-                            isCurrent
-                              ? "bg-teal-500/15 border-teal-500/40 text-teal-300"
-                              : "bg-[#121418] border-[#2d323f] text-slate-400 hover:text-white hover:border-teal-500/40"
-                          }`}
-                        >
-                          {u.raw} <span className="opacity-60">({u.count})</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {industryChipCandidates.length === 0 ? (
+                    <p className="text-slate-600">
+                      Nothing on your records contains "{draft.industry}" -- clear the search above to browse everything, or check "did you mean" below once you save.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {industryChipCandidates.slice(0, 20).map((u) => {
+                        const isCurrent = normalizeIndustry(u.raw) === industryLc;
+                        return (
+                          <button
+                            key={u.raw}
+                            type="button"
+                            onClick={() => setDraft((p) => ({ ...p, industry: u.raw }))}
+                            className={`px-2 py-1 rounded-md border text-[11px] transition-colors ${
+                              isCurrent
+                                ? "bg-teal-500/15 border-teal-500/40 text-teal-300"
+                                : "bg-[#121418] border-[#2d323f] text-slate-400 hover:text-white hover:border-teal-500/40"
+                            }`}
+                          >
+                            {u.raw} <span className="opacity-60">({u.count})</span>
+                          </button>
+                        );
+                      })}
+                      {industryChipCandidates.length > 20 && (
+                        <span className="px-2 py-1 text-slate-600">+{industryChipCandidates.length - 20} more -- keep typing to narrow it down</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

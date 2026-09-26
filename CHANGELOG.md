@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.30.1] - 2026-09-26
+
+### Fixed
+- Industry Playbook "pick a value already used on your records" chip list was a fixed top-12-by-count ranking, not a search -- so a real, low-count industry (e.g. 2 businesses tagged "Car Wash") could be invisible behind whatever industry has the most records overall (often a bulk-import default like "General" applied to hundreds of Leads). It now actually searches: once you've typed something, the list filters to values containing what you typed instead of ranking by volume.
+
 ## [1.30.0] - 2026-09-26
 
 ### Added
