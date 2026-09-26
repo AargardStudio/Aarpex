@@ -329,6 +329,13 @@ interface CRMContextType {
   updateIndustryPlaybook: (id: string, updates: Partial<IndustryPlaybook>) => void;
   deleteIndustryPlaybook: (id: string) => void;
   getPlaybookForIndustry: (industry: string | undefined) => IndustryPlaybook | undefined;
+  // Honest status for the autonomous scan (see runAgentScan below): when it
+  // last actually ran in this browser tab, and whether one is running right
+  // now. There is no server-side scheduler, so this is the ONLY source of
+  // truth for "is this actually being monitored" -- the UI must never claim
+  // continuous monitoring beyond what these two fields can support.
+  lastAgentScanAt: string | null;
+  isAgentScanRunning: boolean;
 
   // Agent Approvals -- the human-in-the-loop queue every autonomous or
   // negotiation action proposes into before anything reaches a prospect.
@@ -613,6 +620,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadTenantEntity("industryPlaybooks", [] as IndustryPlaybook[])
   );
 
+  // Deliberately NOT persisted (no localStorage/Supabase) -- this describes
+  // what THIS browser tab has actually done this session, not a durable
+  // fact, so it must reset to "hasn't happened yet" on every fresh load
+  // rather than showing a stale timestamp from a previous session as if it
+  // were still true.
+  const [lastAgentScanAt, setLastAgentScanAt] = useState<string | null>(null);
+  const [isAgentScanRunning, setIsAgentScanRunning] = useState(false);
+
   const [agentActions, setAgentActions] = useState<AgentAction[]>(() =>
     loadTenantEntity("agentActions", [] as AgentAction[])
   );
@@ -765,6 +780,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!activeTenantId) return;
 
     const runAgentScan = async () => {
+      setIsAgentScanRunning(true);
+      setLastAgentScanAt(new Date().toISOString());
       const {
         leads: curLeads,
         contacts: curContacts,
@@ -779,7 +796,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } = agentScanStateRef.current;
 
       const autoPlaybooks = curPlaybooks.filter((p) => p.isActive && p.autoRunEnabled);
-      if (autoPlaybooks.length === 0) return;
+      if (autoPlaybooks.length === 0) {
+        setIsAgentScanRunning(false);
+        return;
+      }
 
       // Auto-extracted knowledge base -- for industries running on autopilot,
       // the agent builds each lead/contact's individual "AI-Extracted Summary"
@@ -1141,6 +1161,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...prev,
         ]);
       }
+      setIsAgentScanRunning(false);
     };
 
     // Run once shortly after mount/tenant switch, then on a slow interval --
@@ -3553,6 +3574,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateIndustryPlaybook,
         deleteIndustryPlaybook,
         getPlaybookForIndustry,
+        lastAgentScanAt,
+        isAgentScanRunning,
 
         agentActions,
         addAgentAction,

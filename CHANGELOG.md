@@ -13,6 +13,24 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.30.0] - 2026-09-26
+
+### Added
+- Industry Playbooks were redesigned so a first-time user can understand the whole model without opening Instructions:
+  - A "Who will this Playbook reach?" summary (matching count, broken down by Leads/Companies) is now visible before you activate anything.
+  - A plain "How this Playbook works" flow (Match -> AI prepares an action -> You approve -> AarPex sends) is shown right inside the Playbook, with an explicit statement that AarPex never sends AI-generated outreach without your approval.
+  - A "Ready to activate" summary appears before creating a new Playbook (industry, matching count, excluded count, linked product, monitoring on/off).
+  - Editing an existing Playbook now shows a real "Monitoring status" section: whether it's currently checking, when it last actually checked, and an honest "browser monitoring" label (never a false "always on") since this still depends on a browser tab being open -- there's no server-side scheduler yet.
+  - That same section shows this Playbook's own pending-approval count (with a one-click jump to Agent Approvals) and its last 5 agent activity entries with plain-language reasoning.
+  - Matching Businesses now has search and an All/Companies/Leads filter, and every row explains why it's included via a tooltip comparing the exact Industry text on both sides.
+  - Changing a saved Playbook's Industry now shows a "change audience?" warning comparing the old vs. new matching count before you save.
+  - Pausing an active Playbook (renamed from "Inactive" to "Paused" throughout) now asks for confirmation and explains that pending approvals are unaffected; Playbook cards also get a one-click Pause/Resume action and a pending-approvals shortcut.
+  - A dismissible "Automate outreach by industry" explainer appears the first time Industry Playbooks is opened.
+  - An inline warning appears when no mailbox is connected, since a Playbook can prepare actions but can't send anything approved until email is set up.
+
+### Changed
+- "Autonomous Agent" section relabeled "Automated Monitoring" and its toggle now reads "Monitoring: On/Off" instead of "Auto-run" -- same setting, plainer language throughout, matching Agent Approvals' existing "Approve & Send" wording.
+
 ## [1.29.0] - 2026-09-26
 
 ### Added

@@ -23,6 +23,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.30.0",
+    date: "2026-09-26",
+    headline: "Understand Your Playbooks at a Glance",
+    tagline: "Industry Playbooks now explain themselves: who they reach, what they'll do, whether they're actually running right now, and what's waiting for your approval -- no Instructions page required.",
+    highlights: [
+      {
+        title: "Who will this Playbook reach?",
+        description: "See the matching business count -- and how it breaks down between Leads and Companies -- before you ever activate a Playbook.",
+      },
+      {
+        title: "Honest monitoring status",
+        description: "Every Playbook now shows whether it's checking right now, when it last actually checked, and a clear \"browser monitoring\" label -- it never claims to be always-on when it isn't.",
+      },
+      {
+        title: "Approvals and activity, right in the Playbook",
+        description: "See this Playbook's own pending approvals and recent agent activity without leaving it, plus a one-click jump to Agent Approvals.",
+      },
+      {
+        title: "Pause with confidence",
+        description: "Pausing a Playbook now asks for confirmation and explains exactly what happens -- and a one-click Pause/Resume button lives right on the Playbook card.",
+      },
+    ],
+  },
+  {
     version: "1.29.0",
     date: "2026-09-26",
     headline: "Pick Your Playbook's Industry -- Don't Retype It",
