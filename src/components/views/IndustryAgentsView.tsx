@@ -204,11 +204,6 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
         }
       : emptyDraft()
   );
-  // Whether this tenant has actually configured an API key for the
-  // provider this agent is currently set to use -- surfaced as a plain
-  // warning rather than silently letting the agent be saved unusable.
-  const providerConfig = activeTenant?.aiProviderConfigs?.[draft.modelProvider as AIProvider];
-  const providerConfigured = !!providerConfig?.isEnabled && !!providerConfig?.apiKey;
   const [isSaving, setIsSaving] = useState(false);
   const [matchSearch, setMatchSearch] = useState("");
   const [matchFilter, setMatchFilter] = useState<"all" | "companies" | "leads">("all");
@@ -988,15 +983,10 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
                 />
               </div>
             </div>
-            {!providerConfigured && (
-              <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start gap-2 text-amber-200">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                <span>
-                  No {AI_PROVIDER_LABELS[draft.modelProvider as AIProvider]} API key is on file for this workspace yet -- add
-                  one in Settings before turning monitoring on, or this agent won't be able to draft anything.
-                </span>
-              </div>
-            )}
+            <p className="text-slate-500">
+              Powered by AarPex's shared AI infrastructure -- there's nothing to configure here beyond picking a
+              provider and model above.
+            </p>
 
             <div className="pt-2 border-t border-[#2d323f]/80 space-y-2">
               <label className="block text-slate-400 font-semibold mb-1 flex items-center gap-1">

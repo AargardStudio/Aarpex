@@ -12,9 +12,12 @@ export interface AIModelOption {
 }
 
 export const AI_PROVIDER_MODELS: Record<AIProvider, AIModelOption[]> = {
+  // Matches the same model ids server.ts's callGeminiSafe() already uses
+  // and falls back across -- keeping the dropdown in sync with what
+  // actually works avoids offering a model id that 404s.
   gemini: [
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (fast, default)" },
-    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (higher quality)" },
+    { value: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite (fast, default)" },
+    { value: "gemini-3.8-flash", label: "Gemini 3.8 Flash (higher quality)" },
   ],
   openai: [
     { value: "gpt-4o-mini", label: "GPT-4o mini (fast, default)" },

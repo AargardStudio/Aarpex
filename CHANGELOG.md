@@ -13,6 +13,18 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.32.0] - 2026-09-27
+
+### Changed
+- **AI provider keys for Industry Agents are now platform-wide, not per-tenant.** Reversed the v1.31.0 design: instead of each workspace bringing its own OpenAI/Gemini key, Aargard provides one shared key per provider (`GEMINI_API_KEY` / `OPENAI_API_KEY`) used by every tenant -- the same model as every other AI feature in AarPex. Removed the per-tenant "AI Provider Keys" Settings tab and the `ai_provider_configs` tenant column added in the previous release; an agent's own provider/model choice is unaffected, only where the credential comes from changed.
+
+### Added
+- Industry Agents now **actually route their drafts through the provider/model each one is set to** (email-campaign, lead-analysis, personalized-email, and negotiation-offer) instead of always using the platform's shared Gemini integration regardless of what was selected -- the gap flagged as a known limitation in v1.31.0 is now closed for these four AI calls.
+- `/api/health` and `/api/env-check` now also report whether `OPENAI_API_KEY` is configured on this deployment, matching the existing `GEMINI_API_KEY` check.
+
+### Fixed
+- Corrected the Gemini model ids offered in an Industry Agent's model dropdown (`gemini-2.5-flash`/`gemini-2.5-pro` didn't match any model this deployment's Gemini integration actually calls) to the same ids/fallback order already used elsewhere (`gemini-3.1-flash-lite`, `gemini-3.8-flash`).
+
 ## [1.31.0] - 2026-09-27
 
 ### Changed

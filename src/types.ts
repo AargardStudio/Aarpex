@@ -464,9 +464,10 @@ export interface StoredFile {
 export type PreferredOutreachChannel = "Email" | "WhatsApp" | "Call" | "Mixed";
 
 // Which AI provider/model an Industry Agent uses to draft its follow-ups,
-// replies, and negotiation offers. Each tenant brings its own API key per
-// provider (see TenantAIProviderConfig on Tenant) -- there is no
-// Aargard-subsidized platform key for this feature.
+// replies, and negotiation offers. One platform-wide key per provider
+// (GEMINI_API_KEY / OPENAI_API_KEY, see server.ts) is shared by every
+// tenant -- Aargard provides and pays for it, same as every other AI
+// feature in AarPex; there is no per-tenant key to configure.
 export type AIProvider = "openai" | "gemini";
 
 export interface IndustryAgent {
@@ -1008,18 +1009,6 @@ export interface TenantWhatsAppConfig {
   statusMessage?: string;
 }
 
-// One shared API key per AI provider per tenant -- used by every Industry
-// Agent that picks that provider (see IndustryAgent.modelProvider). Same
-// shape/status convention as TenantStripeConfig/TenantWebmailConfig: the
-// tenant brings their own credential, AarPex never subsidizes usage.
-export interface TenantAIProviderConfig {
-  isEnabled: boolean;
-  apiKey: string;
-  lastVerifiedAt?: string;
-  status: "unconfigured" | "connected" | "invalid_key" | "testing";
-  statusMessage?: string;
-}
-
 export interface TenantMember {
   userId: string;
   name: string;
@@ -1106,9 +1095,6 @@ export interface Tenant {
    * to the one with isDefault:true); see TenantWebmailConfig.id. */
   webmailConfigs: TenantWebmailConfig[];
   whatsappConfig?: TenantWhatsAppConfig;
-  /** One shared key per AI provider, used by every Industry Agent on this
-   * tenant configured to use that provider. Keyed by AIProvider. */
-  aiProviderConfigs?: Partial<Record<AIProvider, TenantAIProviderConfig>>;
   supabaseConfig?: SupabaseConfig;
   auditLog?: AuditLogEntry[];
 }

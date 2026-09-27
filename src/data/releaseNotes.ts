@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.32.0",
+    date: "2026-09-27",
+    headline: "Industry Agents Now Actually Use Your Chosen AI Provider",
+    tagline: "Pick OpenAI or Gemini per agent and it's genuinely used for that agent's drafts -- powered by AarPex's own shared AI infrastructure, nothing for you to configure.",
+    highlights: [
+      {
+        title: "No key to set up",
+        description: "AI provider keys are managed by AarPex, not per-workspace -- just pick a provider and model on each Industry Agent and it's ready to go.",
+      },
+      {
+        title: "Provider choice is now real",
+        description: "An agent set to OpenAI actually drafts through OpenAI now, instead of always using the shared Gemini integration regardless of what was selected.",
+      },
+    ],
+  },
+  {
     version: "1.31.0",
     date: "2026-09-27",
     headline: "Industry Playbooks Is Now Industry Agents",

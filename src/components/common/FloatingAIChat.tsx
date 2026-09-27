@@ -516,6 +516,8 @@ export const FloatingAIChat: React.FC = () => {
             currency: candidateProduct.currency,
             maxDiscountPercent: agent.maxDiscountPercent,
             negotiationConditions: agent.negotiationConditions,
+            modelProvider: agent.modelProvider,
+            modelName: agent.modelName,
             knowledgeEntries: knowledgeBase
               .filter((k) => (lead ? (k.linkedLeadIds || []).includes(lead.id) : (k.linkedContactIds || []).includes(contact!.id)))
               .map((k) => k.content),

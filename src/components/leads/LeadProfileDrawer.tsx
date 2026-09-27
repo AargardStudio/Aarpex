@@ -321,6 +321,8 @@ export const LeadProfileDrawer: React.FC = () => {
           currency: candidateProduct.currency,
           maxDiscountPercent: agent.maxDiscountPercent,
           negotiationConditions: agent.negotiationConditions,
+          modelProvider: agent.modelProvider,
+          modelName: agent.modelName,
           knowledgeEntries: linkedKnowledge.map((k) => k.content),
           activities: leadActivities,
           senderName: currentUser?.name,

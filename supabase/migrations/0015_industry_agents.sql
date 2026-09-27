@@ -4,18 +4,14 @@
 -- every existing row, id, and foreign-key reference intact) and adds the
 -- new fields required by the Industry Agents build spec:
 --   - model_provider / model_name: which AI provider/model drafts this
---     agent's messages (see TenantAIProviderConfig below for the actual
---     per-tenant credential).
+--     agent's messages. One platform-wide API key per provider
+--     (GEMINI_API_KEY / OPENAI_API_KEY in server.ts) is shared by every
+--     tenant -- there is no per-tenant credential to store.
 --   - frequency_minutes: how often (in minutes, 15 minimum) this agent's
 --     scan should run once auto-run is on.
 --   - last_scan_at: when this agent's scan last actually ran.
 --   - negotiation_guidance is renamed to negotiation_conditions (same
 --     column, same data, clearer name matching src/types.ts).
---
--- Also adds tenant-level, shared-per-provider AI API key storage
--- (ai_provider_configs jsonb, same "one JSON blob per tenant" pattern as
--- stripe_config/webmail_config/whatsapp_config) so each tenant brings its
--- own OpenAI/Gemini key rather than sharing Aargard's platform key.
 --
 -- Safe to re-run.
 -- ============================================================================
@@ -54,7 +50,7 @@ create table if not exists public.industry_agents (
 alter table public.industry_agents
   add column if not exists negotiation_guidance text,
   add column if not exists model_provider text not null default 'gemini',
-  add column if not exists model_name text not null default 'gemini-2.5-flash',
+  add column if not exists model_name text not null default 'gemini-3.1-flash-lite',
   add column if not exists frequency_minutes integer not null default 15,
   add column if not exists last_scan_at timestamptz;
 
@@ -92,11 +88,3 @@ drop policy if exists industry_agents_all on public.industry_agents;
 create policy industry_agents_all on public.industry_agents
   for all using (public.is_tenant_member(tenant_id))
   with check (public.is_tenant_member(tenant_id));
-
--- Tenant-level AI provider keys -- one shared key per provider per tenant,
--- used by every Industry Agent on that tenant configured to use it. Same
--- "single JSON object" pattern as stripe_config/webmail_config/
--- whatsapp_config; shape is { openai?: {...}, gemini?: {...} }, each entry
--- matching TenantAIProviderConfig in src/types.ts.
-alter table public.tenants
-  add column if not exists ai_provider_configs jsonb not null default '{}'::jsonb;

@@ -158,6 +158,54 @@ async function callGeminiSafe(prompt: string, responseMimeType: string = "applic
   return null;
 }
 
+// Platform-wide OpenAI caller -- same one shared key (OPENAI_API_KEY) used
+// for every tenant's Industry Agents set to the "openai" provider, exactly
+// like GEMINI_API_KEY above. Plain fetch to the Chat Completions API rather
+// than pulling in the openai SDK for a single call shape.
+async function callOpenAISafe(prompt: string, model: string = "gpt-4o-mini", jsonMode: boolean = true): Promise<string | null> {
+  if (!process.env.OPENAI_API_KEY) return null;
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
+      }),
+    });
+    if (!res.ok) {
+      console.error(`[callOpenAISafe] ${res.status} ${await res.text().catch(() => "")}`.slice(0, 500));
+      return null;
+    }
+    const data: any = await res.json();
+    return data?.choices?.[0]?.message?.content || null;
+  } catch (err) {
+    console.error("[callOpenAISafe] request failed:", err);
+    return null;
+  }
+}
+
+// Provider-agnostic dispatcher for Industry Agent drafts -- routes to
+// whichever provider/model the agent (IndustryAgent.modelProvider/
+// modelName) is actually configured to use, both drawing on the same
+// platform-wide key (there is no per-tenant credential). Falls back to the
+// default Gemini caller when no agent context is given (every other AI
+// feature in AarPex, e.g. customer-analysis/deal-analysis/daily-briefing).
+async function callAIForAgent(
+  agent: { modelProvider?: string; modelName?: string } | null | undefined,
+  prompt: string,
+  responseMimeType: string = "application/json"
+): Promise<string | null> {
+  if (agent?.modelProvider === "openai") {
+    return callOpenAISafe(prompt, agent.modelName || "gpt-4o-mini", responseMimeType === "application/json");
+  }
+  return callGeminiSafe(prompt, responseMimeType);
+}
+
 // ----------------------------------------------------------------------------
 // Lightweight HTML -> plain text extraction, used by the "generate a
 // Knowledge Base entry from a URL" feature below. Deliberately dependency-
@@ -211,6 +259,7 @@ app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
     hasApiKey: !!process.env.GEMINI_API_KEY,
+    hasOpenAiKey: !!process.env.OPENAI_API_KEY,
     timestamp: new Date().toISOString(),
   });
 });
@@ -226,6 +275,7 @@ app.get("/api/env-check", async (req, res) => {
 
   const checks: Record<string, any> = {
     GEMINI_API_KEY: present(process.env.GEMINI_API_KEY),
+    OPENAI_API_KEY: present(process.env.OPENAI_API_KEY),
     APP_URL: present(process.env.APP_URL) ? process.env.APP_URL : false,
     STRIPE_SECRET_KEY: present(process.env.STRIPE_SECRET_KEY),
     STRIPE_PUBLISHABLE_KEY: present(process.env.STRIPE_PUBLISHABLE_KEY),
@@ -794,7 +844,7 @@ Return pure JSON only, no markdown fences, in this exact shape:
   ]
 }`;
 
-    const rawAiText = await callGeminiSafe(prompt);
+    const rawAiText = await callAIForAgent(agent, prompt);
     if (rawAiText) {
       try {
         const parsed = JSON.parse(rawAiText);
@@ -909,7 +959,7 @@ Generate a JSON response:
 
 Return pure valid JSON only.`;
 
-    const rawAiText = await callGeminiSafe(prompt);
+    const rawAiText = await callAIForAgent(agent, prompt);
     if (rawAiText) {
       try {
         const parsed = JSON.parse(rawAiText);
@@ -1046,7 +1096,7 @@ Write a subject line and email body. Reference at least one concrete, specific d
 Return pure JSON only, no markdown fences, in this exact shape:
 { "subject": "...", "body": "..." }`;
 
-    const rawAiText = await callGeminiSafe(prompt);
+    const rawAiText = await callAIForAgent(agent, prompt);
     if (rawAiText) {
       try {
         const parsed = JSON.parse(rawAiText);
@@ -1148,6 +1198,8 @@ app.post("/api/ai/negotiation-offer", async (req, res) => {
       requestContext, // optional: what prompted this, e.g. "they asked for a lower price"
       senderName,
       senderCompany,
+      modelProvider, // optional: the Industry Agent's chosen provider ("openai" | "gemini")
+      modelName, // optional: the Industry Agent's chosen model
     } = req.body;
 
     if (!recipientName) {
@@ -1214,7 +1266,7 @@ Write a subject and email body proposing a SPECIFIC discount percentage and resu
 Return pure JSON only, no markdown fences, in this exact shape:
 { "subject": "...", "body": "...", "proposedDiscountPercent": number }`;
 
-    const rawAiText = await callGeminiSafe(prompt);
+    const rawAiText = await callAIForAgent({ modelProvider, modelName }, prompt);
     if (rawAiText) {
       try {
         const parsed = JSON.parse(rawAiText);

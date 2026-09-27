@@ -38,8 +38,6 @@ import {
   AgentActionStatus,
   StoredFile,
   StoredFileSource,
-  AIProvider,
-  TenantAIProviderConfig,
 } from "../types";
 import { STORAGE_LIMITS_BYTES } from "../data/subscriptionPlans";
 import { isSupabaseAuthConfigured, getSupabaseAuthClient } from "../config/supabaseAuthClient";
@@ -189,7 +187,6 @@ interface CRMContextType {
   deleteWebmailConfig: (id: string) => void;
   setDefaultWebmailConfig: (id: string) => void;
   updateWhatsAppConfig: (config: Partial<TenantWhatsAppConfig>) => void;
-  updateAIProviderConfig: (provider: AIProvider, config: Partial<TenantAIProviderConfig>) => void;
   updateSupabaseConfig: (config: Partial<SupabaseConfig>) => void;
   addAuditLogEntry: (action: string, details?: string, category?: AuditLogEntry["category"]) => void;
 
@@ -1787,26 +1784,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               status: "unconfigured",
               ...t.whatsappConfig,
               ...configUpdates,
-            },
-          };
-        }
-        return t;
-      })
-    );
-  };
-
-  // AI provider keys -- one shared key per provider per tenant, used by
-  // every Industry Agent on this tenant configured to use that provider.
-  const updateAIProviderConfig = (provider: AIProvider, configUpdates: Partial<TenantAIProviderConfig>) => {
-    setTenants((prev) =>
-      prev.map((t) => {
-        if (t.id === activeTenantId) {
-          const existing = t.aiProviderConfigs?.[provider] || { isEnabled: false, apiKey: "", status: "unconfigured" as const };
-          return {
-            ...t,
-            aiProviderConfigs: {
-              ...t.aiProviderConfigs,
-              [provider]: { ...existing, ...configUpdates },
             },
           };
         }
@@ -3524,7 +3501,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteWebmailConfig,
         setDefaultWebmailConfig,
         updateWhatsAppConfig,
-        updateAIProviderConfig,
         updateSupabaseConfig,
         addAuditLogEntry,
 
