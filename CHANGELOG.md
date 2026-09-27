@@ -13,6 +13,13 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.32.1] - 2026-09-27
+
+### Fixed
+- **Root-caused the long-standing "Car Wash businesses not appearing" bug** (and the same failure for any manually-typed Industry, confirmed to reproduce with a freshly created "FNB" agent too): a value typed by hand into an Industry field -- an Industry Agent's own Industry, or a Lead's/Company's -- could pick up an invisible, non-whitespace Unicode character (from an input method, a browser extension, or a paste) that ordinary `.trim()` never strips, while a value chosen from an existing-value chip or a dropdown never had the problem. That's exactly the pattern reported: the default/picked "General" industry matched fine, but anything typed by hand into Car Wash, FNB, or any other custom industry silently matched zero businesses even though the text looked identical on screen.
+- `normalizeIndustry()` (`src/lib/industryMatch.ts`, the one shared comparison used everywhere an Industry Agent decides who it applies to) now also strips that class of invisible characters and applies Unicode NFKC normalization before comparing, on top of the existing trim/lowercase/whitespace-collapse.
+- New `sanitizeIndustryText()` applies the same cleanup **at save time**, not just at comparison time, so a stray invisible character never makes it into a stored record in the first place. Wired into every place a person types a custom Industry by hand: the Industry Agent create/edit form, editing a Lead's or Company's Industry from their profile drawer, and Quick Create's "Other" industry field for both Leads and Companies.
+
 ## [1.32.0] - 2026-09-27
 
 ### Changed

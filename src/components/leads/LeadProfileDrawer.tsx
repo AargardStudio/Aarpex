@@ -31,6 +31,7 @@ import {
   Check,
 } from "lucide-react";
 import { apiFetch } from "../../lib/apiClient";
+import { sanitizeIndustryText } from "../../lib/industryMatch";
 import { INDUSTRIES } from "../../data/industries";
 
 interface AnalysisResult {
@@ -135,7 +136,7 @@ export const LeadProfileDrawer: React.FC = () => {
     setIsEditingIndustry(true);
   };
   const handleSaveIndustry = () => {
-    if (industryDraft.trim()) updateLead(lead.id, { industry: industryDraft.trim() });
+    if (industryDraft.trim()) updateLead(lead.id, { industry: sanitizeIndustryText(industryDraft) });
     setIsEditingIndustry(false);
   };
   const candidateProduct =

@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.32.1",
+    date: "2026-09-27",
+    headline: "Fixed: Custom Industries Not Matching Their Agent",
+    tagline: "Typing a custom Industry by hand could silently pick up an invisible character your eyes could never catch -- now cleaned up automatically, both when it's typed and when it's matched.",
+    highlights: [
+      {
+        title: "Root cause found",
+        description: "A hand-typed Industry value (on an Industry Agent, a Lead, or a Company) could carry an invisible character that looked identical on screen but never matched -- values picked from a suggestion chip or dropdown were never affected.",
+      },
+      {
+        title: "Fixed at the source",
+        description: "Industry text is now cleaned the moment it's saved, everywhere it's typed by hand, on top of the existing matching safeguards -- so this can't quietly happen again.",
+      },
+    ],
+  },
+  {
     version: "1.32.0",
     date: "2026-09-27",
     headline: "Industry Agents Now Actually Use Your Chosen AI Provider",

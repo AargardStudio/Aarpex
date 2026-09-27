@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { IndustryAgent, PreferredOutreachChannel, AgentAction, AIProvider } from "../../types";
 import { INDUSTRIES } from "../../data/industries";
-import { normalizeIndustry, summarizeIndustryUsage, findCloseIndustryMatches, IndustryUsage } from "../../lib/industryMatch";
+import { normalizeIndustry, sanitizeIndustryText, summarizeIndustryUsage, findCloseIndustryMatches, IndustryUsage } from "../../lib/industryMatch";
 import { AI_PROVIDER_MODELS, AI_PROVIDER_LABELS, defaultModelFor } from "../../lib/aiProviders";
 
 function csv(list: string[] | undefined): string {
@@ -339,10 +339,17 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
     if (!draft.industry.trim() || duplicateIndustry) return;
     setIsSaving(true);
     try {
+      // Clean the Industry text at the moment it's actually stored -- not
+      // just at comparison time -- so a stray invisible character picked up
+      // while typing (a browser extension, an OS input method, a paste from
+      // elsewhere) never makes it into the saved record at all. See
+      // sanitizeIndustryText() in industryMatch.ts for why this matters
+      // beyond what normalizeIndustry() already protects.
+      const cleanDraft = { ...draft, industry: sanitizeIndustryText(draft.industry) };
       if (editing) {
-        updateIndustryAgent(editing.id, draft);
+        updateIndustryAgent(editing.id, cleanDraft);
       } else {
-        addIndustryAgent(draft);
+        addIndustryAgent(cleanDraft);
       }
       onClose();
     } finally {

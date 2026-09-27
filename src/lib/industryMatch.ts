@@ -11,16 +11,53 @@
 // once actually compared -- exactly the "I fixed it, it's definitely
 // correct" bug report this was written to stop happening again.
 //
+// A second, sneakier class of the same bug: characters that are invisible
+// but are NOT whitespace as far as JS's `\s` is concerned, so `.trim()` and
+// `\s+` collapsing never touch them -- a zero-width space (U+200B), a
+// zero-width joiner/non-joiner, a bidi control character, a soft hyphen,
+// etc. Copy-pasting industry text out of a spreadsheet, PDF, or web page is
+// a common way for one of these to end up in a single record's Industry
+// field while every other record (typed by hand) doesn't have it. The two
+// values can be pixel-identical on screen, byte-identical in length to the
+// eye, and still never match -- which is exactly the shape of bug that
+// survived two previous whitespace-only fixes here. INVISIBLE_CHARS_RE
+// strips those out explicitly; NFKC normalization additionally folds
+// visually-identical Unicode variants (fullwidth forms, some ligatures)
+// that a straight lowercase/trim wouldn't unify either.
+//
 // normalizeIndustry() is the one place that comparison logic lives now;
 // every place in the app that decides whether an Industry Agent applies
 // to a Lead/Company (or looks one up by industry) should compare
 // normalizeIndustry(a) === normalizeIndustry(b) rather than rolling its own
 // trim/lowercase.
+const INVISIBLE_CHARS_RE = /[​-‏‪-‮⁠-⁩﻿­]/g;
+
 export function normalizeIndustry(value: string | undefined | null): string {
   return (value || "")
+    .normalize("NFKC")
+    .replace(INVISIBLE_CHARS_RE, "")
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
+}
+
+// Applied at SAVE time -- everywhere a person types an Industry value into a
+// free-text field (an Industry Agent's Industry, or a Lead/Company's own
+// Industry field) -- so the string that actually gets stored is clean, not
+// just the comparison normalizeIndustry() produces on the fly. This matters
+// beyond matching: an Industry Agent's own `industry` field is also compared
+// by *exact* string equality in a couple of places (e.g. stamping/filtering
+// AgentAction records), so a value that silently carries an invisible
+// character forever would still cause subtler drift even though
+// normalizeIndustry() keeps the Lead/Company matching itself working.
+// Deliberately preserves case (this is the stored/displayed value, not the
+// lowercase comparison key normalizeIndustry() produces).
+export function sanitizeIndustryText(value: string): string {
+  return (value || "")
+    .normalize("NFKC")
+    .replace(INVISIBLE_CHARS_RE, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // Small edit-distance helper, used only to power "did you mean" suggestions

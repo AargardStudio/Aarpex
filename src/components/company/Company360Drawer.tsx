@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { CustomerStatus, CallLogEntry } from "../../types";
 import { apiFetch } from "../../lib/apiClient";
+import { sanitizeIndustryText } from "../../lib/industryMatch";
 import { INDUSTRIES } from "../../data/industries";
 
 const CALL_OUTCOMES: CallLogEntry["outcome"][] = [
@@ -170,7 +171,7 @@ export const Company360Drawer: React.FC = () => {
   };
 
   const handleSaveIndustry = () => {
-    if (industryDraft.trim()) updateCompany(company.id, { industry: industryDraft.trim() });
+    if (industryDraft.trim()) updateCompany(company.id, { industry: sanitizeIndustryText(industryDraft) });
     setIsEditingIndustry(false);
   };
 

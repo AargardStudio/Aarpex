@@ -13,6 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { InvoiceItem } from "../../types";
+import { sanitizeIndustryText } from "../../lib/industryMatch";
 import { INDUSTRIES, CLIENT_CATEGORIES } from "../../data/industries";
 
 export const QuickCreateModal: React.FC = () => {
@@ -145,7 +146,7 @@ export const QuickCreateModal: React.FC = () => {
         jobTitle: leadJobTitle,
         email: leadEmail,
         phone: leadPhone,
-        industry: leadIndustry === "Other" ? leadIndustryCustom.trim() || "Other" : leadIndustry,
+        industry: leadIndustry === "Other" ? sanitizeIndustryText(leadIndustryCustom) || "Other" : leadIndustry,
         clientCategory: leadClientCategory || undefined,
         socialLinks: leadSocialLinks
           .filter((s) => s.url.trim())
@@ -190,7 +191,7 @@ export const QuickCreateModal: React.FC = () => {
       if (!compName) return;
       addCompany({
         name: compName,
-        industry: compIndustry === "Other" ? compIndustryCustom.trim() || "Other" : compIndustry,
+        industry: compIndustry === "Other" ? sanitizeIndustryText(compIndustryCustom) || "Other" : compIndustry,
         clientCategory: compClientCategory || undefined,
         website: compWebsite,
         city: compCity,
