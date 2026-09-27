@@ -33,11 +33,13 @@ import {
   ProductAIInsight,
   KnowledgeBaseEntry,
   KnowledgeBaseCategory,
-  IndustryPlaybook,
+  IndustryAgent,
   AgentAction,
   AgentActionStatus,
   StoredFile,
   StoredFileSource,
+  AIProvider,
+  TenantAIProviderConfig,
 } from "../types";
 import { STORAGE_LIMITS_BYTES } from "../data/subscriptionPlans";
 import { isSupabaseAuthConfigured, getSupabaseAuthClient } from "../config/supabaseAuthClient";
@@ -109,7 +111,7 @@ export type NavView =
   | "Settings"
   | "CEO Notes"
   | "Knowledge Base"
-  | "Industry Playbooks"
+  | "Industry Agents"
   | "Agent Approvals"
   | "File Manager"
   | "Instructions";
@@ -187,6 +189,7 @@ interface CRMContextType {
   deleteWebmailConfig: (id: string) => void;
   setDefaultWebmailConfig: (id: string) => void;
   updateWhatsAppConfig: (config: Partial<TenantWhatsAppConfig>) => void;
+  updateAIProviderConfig: (provider: AIProvider, config: Partial<TenantAIProviderConfig>) => void;
   updateSupabaseConfig: (config: Partial<SupabaseConfig>) => void;
   addAuditLogEntry: (action: string, details?: string, category?: AuditLogEntry["category"]) => void;
 
@@ -318,17 +321,17 @@ interface CRMContextType {
     category: KnowledgeBaseCategory
   ) => Promise<{ title: string; content: string; tags: string[]; sourceUrl: string }>;
 
-  // Industry Playbooks -- configurable, user-defined AI management profiles
-  // per industry (see IndustryPlaybook in types.ts). Drives email tone,
+  // Industry Agents -- configurable, user-defined AI management profiles
+  // per industry (see IndustryAgent in types.ts). Drives email tone,
   // qualification guidance, and follow-up cadence/channel wherever AI
   // touches a lead/contact/company in that industry.
-  industryPlaybooks: IndustryPlaybook[];
-  addIndustryPlaybook: (
-    playbook: Omit<IndustryPlaybook, "id" | "createdAt" | "updatedAt" | "createdBy">
-  ) => IndustryPlaybook;
-  updateIndustryPlaybook: (id: string, updates: Partial<IndustryPlaybook>) => void;
-  deleteIndustryPlaybook: (id: string) => void;
-  getPlaybookForIndustry: (industry: string | undefined) => IndustryPlaybook | undefined;
+  industryAgents: IndustryAgent[];
+  addIndustryAgent: (
+    agent: Omit<IndustryAgent, "id" | "createdAt" | "updatedAt" | "createdBy">
+  ) => IndustryAgent;
+  updateIndustryAgent: (id: string, updates: Partial<IndustryAgent>) => void;
+  deleteIndustryAgent: (id: string) => void;
+  getAgentForIndustry: (industry: string | undefined) => IndustryAgent | undefined;
   // Honest status for the autonomous scan (see runAgentScan below): when it
   // last actually ran in this browser tab, and whether one is running right
   // now. There is no server-side scheduler, so this is the ONLY source of
@@ -616,9 +619,28 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadTenantEntity("knowledgeBase", [] as KnowledgeBaseEntry[])
   );
 
-  const [industryPlaybooks, setIndustryPlaybooks] = useState<IndustryPlaybook[]>(() =>
-    loadTenantEntity("industryPlaybooks", [] as IndustryPlaybook[])
-  );
+  // Lossless migration from the retired Industry Playbook feature: a tenant
+  // that never touched anything new here still has its old data sitting
+  // under the old localStorage key (and, before its first Supabase sync
+  // under the new table name, in the old `industry_playbooks` Supabase
+  // rows -- picked up by the normal fetch/hydrate path once the migration
+  // in supabase/migrations/0015_industry_agents.sql has been applied,
+  // which renames that table in place so no row is ever duplicated or
+  // lost). Backfills the new required fields with safe defaults so an
+  // old row loads as a fully valid IndustryAgent rather than crashing.
+  const [industryAgents, setIndustryAgents] = useState<IndustryAgent[]>(() => {
+    const current = loadTenantEntity("industryAgents", [] as IndustryAgent[]);
+    if (current.length > 0) return current;
+    const legacy = loadTenantEntity("industryPlaybooks", [] as any[]);
+    if (!legacy || legacy.length === 0) return current;
+    return legacy.map((p: any) => ({
+      ...p,
+      modelProvider: p.modelProvider || "gemini",
+      modelName: p.modelName || "gemini-2.5-flash",
+      frequencyMinutes: p.frequencyMinutes || 15,
+      negotiationConditions: p.negotiationConditions ?? p.negotiationGuidance,
+    })) as IndustryAgent[];
+  });
 
   // Deliberately NOT persisted (no localStorage/Supabase) -- this describes
   // what THIS browser tab has actually done this session, not a durable
@@ -722,9 +744,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [knowledgeBase, activeTenantId]);
 
   useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_industryPlaybooks`, JSON.stringify(industryPlaybooks));
-    if (shouldSyncToSupabase) syncTenantTable("industry_playbooks", activeTenantId, industryPlaybooks);
-  }, [industryPlaybooks, activeTenantId]);
+    localStorage.setItem(`crm_tenant_${activeTenantId}_industryAgents`, JSON.stringify(industryAgents));
+    if (shouldSyncToSupabase) syncTenantTable("industry_agents", activeTenantId, industryAgents);
+  }, [industryAgents, activeTenantId]);
 
   useEffect(() => {
     localStorage.setItem(`crm_tenant_${activeTenantId}_agentActions`, JSON.stringify(agentActions));
@@ -737,7 +759,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [storedFiles, activeTenantId]);
 
   // ------------------------------------------------------------------------
-  // Autonomous agent scan -- for any Industry Playbook with autoRunEnabled,
+  // Autonomous agent scan -- for any Industry Agent with autoRunEnabled,
   // periodically (while AarPex is open in a browser tab) looks for leads and
   // contacts that are due a follow-up, and checks the tenant's default
   // mailbox for new replies, drafting a proposed action into the Agent
@@ -754,7 +776,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     contacts,
     rawCompanies,
     activities,
-    industryPlaybooks,
+    industryAgents,
     agentActions,
     knowledgeBase,
     activeTenant,
@@ -767,7 +789,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       contacts,
       rawCompanies,
       activities,
-      industryPlaybooks,
+      industryAgents,
       agentActions,
       knowledgeBase,
       activeTenant,
@@ -787,7 +809,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         contacts: curContacts,
         rawCompanies: curCompanies,
         activities: curActivities,
-        industryPlaybooks: curPlaybooks,
+        industryAgents: curAgents,
         agentActions: curAgentActions,
         knowledgeBase: curKnowledge,
         activeTenant: curTenant,
@@ -795,8 +817,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         products: curProducts,
       } = agentScanStateRef.current;
 
-      const autoPlaybooks = curPlaybooks.filter((p) => p.isActive && p.autoRunEnabled);
-      if (autoPlaybooks.length === 0) {
+      const autoAgents = curAgents.filter((p) => p.isActive && p.autoRunEnabled);
+      if (autoAgents.length === 0) {
         setIsAgentScanRunning(false);
         return;
       }
@@ -821,19 +843,19 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const newActions: Omit<AgentAction, "id" | "createdAt" | "status">[] = [];
 
-      for (const playbook of autoPlaybooks) {
-        const industryLc = normalizeIndustry(playbook.industry);
-        const cadenceMs = Math.max(1, playbook.followUpFrequencyDays) * 86400000;
-        // Resolve this playbook's optional Product/Service so every draft it
+      for (const agent of autoAgents) {
+        const industryLc = normalizeIndustry(agent.industry);
+        const cadenceMs = Math.max(1, agent.followUpFrequencyDays) * 86400000;
+        // Resolve this agent's optional Product/Service so every draft it
         // generates below is seeded with the same name/pitch context a
         // manually-built Email Marketing campaign gets from its own
         // Product/Service picker.
-        const playbookProduct = playbook.productId ? curProducts.find((prod) => prod.id === playbook.productId) : undefined;
+        const agentProduct = agent.productId ? curProducts.find((prod) => prod.id === agent.productId) : undefined;
 
         // Follow-up due: leads
         const dueLeads = curLeads.filter((l) => {
           if (normalizeIndustry(l.industry) !== industryLc) return false;
-          if ((playbook.excludedLeadIds || []).includes(l.id)) return false;
+          if ((agent.excludedLeadIds || []).includes(l.id)) return false;
           if (!l.email) return false;
           if (l.status === "Converted" || l.status === "Lost") return false;
           const reference = l.lastContact ? new Date(l.lastContact).getTime() : new Date(l.createdDate || 0).getTime();
@@ -846,7 +868,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const dueContacts = curContacts.filter((c) => {
           const comp = curCompanies.find((co) => co.id === c.companyId);
           if (normalizeIndustry(comp?.industry) !== industryLc) return false;
-          if (comp && (playbook.excludedCompanyIds || []).includes(comp.id)) return false;
+          if (comp && (agent.excludedCompanyIds || []).includes(comp.id)) return false;
           if (!c.email) return false;
           const lastActivity = curActivities
             .filter((a) => a.contactId === c.id)
@@ -862,14 +884,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // gets two summaries in one pass).
         const leadsNeedingSummary = curLeads.filter((l) => {
           if (normalizeIndustry(l.industry) !== industryLc) return false;
-          if ((playbook.excludedLeadIds || []).includes(l.id)) return false;
+          if ((agent.excludedLeadIds || []).includes(l.id)) return false;
           if (curKnowledge.some((k) => k.tags.includes("AI-Generated") && (k.linkedLeadIds || []).includes(l.id))) return false;
           return !kbUpserts.some((k) => (k.linkedLeadIds || []).includes(l.id));
         });
         const contactsNeedingSummary = curContacts.filter((c) => {
           const comp = curCompanies.find((co) => co.id === c.companyId);
           if (normalizeIndustry(comp?.industry) !== industryLc) return false;
-          if (comp && (playbook.excludedCompanyIds || []).includes(comp.id)) return false;
+          if (comp && (agent.excludedCompanyIds || []).includes(comp.id)) return false;
           if (curKnowledge.some((k) => k.tags.includes("AI-Generated") && (k.linkedContactIds || []).includes(c.id))) return false;
           return !kbUpserts.some((k) => (k.linkedContactIds || []).includes(c.id));
         });
@@ -949,24 +971,24 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 recipientJobTitle: lead.jobTitle,
                 recipientIndustry: lead.industry,
                 activities: leadActs,
-                playbook,
-                productName: playbookProduct?.name,
-                productPitch: playbookProduct?.pitch,
+                agent,
+                productName: agentProduct?.name,
+                productPitch: agentProduct?.pitch,
                 senderName: curUser?.name,
                 senderCompany: curTenant?.companyName || curTenant?.name,
-                goal: `Send a follow-up -- it's been ${playbook.followUpFrequencyDays}+ days since last contact with no response.`,
+                goal: `Send a follow-up -- it's been ${agent.followUpFrequencyDays}+ days since last contact with no response.`,
               }),
             });
             const data = await res.json();
             newActions.push({
-              industry: playbook.industry,
+              industry: agent.industry,
               actionType: "follow_up",
               leadId: lead.id,
               recipientName: lead.name,
               recipientEmail: lead.email,
               subject: data.subject,
               body: data.body,
-              reasoning: `No response in ${playbook.followUpFrequencyDays}+ days (playbook cadence for ${playbook.industry}).`,
+              reasoning: `No response in ${agent.followUpFrequencyDays}+ days (agent cadence for ${agent.industry}).`,
               triggerSource: "auto_followup",
             });
           } catch (err) {
@@ -987,24 +1009,24 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 recipientJobTitle: contact.position,
                 recipientIndustry: comp?.industry,
                 activities: contactActs,
-                playbook,
-                productName: playbookProduct?.name,
-                productPitch: playbookProduct?.pitch,
+                agent,
+                productName: agentProduct?.name,
+                productPitch: agentProduct?.pitch,
                 senderName: curUser?.name,
                 senderCompany: curTenant?.companyName || curTenant?.name,
-                goal: `Send a follow-up -- it's been ${playbook.followUpFrequencyDays}+ days since last contact with no response.`,
+                goal: `Send a follow-up -- it's been ${agent.followUpFrequencyDays}+ days since last contact with no response.`,
               }),
             });
             const data = await res.json();
             newActions.push({
-              industry: playbook.industry,
+              industry: agent.industry,
               actionType: "follow_up",
               contactId: contact.id,
               recipientName: `${contact.firstName} ${contact.lastName}`.trim(),
               recipientEmail: contact.email,
               subject: data.subject,
               body: data.body,
-              reasoning: `No response in ${playbook.followUpFrequencyDays}+ days (playbook cadence for ${playbook.industry}).`,
+              reasoning: `No response in ${agent.followUpFrequencyDays}+ days (agent cadence for ${agent.industry}).`,
               triggerSource: "auto_followup",
             });
           } catch (err) {
@@ -1020,7 +1042,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const candidateLeads = curLeads.filter(
             (l) =>
               normalizeIndustry(l.industry) === industryLc &&
-              !(playbook.excludedLeadIds || []).includes(l.id) &&
+              !(agent.excludedLeadIds || []).includes(l.id) &&
               l.email &&
               l.status !== "Converted" &&
               l.status !== "Lost"
@@ -1029,7 +1051,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const comp = curCompanies.find((co) => co.id === c.companyId);
             return (
               normalizeIndustry(comp?.industry) === industryLc &&
-              !(comp && (playbook.excludedCompanyIds || []).includes(comp.id)) &&
+              !(comp && (agent.excludedCompanyIds || []).includes(comp.id)) &&
               c.email
             );
           });
@@ -1069,11 +1091,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                       recipientName,
                       recipientCompany: isLead ? record.company : comp?.name,
                       recipientJobTitle: isLead ? record.jobTitle : record.position,
-                      recipientIndustry: playbook.industry,
+                      recipientIndustry: agent.industry,
                       activities: curActivities.filter((a) => (isLead ? a.leadId === record.id : a.contactId === record.id)),
-                      playbook,
-                      productName: playbookProduct?.name,
-                      productPitch: playbookProduct?.pitch,
+                      agent,
+                      productName: agentProduct?.name,
+                      productPitch: agentProduct?.pitch,
                       senderName: curUser?.name,
                       senderCompany: curTenant?.companyName || curTenant?.name,
                       goal: "They just replied in our inbox -- draft a warm, specific reply that keeps the conversation moving forward.",
@@ -1081,7 +1103,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   });
                   const draftData = await draftRes.json();
                   newActions.push({
-                    industry: playbook.industry,
+                    industry: agent.industry,
                     actionType: "email_reply",
                     leadId: isLead ? record.id : undefined,
                     contactId: isLead ? undefined : record.id,
@@ -1225,7 +1247,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         emailCampaignsRes,
         productsRes,
         knowledgeBaseRes,
-        industryPlaybooksRes,
+        industryAgentsRes,
         agentActionsRes,
         storedFilesRes,
       ] = await Promise.all([
@@ -1242,7 +1264,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetchTenantTable<EmailCampaign>("email_campaigns", activeTenantId),
         fetchTenantTable<Product>("products", activeTenantId),
         fetchTenantTable<KnowledgeBaseEntry>("knowledge_base", activeTenantId),
-        fetchTenantTable<IndustryPlaybook>("industry_playbooks", activeTenantId),
+        fetchTenantTable<IndustryAgent>("industry_agents", activeTenantId),
         fetchTenantTable<AgentAction>("agent_actions", activeTenantId),
         fetchTenantTable<StoredFile>("stored_files", activeTenantId),
       ]);
@@ -1260,7 +1282,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (emailCampaignsRes) setEmailCampaigns(emailCampaignsRes);
       if (productsRes) setProducts(productsRes);
       if (knowledgeBaseRes) setKnowledgeBase(knowledgeBaseRes);
-      if (industryPlaybooksRes) setIndustryPlaybooks(industryPlaybooksRes);
+      if (industryAgentsRes) setIndustryAgents(industryAgentsRes);
       if (agentActionsRes) setAgentActions(agentActionsRes);
       if (storedFilesRes) setStoredFiles(storedFilesRes);
       setIsHydratingTenantData(false);
@@ -1289,7 +1311,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(`crm_tenant_${activeTenantId}_emailCampaigns`, JSON.stringify(emailCampaigns));
     localStorage.setItem(`crm_tenant_${activeTenantId}_products`, JSON.stringify(products));
     localStorage.setItem(`crm_tenant_${activeTenantId}_knowledgeBase`, JSON.stringify(knowledgeBase));
-    localStorage.setItem(`crm_tenant_${activeTenantId}_industryPlaybooks`, JSON.stringify(industryPlaybooks));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_industryAgents`, JSON.stringify(industryAgents));
     localStorage.setItem(`crm_tenant_${activeTenantId}_agentActions`, JSON.stringify(agentActions));
     localStorage.setItem(`crm_tenant_${activeTenantId}_storedFiles`, JSON.stringify(storedFiles));
 
@@ -1320,7 +1342,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEmailCampaigns(loadTarget("emailCampaigns", [] as EmailCampaign[]));
     setProducts(loadTarget("products", [] as Product[]));
     setKnowledgeBase(loadTarget("knowledgeBase", [] as KnowledgeBaseEntry[]));
-    setIndustryPlaybooks(loadTarget("industryPlaybooks", [] as IndustryPlaybook[]));
+    setIndustryAgents(loadTarget("industryAgents", [] as IndustryAgent[]));
     setAgentActions(loadTarget("agentActions", [] as AgentAction[]));
     setStoredFiles(loadTarget("storedFiles", [] as StoredFile[]));
     setSelectedCompanyId(null);
@@ -1765,6 +1787,26 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               status: "unconfigured",
               ...t.whatsappConfig,
               ...configUpdates,
+            },
+          };
+        }
+        return t;
+      })
+    );
+  };
+
+  // AI provider keys -- one shared key per provider per tenant, used by
+  // every Industry Agent on this tenant configured to use that provider.
+  const updateAIProviderConfig = (provider: AIProvider, configUpdates: Partial<TenantAIProviderConfig>) => {
+    setTenants((prev) =>
+      prev.map((t) => {
+        if (t.id === activeTenantId) {
+          const existing = t.aiProviderConfigs?.[provider] || { isEnabled: false, apiKey: "", status: "unconfigured" as const };
+          return {
+            ...t,
+            aiProviderConfigs: {
+              ...t.aiProviderConfigs,
+              [provider]: { ...existing, ...configUpdates },
             },
           };
         }
@@ -2965,47 +3007,47 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setKnowledgeBase((prev) => prev.filter((entry) => entry.id !== id));
   };
 
-  // Industry Playbooks ---------------------------------------------------
-  const addIndustryPlaybook = (
-    playbookData: Omit<IndustryPlaybook, "id" | "createdAt" | "updatedAt" | "createdBy">
-  ): IndustryPlaybook => {
+  // Industry Agents ---------------------------------------------------
+  const addIndustryAgent = (
+    agentData: Omit<IndustryAgent, "id" | "createdAt" | "updatedAt" | "createdBy">
+  ): IndustryAgent => {
     const newId =
       typeof crypto !== "undefined" && "randomUUID" in crypto
         ? crypto.randomUUID()
         : `pbk_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const now = new Date().toISOString();
-    const newPlaybook: IndustryPlaybook = {
-      ...playbookData,
+    const newAgent: IndustryAgent = {
+      ...agentData,
       id: newId,
-      talkingPoints: playbookData.talkingPoints || [],
-      painPoints: playbookData.painPoints || [],
-      autoRunEnabled: playbookData.autoRunEnabled ?? false,
-      maxDiscountPercent: playbookData.maxDiscountPercent ?? 0,
+      talkingPoints: agentData.talkingPoints || [],
+      painPoints: agentData.painPoints || [],
+      autoRunEnabled: agentData.autoRunEnabled ?? false,
+      maxDiscountPercent: agentData.maxDiscountPercent ?? 0,
       createdBy: currentUser.name,
       createdAt: now,
       updatedAt: now,
     };
-    setIndustryPlaybooks((prev) => [newPlaybook, ...prev]);
-    return newPlaybook;
+    setIndustryAgents((prev) => [newAgent, ...prev]);
+    return newAgent;
   };
 
-  const updateIndustryPlaybook = (id: string, updates: Partial<IndustryPlaybook>) => {
-    setIndustryPlaybooks((prev) =>
+  const updateIndustryAgent = (id: string, updates: Partial<IndustryAgent>) => {
+    setIndustryAgents((prev) =>
       prev.map((p) => (p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p))
     );
   };
 
-  const deleteIndustryPlaybook = (id: string) => {
-    setIndustryPlaybooks((prev) => prev.filter((p) => p.id !== id));
+  const deleteIndustryAgent = (id: string) => {
+    setIndustryAgents((prev) => prev.filter((p) => p.id !== id));
   };
 
-  // Case-insensitive exact match on the industry name -- inactive playbooks
+  // Case-insensitive exact match on the industry name -- inactive agents
   // are skipped so toggling one off actually stops it from being applied.
-  const getPlaybookForIndustry = (industry: string | undefined): IndustryPlaybook | undefined => {
+  const getAgentForIndustry = (industry: string | undefined): IndustryAgent | undefined => {
     if (!industry) return undefined;
     const normalized = normalizeIndustry(industry);
     if (!normalized) return undefined;
-    return industryPlaybooks.find((p) => p.isActive && normalizeIndustry(p.industry) === normalized);
+    return industryAgents.find((p) => p.isActive && normalizeIndustry(p.industry) === normalized);
   };
 
   // Agent Approvals ------------------------------------------------------
@@ -3482,6 +3524,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteWebmailConfig,
         setDefaultWebmailConfig,
         updateWhatsAppConfig,
+        updateAIProviderConfig,
         updateSupabaseConfig,
         addAuditLogEntry,
 
@@ -3569,11 +3612,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteKnowledgeBaseEntry,
         generateKnowledgeBaseDraftFromUrl,
 
-        industryPlaybooks,
-        addIndustryPlaybook,
-        updateIndustryPlaybook,
-        deleteIndustryPlaybook,
-        getPlaybookForIndustry,
+        industryAgents,
+        addIndustryAgent,
+        updateIndustryAgent,
+        deleteIndustryAgent,
+        getAgentForIndustry,
         lastAgentScanAt,
         isAgentScanRunning,
 

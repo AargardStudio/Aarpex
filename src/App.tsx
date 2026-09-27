@@ -23,7 +23,7 @@ import { InboxView } from "./components/views/InboxView";
 import { ReportsView } from "./components/views/ReportsView";
 import { SettingsView } from "./components/views/SettingsView";
 import { KnowledgeBaseView } from "./components/views/KnowledgeBaseView";
-import { IndustryPlaybooksView } from "./components/views/IndustryPlaybooksView";
+import { IndustryAgentsView } from "./components/views/IndustryAgentsView";
 import { AgentApprovalsView } from "./components/views/AgentApprovalsView";
 import { FileManagerView } from "./components/views/FileManagerView";
 import { InstructionsView } from "./components/views/InstructionsView";
@@ -133,8 +133,8 @@ const CRMMainContent: React.FC = () => {
         return <CeoNotesView />;
       case "knowledgebase":
         return <KnowledgeBaseView />;
-      case "industryplaybooks":
-        return <IndustryPlaybooksView />;
+      case "industryagents":
+        return <IndustryAgentsView />;
       case "agentapprovals":
         return <AgentApprovalsView />;
       case "filemanager":

@@ -84,7 +84,7 @@ export const LeadProfileDrawer: React.FC = () => {
     addKnowledgeBaseEntry,
     updateKnowledgeBaseEntry,
     deleteKnowledgeBaseEntry,
-    getPlaybookForIndustry,
+    getAgentForIndustry,
     products,
     addAgentAction,
   } = useCRM();
@@ -122,12 +122,12 @@ export const LeadProfileDrawer: React.FC = () => {
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const latestNextAction = leadActivities.find((a) => a.nextAction)?.nextAction || lead.nextFollowUp;
   const rating = getLeadRating(lead.leadScore);
-  const playbook = getPlaybookForIndustry(lead.industry);
+  const agent = getAgentForIndustry(lead.industry);
 
-  // Industry is the field Industry Playbooks match against to decide which
+  // Industry is the field Industry Agents match against to decide which
   // leads their AI agent works -- there was previously no way to set or
   // change it once a lead was created (only at "Add Lead" time), which made
-  // it impossible to move an existing lead into a playbook's industry
+  // it impossible to move an existing lead into an agent's industry
   // without re-importing it via a spreadsheet. This makes it a normal
   // editable field, right in the profile.
   const handleStartEditIndustry = () => {
@@ -180,7 +180,7 @@ export const LeadProfileDrawer: React.FC = () => {
       const res = await apiFetch("/api/ai/lead-analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lead, activities: leadActivities, playbook }),
+        body: JSON.stringify({ lead, activities: leadActivities, agent }),
       });
       const data = await res.json();
       setResult(data);
@@ -267,7 +267,7 @@ export const LeadProfileDrawer: React.FC = () => {
 
   // Single-recipient personalized email -- distinct from bulk Email
   // Marketing campaigns. Draws on this lead's individual knowledge base
-  // (manual + AI-extracted), its matching Industry Playbook, and recent
+  // (manual + AI-extracted), its matching Industry Agent, and recent
   // activity, then prefills the result into the shared compose modal for
   // the rep to review before sending.
   const handleGeneratePersonalizedEmail = async () => {
@@ -284,7 +284,7 @@ export const LeadProfileDrawer: React.FC = () => {
           recipientIndustry: lead.industry,
           knowledgeEntries: linkedKnowledge.map((k) => k.content),
           activities: leadActivities,
-          playbook,
+          agent,
           senderName: currentUser?.name,
           senderCompany: activeTenant?.companyName || activeTenant?.name,
         }),
@@ -299,11 +299,11 @@ export const LeadProfileDrawer: React.FC = () => {
     }
   };
 
-  // Proposes a negotiation offer, capped by the industry playbook's
+  // Proposes a negotiation offer, capped by the industry agent's
   // maxDiscountPercent -- this never sends anything itself, it only queues
   // a draft into Agent Approvals for review.
   const handleProposeOffer = async () => {
-    if (!playbook || !candidateProduct) return;
+    if (!agent || !candidateProduct) return;
     setIsProposingOffer(true);
     setOfferQueued(false);
     try {
@@ -319,8 +319,8 @@ export const LeadProfileDrawer: React.FC = () => {
           productPrice: candidateProduct.price,
           productPricingModel: candidateProduct.pricingModel,
           currency: candidateProduct.currency,
-          maxDiscountPercent: playbook.maxDiscountPercent,
-          negotiationGuidance: playbook.negotiationGuidance,
+          maxDiscountPercent: agent.maxDiscountPercent,
+          negotiationConditions: agent.negotiationConditions,
           knowledgeEntries: linkedKnowledge.map((k) => k.content),
           activities: leadActivities,
           senderName: currentUser?.name,
@@ -547,7 +547,7 @@ export const LeadProfileDrawer: React.FC = () => {
                         <button
                           onClick={handleStartEditIndustry}
                           className="opacity-0 group-hover/industry:opacity-100 text-slate-400 hover:text-indigo-600 transition-opacity"
-                          title="Edit industry -- match this to an Industry Playbook to include this lead in its AI agent"
+                          title="Edit industry -- match this to an Industry Agent to include this lead in its AI agent"
                         >
                           <Pencil className="w-3 h-3" />
                         </button>
@@ -845,7 +845,7 @@ export const LeadProfileDrawer: React.FC = () => {
                     </div>
 
                     <div className="flex justify-end gap-2 flex-wrap">
-                      {playbook && playbook.maxDiscountPercent > 0 && candidateProduct && (
+                      {agent && agent.maxDiscountPercent > 0 && candidateProduct && (
                         <button
                           onClick={handleProposeOffer}
                           disabled={isProposingOffer || !lead.email}
@@ -881,7 +881,7 @@ export const LeadProfileDrawer: React.FC = () => {
                       Run the analysis to get a qualification score, buyer-intent signals, and a recommended channel/opener for this lead.
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {playbook && playbook.maxDiscountPercent > 0 && candidateProduct && (
+                      {agent && agent.maxDiscountPercent > 0 && candidateProduct && (
                         <button
                           onClick={handleProposeOffer}
                           disabled={isProposingOffer || !lead.email}
@@ -906,9 +906,9 @@ export const LeadProfileDrawer: React.FC = () => {
                 {emailGenError && (
                   <p className="text-[11px] text-rose-400">Couldn't generate the email -- please try again.</p>
                 )}
-                {playbook && (
+                {agent && (
                   <p className="text-[10px] text-slate-500">
-                    Using the "{playbook.industry}" industry playbook for tone, qualification, and channel guidance.
+                    Using the "{agent.industry}" industry agent for tone, qualification, and channel guidance.
                   </p>
                 )}
               </div>

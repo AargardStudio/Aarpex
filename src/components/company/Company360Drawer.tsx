@@ -158,10 +158,10 @@ export const Company360Drawer: React.FC = () => {
     setIsEditingPhone(false);
   };
 
-  // Industry is the field Industry Playbooks match against to decide which
+  // Industry is the field Industry Agents match against to decide which
   // businesses their AI agent works -- there was previously no way to set
   // or change it once a company was created (only at "Add Company" time),
-  // which made it impossible to move an existing company into a playbook's
+  // which made it impossible to move an existing company into an agent's
   // industry without re-importing it via a spreadsheet. This makes it a
   // normal editable field like phone, right in the profile.
   const handleStartEditIndustry = () => {
@@ -612,7 +612,7 @@ export const Company360Drawer: React.FC = () => {
                         <button
                           onClick={handleStartEditIndustry}
                           className="opacity-0 group-hover/industry:opacity-100 text-slate-400 hover:text-indigo-600 transition-opacity"
-                          title="Edit industry -- match this to an Industry Playbook to include this company in its AI agent"
+                          title="Edit industry -- match this to an Industry Agent to include this company in its AI agent"
                         >
                           <Pencil className="w-3 h-3" />
                         </button>

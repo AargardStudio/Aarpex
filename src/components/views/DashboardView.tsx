@@ -44,7 +44,7 @@ export const DashboardView: React.FC = () => {
     contacts,
     tasks,
     pipelines,
-    industryPlaybooks,
+    industryAgents,
     currentUser,
     setActiveNav,
     setSelectedCompanyId,
@@ -92,9 +92,9 @@ export const DashboardView: React.FC = () => {
     { label: "Add a Contact", done: (contacts?.length || 0) > 0, nav: "Contacts" as const },
     { label: "Create your first Deal", done: deals.length > 0, nav: "Deals" as const },
     {
-      label: "Turn on an Industry Playbook (optional)",
-      done: (industryPlaybooks || []).some((p: any) => p.autoRunEnabled),
-      nav: "Industry Playbooks" as const,
+      label: "Turn on an Industry Agent (optional)",
+      done: (industryAgents || []).some((p: any) => p.autoRunEnabled),
+      nav: "Industry Agents" as const,
     },
     { label: "Allow browser notifications", done: hasNotificationsOn, nav: null },
   ];

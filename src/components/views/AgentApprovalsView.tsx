@@ -194,7 +194,7 @@ export const AgentApprovalsView: React.FC = () => {
           Agent Approvals
         </h1>
         <p className="text-xs text-slate-400 mt-0.5">
-          Every follow-up, reply, and negotiation offer your Industry Playbook agents draft lands here first --
+          Every follow-up, reply, and negotiation offer your Industry Agent agents draft lands here first --
           nothing reaches a prospect until you approve it, with the option to edit before sending.
         </p>
       </div>
@@ -221,7 +221,7 @@ export const AgentApprovalsView: React.FC = () => {
           <Bot className="w-8 h-8 text-slate-600 mx-auto" />
           <p>
             {tab === "pending"
-              ? "No pending actions right now. Enable \"Auto-run\" on an Industry Playbook, or propose an offer from a lead/contact, to see items here."
+              ? "No pending actions right now. Enable \"Auto-run\" on an Industry Agent, or propose an offer from a lead/contact, to see items here."
               : `No ${tab} actions yet.`}
           </p>
         </div>

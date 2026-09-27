@@ -67,7 +67,7 @@ export const ContactProfileDrawer: React.FC = () => {
     addKnowledgeBaseEntry,
     updateKnowledgeBaseEntry,
     deleteKnowledgeBaseEntry,
-    getPlaybookForIndustry,
+    getAgentForIndustry,
     products,
     addAgentAction,
   } = useCRM();
@@ -103,7 +103,7 @@ export const ContactProfileDrawer: React.FC = () => {
     .filter((a) => a.contactId === contact.id)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const latestNextAction = contactActivities.find((a) => a.nextAction)?.nextAction;
-  const playbook = getPlaybookForIndustry(company?.industry);
+  const agent = getAgentForIndustry(company?.industry);
   const candidateProduct =
     products.find(
       (p) => p.status === "Active" && (p.targetCriteria.industries.length === 0 || p.targetCriteria.industries.includes(company?.industry || ""))
@@ -161,7 +161,7 @@ export const ContactProfileDrawer: React.FC = () => {
             notes: contact.notes,
           },
           activities: contactActivities,
-          playbook,
+          agent,
         }),
       });
       const data = await res.json();
@@ -235,7 +235,7 @@ export const ContactProfileDrawer: React.FC = () => {
 
   // Single-recipient personalized email -- distinct from bulk Email
   // Marketing campaigns. Draws on this contact's individual knowledge base
-  // (manual + AI-extracted), its matching Industry Playbook, and recent
+  // (manual + AI-extracted), its matching Industry Agent, and recent
   // activity, then prefills the result into the shared compose modal for
   // the rep to review before sending.
   const handleGeneratePersonalizedEmail = async () => {
@@ -252,7 +252,7 @@ export const ContactProfileDrawer: React.FC = () => {
           recipientIndustry: company?.industry,
           knowledgeEntries: linkedKnowledge.map((k) => k.content),
           activities: contactActivities,
-          playbook,
+          agent,
           senderName: currentUser?.name,
           senderCompany: activeTenant?.companyName || activeTenant?.name,
         }),
@@ -273,11 +273,11 @@ export const ContactProfileDrawer: React.FC = () => {
     }
   };
 
-  // Proposes a negotiation offer, capped by the industry playbook's
+  // Proposes a negotiation offer, capped by the industry agent's
   // maxDiscountPercent -- this never sends anything itself, it only queues
   // a draft into Agent Approvals for review.
   const handleProposeOffer = async () => {
-    if (!playbook || !candidateProduct) return;
+    if (!agent || !candidateProduct) return;
     setIsProposingOffer(true);
     setOfferQueued(false);
     try {
@@ -293,8 +293,8 @@ export const ContactProfileDrawer: React.FC = () => {
           productPrice: candidateProduct.price,
           productPricingModel: candidateProduct.pricingModel,
           currency: candidateProduct.currency,
-          maxDiscountPercent: playbook.maxDiscountPercent,
-          negotiationGuidance: playbook.negotiationGuidance,
+          maxDiscountPercent: agent.maxDiscountPercent,
+          negotiationConditions: agent.negotiationConditions,
           knowledgeEntries: linkedKnowledge.map((k) => k.content),
           activities: contactActivities,
           senderName: currentUser?.name,
@@ -789,7 +789,7 @@ export const ContactProfileDrawer: React.FC = () => {
                     </div>
 
                     <div className="flex justify-end gap-2 flex-wrap">
-                      {playbook && playbook.maxDiscountPercent > 0 && candidateProduct && (
+                      {agent && agent.maxDiscountPercent > 0 && candidateProduct && (
                         <button
                           onClick={handleProposeOffer}
                           disabled={isProposingOffer || !contact.email}
@@ -818,7 +818,7 @@ export const ContactProfileDrawer: React.FC = () => {
                       Run the analysis to get a qualification score, buyer-intent signals, and a recommended channel/opener for this contact.
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {playbook && playbook.maxDiscountPercent > 0 && candidateProduct && (
+                      {agent && agent.maxDiscountPercent > 0 && candidateProduct && (
                         <button
                           onClick={handleProposeOffer}
                           disabled={isProposingOffer || !contact.email}
@@ -843,9 +843,9 @@ export const ContactProfileDrawer: React.FC = () => {
                 {emailGenError && (
                   <p className="text-[11px] text-rose-400">Couldn't generate the email -- please try again.</p>
                 )}
-                {playbook && (
+                {agent && (
                   <p className="text-[10px] text-slate-500">
-                    Using the "{playbook.industry}" industry playbook for tone, qualification, and channel guidance.
+                    Using the "{agent.industry}" industry agent for tone, qualification, and channel guidance.
                   </p>
                 )}
               </div>

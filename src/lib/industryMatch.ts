@@ -1,6 +1,6 @@
 // Industry is a freeform text field (Leads, Companies, and Industry
-// Playbooks all just store whatever string was typed/selected), and an
-// Industry Playbook's whole matching mechanism is comparing that text
+// Agents all just store whatever string was typed/selected), and an
+// Industry Agent's whole matching mechanism is comparing that text
 // against a business's Industry field. A plain `.trim().toLowerCase()`
 // comparison -- which is what every call site used to do independently --
 // still fails on things a person can't see or reasonably guard against by
@@ -12,7 +12,7 @@
 // correct" bug report this was written to stop happening again.
 //
 // normalizeIndustry() is the one place that comparison logic lives now;
-// every place in the app that decides whether an Industry Playbook applies
+// every place in the app that decides whether an Industry Agent applies
 // to a Lead/Company (or looks one up by industry) should compare
 // normalizeIndustry(a) === normalizeIndustry(b) rather than rolling its own
 // trim/lowercase.
@@ -52,7 +52,7 @@ export interface IndustryUsage {
 // Collapses a list of raw Industry strings (as they actually appear on real
 // Leads/Companies right now) into one entry per distinct normalized value,
 // keeping the first exact spelling seen plus a usage count. This is what
-// lets the Playbook form offer "pick an existing industry" instead of
+// lets the Industry Agent form offer "pick an existing industry" instead of
 // asking someone to re-type a value from memory and hope it matches
 // byte-for-byte -- the exact bug class normalizeIndustry() above exists to
 // catch, but picking beats re-typing every time.

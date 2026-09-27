@@ -22,7 +22,7 @@
  * dataset anymore: every workspace is real, created through sign-up.
  */
 import { getSupabaseAuthClient, isSupabaseAuthConfigured } from "../config/supabaseAuthClient";
-import type { Tenant, TenantMember, TenantStripeConfig, TenantWebmailConfig, TenantWhatsAppConfig } from "../types";
+import type { Tenant, TenantMember, TenantStripeConfig, TenantWebmailConfig, TenantWhatsAppConfig, TenantAIProviderConfig, AIProvider } from "../types";
 
 export type TenantTable =
   | "companies"
@@ -38,7 +38,7 @@ export type TenantTable =
   | "email_campaigns"
   | "products"
   | "knowledge_base"
-  | "industry_playbooks"
+  | "industry_agents"
   | "agent_actions"
   | "stored_files";
 
@@ -608,6 +608,7 @@ async function performTenantRowSync(tenant: Tenant): Promise<void> {
         // it just now holds an array instead of a single object.
         webmail_config: tenant.webmailConfigs || [],
         whatsapp_config: tenant.whatsappConfig || {},
+        ai_provider_configs: tenant.aiProviderConfigs || {},
       })
       .eq("id", tenant.id);
     if (error) {
@@ -663,6 +664,28 @@ const DEFAULT_WHATSAPP_CONFIG: TenantWhatsAppConfig = {
   phoneNumberId: "",
   status: "unconfigured",
 };
+
+const DEFAULT_AI_PROVIDER_CONFIG: TenantAIProviderConfig = {
+  isEnabled: false,
+  apiKey: "",
+  status: "unconfigured",
+};
+
+// r.ai_provider_configs is undefined until migration 0015 has been run on
+// this project's Supabase instance -- defaults to {} (every provider reads
+// as "unconfigured") rather than throwing, same as every other optional
+// tenant config.
+function aiProviderConfigsFromRow(raw: unknown): Partial<Record<AIProvider, TenantAIProviderConfig>> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Partial<Record<AIProvider, TenantAIProviderConfig>> = {};
+  for (const provider of ["openai", "gemini"] as AIProvider[]) {
+    const entry = (raw as any)[provider];
+    if (entry && typeof entry === "object") {
+      out[provider] = { ...DEFAULT_AI_PROVIDER_CONFIG, ...entry };
+    }
+  }
+  return out;
+}
 
 // Field defaults used to backfill a mailbox entry read back from Supabase
 // (older rows, or ones created before a field existed, may be missing some
@@ -769,6 +792,7 @@ export async function fetchMyTenantsFull(): Promise<Tenant[] | null> {
         ...DEFAULT_WHATSAPP_CONFIG,
         ...(r.whatsapp_config || {}),
       };
+      const aiProviderConfigs = aiProviderConfigsFromRow(r.ai_provider_configs);
       const tenant: Tenant = {
         id: r.id,
         name: r.name,
@@ -794,6 +818,7 @@ export async function fetchMyTenantsFull(): Promise<Tenant[] | null> {
         stripeConfig,
         webmailConfigs,
         whatsappConfig,
+        aiProviderConfigs,
       };
       return tenant;
     });

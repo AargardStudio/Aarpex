@@ -42,8 +42,10 @@ import {
 } from "../../data/subscriptionPlans";
 import { apiFetch } from "../../lib/apiClient";
 import { getMailboxById, mailboxLabel } from "../../lib/webmail";
+import { AIProvider } from "../../types";
+import { AI_PROVIDER_LABELS } from "../../lib/aiProviders";
 
-type SettingsTab = "workspaces" | "subscription" | "stripe" | "webmail" | "whatsapp" | "company" | "security" | "database";
+type SettingsTab = "workspaces" | "subscription" | "stripe" | "webmail" | "whatsapp" | "ai" | "company" | "security" | "database";
 
 export const SettingsView: React.FC = () => {
   const {
@@ -63,6 +65,7 @@ export const SettingsView: React.FC = () => {
     deleteWebmailConfig,
     setDefaultWebmailConfig,
     updateWhatsAppConfig,
+    updateAIProviderConfig,
     addAuditLogEntry,
     signOut,
     clearAllData,
@@ -133,6 +136,19 @@ export const SettingsView: React.FC = () => {
   const [isVerifyingWa, setIsVerifyingWa] = useState(false);
   const [waVerifyResult, setWaVerifyResult] = useState<any>(null);
   const [waSaveSuccess, setWaSaveSuccess] = useState(false);
+
+  // AI Provider Keys -- one shared key per provider per tenant, used by
+  // every Industry Agent configured to use that provider (see
+  // TenantAIProviderConfig in src/types.ts). Simple save-and-store, no
+  // separate "Test Connection" round trip yet -- a key is considered
+  // "connected" the moment it's saved non-empty.
+  const aiCfg = activeTenant?.aiProviderConfigs || {};
+  const [aiKeys, setAiKeys] = useState<Record<AIProvider, string>>({
+    openai: aiCfg.openai?.apiKey || "",
+    gemini: aiCfg.gemini?.apiKey || "",
+  });
+  const [showAiKey, setShowAiKey] = useState<Record<AIProvider, boolean>>({ openai: false, gemini: false });
+  const [aiSaveSuccess, setAiSaveSuccess] = useState<AIProvider | null>(null);
 
   // Webmail / Hostinger State (100% Customizable in Settings) -- a
   // workspace can connect more than one mailbox now; selectedMailboxId
@@ -725,6 +741,22 @@ export const SettingsView: React.FC = () => {
           <MessageSquare className="w-3.5 h-3.5" />
           <span>WhatsApp Business</span>
           {activeTenant?.whatsappConfig?.status === "connected" && (
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab("ai")}
+          className={`px-3.5 py-2 rounded-lg font-bold flex items-center gap-2 transition-all whitespace-nowrap ${
+            activeTab === "ai"
+              ? "bg-teal-600 text-white shadow-sm"
+              : "text-slate-400 hover:text-white hover:bg-[#1e232d]"
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>AI Providers</span>
+          {(activeTenant?.aiProviderConfigs?.openai?.status === "connected" ||
+            activeTenant?.aiProviderConfigs?.gemini?.status === "connected") && (
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
           )}
         </button>
@@ -1625,6 +1657,98 @@ export const SettingsView: React.FC = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* TAB: AI PROVIDERS */}
+      {activeTab === "ai" && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          <div className="bg-[#181b21] p-6 rounded-2xl border border-[#2d323f] shadow-md space-y-2">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-teal-400" /> AI Provider Keys
+            </h3>
+            <p className="text-slate-400">
+              Industry Agents draft every follow-up, reply, and negotiation offer using one of these providers (each
+              agent picks which one in its own settings). Each key is shared by every Industry Agent on{" "}
+              <strong className="text-white">{activeTenant?.name}</strong> configured to use that provider -- there is
+              no platform-subsidized AI usage for this feature, so a provider an agent is set to use needs its key
+              saved here before that agent can draft anything.
+            </p>
+          </div>
+
+          {(["gemini", "openai"] as AIProvider[]).map((provider) => {
+            const cfg = activeTenant?.aiProviderConfigs?.[provider];
+            const isConnected = cfg?.status === "connected" && !!cfg?.apiKey;
+            return (
+              <div key={provider} className="bg-[#181b21] p-6 rounded-2xl border border-[#2d323f] shadow-md space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Key className="w-3.5 h-3.5 text-teal-400" /> {AI_PROVIDER_LABELS[provider]}
+                  </h4>
+                  {isConnected ? (
+                    <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Key saved
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold text-slate-500">Not configured</span>
+                  )}
+                </div>
+
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const key = aiKeys[provider].trim();
+                    updateAIProviderConfig(provider, {
+                      apiKey: key,
+                      isEnabled: !!key,
+                      status: key ? "connected" : "unconfigured",
+                      lastVerifiedAt: key ? new Date().toISOString() : undefined,
+                    });
+                    setAiSaveSuccess(provider);
+                    setTimeout(() => setAiSaveSuccess((p) => (p === provider ? null : p)), 2500);
+                  }}
+                  className="space-y-3"
+                >
+                  <div className="space-y-1.5">
+                    <label className="block text-slate-300 font-semibold text-[11px]">API Key</label>
+                    <div className="relative">
+                      <input
+                        type={showAiKey[provider] ? "text" : "password"}
+                        value={aiKeys[provider]}
+                        onChange={(e) => setAiKeys((p) => ({ ...p, [provider]: e.target.value }))}
+                        placeholder={provider === "gemini" ? "AIza..." : "sk-..."}
+                        className="w-full px-3 py-2 pr-10 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400 font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAiKey((p) => ({ ...p, [provider]: !p[provider] }))}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                      >
+                        {showAiKey[provider] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-[#282d39] flex items-center justify-between">
+                    {aiSaveSuccess === provider ? (
+                      <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Saved
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">Isolated to {activeTenant?.name}.</span>
+                    )}
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Save {AI_PROVIDER_LABELS[provider]} Key</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            );
+          })}
         </div>
       )}
 

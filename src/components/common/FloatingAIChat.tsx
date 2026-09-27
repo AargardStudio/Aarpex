@@ -6,7 +6,7 @@ import { InvoiceItem } from "../../types";
 
 type ActionEntity =
   | "lead" | "contact" | "company" | "deal" | "task" | "activity" | "invoice"
-  | "playbook" | "agent_action" | "negotiation_offer" | "personalized_email";
+  | "industry_agent" | "agent_action" | "negotiation_offer" | "personalized_email";
 type ActionType = "create" | "update" | "delete";
 
 interface ProposedAction {
@@ -34,7 +34,7 @@ const ENTITY_LABEL: Record<ActionEntity, string> = {
   task: "Task",
   activity: "Activity",
   invoice: "Invoice",
-  playbook: "Industry Playbook",
+  industry_agent: "Industry Agent",
   agent_action: "Agent Approval",
   negotiation_offer: "Negotiation Offer",
   personalized_email: "Personalized Email",
@@ -84,9 +84,9 @@ export const FloatingAIChat: React.FC = () => {
     updateInvoice,
     deleteInvoice,
     knowledgeBase,
-    industryPlaybooks,
-    updateIndustryPlaybook,
-    getPlaybookForIndustry,
+    industryAgents,
+    updateIndustryAgent,
+    getAgentForIndustry,
     agentActions,
     approveAndSendAgentAction,
     resolveAgentAction,
@@ -147,7 +147,7 @@ export const FloatingAIChat: React.FC = () => {
     tasks: tasks.slice(0, 200).map((t) => ({ id: t.id, name: t.title })),
     invoices: invoices.slice(0, 200).map((i) => ({ id: i.id, name: i.invoiceNumber })),
     pipelines: pipelines.map((p) => ({ id: p.id, name: p.name, stages: p.stages.map((s) => ({ id: s.id, name: s.name })) })),
-    playbooks: industryPlaybooks.map((p) => ({ id: p.id, name: p.industry })),
+    industryAgents: industryAgents.map((p) => ({ id: p.id, name: p.industry })),
     agentActions: agentActions
       .filter((a) => a.status === "pending")
       .slice(0, 100)
@@ -461,11 +461,11 @@ export const FloatingAIChat: React.FC = () => {
       }
     }
 
-    if (action.entity === "playbook") {
+    if (action.entity === "industry_agent") {
       if (action.type === "update") {
-        const target = industryPlaybooks.find((pb) => pb.id === p.id);
-        updateIndustryPlaybook(p.id, p.updates || {});
-        return `Updated the "${target?.industry || "playbook"}" playbook.`;
+        const target = industryAgents.find((pb) => pb.id === p.id);
+        updateIndustryAgent(p.id, p.updates || {});
+        return `Updated the "${target?.industry || "industry_agent"}" agent.`;
       }
     }
 
@@ -494,13 +494,13 @@ export const FloatingAIChat: React.FC = () => {
         const company = contact ? companies.find((c) => c.id === contact.companyId) : null;
         const recipientName = lead ? lead.name : `${contact!.firstName} ${contact!.lastName}`.trim();
         const recipientIndustry = lead ? lead.industry : company?.industry || "";
-        const playbook = getPlaybookForIndustry(recipientIndustry);
+        const agent = getAgentForIndustry(recipientIndustry);
         const candidateProduct =
           products.find(
             (pr) => pr.status === "Active" && (pr.targetCriteria.industries.length === 0 || pr.targetCriteria.industries.includes(recipientIndustry))
           ) || products.find((pr) => pr.status === "Active") || null;
-        if (!playbook || !playbook.maxDiscountPercent || !candidateProduct) {
-          return `Can't propose an offer -- ${!candidateProduct ? "no active product to offer" : "no negotiation authority set for this industry's playbook"}.`;
+        if (!agent || !agent.maxDiscountPercent || !candidateProduct) {
+          return `Can't propose an offer -- ${!candidateProduct ? "no active product to offer" : "no negotiation authority set for this industry's agent"}.`;
         }
         const res = await apiFetch("/api/ai/negotiation-offer", {
           method: "POST",
@@ -514,8 +514,8 @@ export const FloatingAIChat: React.FC = () => {
             productPrice: candidateProduct.price,
             productPricingModel: candidateProduct.pricingModel,
             currency: candidateProduct.currency,
-            maxDiscountPercent: playbook.maxDiscountPercent,
-            negotiationGuidance: playbook.negotiationGuidance,
+            maxDiscountPercent: agent.maxDiscountPercent,
+            negotiationConditions: agent.negotiationConditions,
             knowledgeEntries: knowledgeBase
               .filter((k) => (lead ? (k.linkedLeadIds || []).includes(lead.id) : (k.linkedContactIds || []).includes(contact!.id)))
               .map((k) => k.content),
@@ -550,7 +550,7 @@ export const FloatingAIChat: React.FC = () => {
         const company = contact ? companies.find((c) => c.id === contact.companyId) : null;
         const recipientName = lead ? lead.name : `${contact!.firstName} ${contact!.lastName}`.trim();
         const recipientIndustry = lead ? lead.industry : company?.industry || "";
-        const playbook = getPlaybookForIndustry(recipientIndustry);
+        const agent = getAgentForIndustry(recipientIndustry);
         const res = await apiFetch("/api/ai/personalized-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -562,7 +562,7 @@ export const FloatingAIChat: React.FC = () => {
             knowledgeEntries: knowledgeBase
               .filter((k) => (lead ? (k.linkedLeadIds || []).includes(lead.id) : (k.linkedContactIds || []).includes(contact!.id)))
               .map((k) => k.content),
-            playbook,
+            agent,
             senderName: currentUser?.name,
             senderCompany: activeTenant?.companyName || activeTenant?.name,
           }),

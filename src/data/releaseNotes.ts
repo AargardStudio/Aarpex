@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.31.0",
+    date: "2026-09-27",
+    headline: "Industry Playbooks Is Now Industry Agents",
+    tagline: "Same feature you already set up, renamed and rebuilt to pick its own AI provider and model -- your existing data carries over automatically, nothing to redo.",
+    highlights: [
+      {
+        title: "Bring your own AI key",
+        description: "Each workspace can now save its own OpenAI and/or Gemini API key in Settings, and every Industry Agent picks which provider and model it uses -- instead of always sharing AarPex's platform key.",
+      },
+      {
+        title: "Your existing Playbooks still work",
+        description: "Nothing to redo: your existing Industry Playbook data -- matching businesses, exclusions, monitoring status, everything -- carries over automatically under its new name.",
+      },
+      {
+        title: "New scan frequency and negotiation conditions fields",
+        description: "Set how often an agent checks for due work (15-minute minimum) and its negotiation conditions (renamed from \"negotiation guidance\") right in its own settings.",
+      },
+    ],
+  },
+  {
     version: "1.30.1",
     date: "2026-09-26",
     headline: "Fixed: The Industry Picker Couldn't Find Your Industry",

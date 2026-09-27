@@ -13,6 +13,21 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.31.0] - 2026-09-27
+
+### Changed
+- **Industry Playbooks is now Industry Agents** -- a full rename and rebuild of the same feature (Phase 1 of the "Industry AI Agents" build spec), not a new parallel feature. Existing Playbook data migrates in place with zero loss: the underlying `industry_playbooks` Supabase table is renamed to `industry_agents` (columns kept, `negotiation_guidance` renamed to `negotiation_conditions`), and a tenant's existing local data is picked up automatically from the old localStorage key on first load after upgrading. "Industry Playbooks" is renamed to "Industry Agents" throughout the sidebar, Dashboard, Instructions, Agent Approvals, chat assistant, and every AI prompt that referenced it.
+- Matching Businesses, exclusions, monitoring status, activity feed, and pending-approvals -- everything already working in the redesigned Industry Playbook UI (v1.30.0/v1.30.1) -- carries over unchanged in behavior, just re-pointed at the renamed Industry Agent.
+
+### Added
+- Each Industry Agent now has its own **AI provider and model** (Google Gemini or OpenAI; a short curated model list per provider) instead of always using the platform's shared Gemini key.
+- New **tenant-level AI Provider Keys** section in Settings: each workspace brings its own OpenAI and/or Gemini API key (one shared key per provider, used by every Industry Agent on that tenant configured to use it) -- the same "you bring your own credential" model already used for Stripe and webmail, extended to AI.
+- Each Industry Agent now has a **scan frequency** field (how often it checks for due work, 15-minute minimum) and a **negotiation conditions** field (renamed from "negotiation guidance" for clarity) -- both were previously implicit or missing.
+- New `supabase/migrations/0015_industry_agents.sql`: renames the table losslessly, adds the new columns, and adds tenant-level `ai_provider_configs` storage.
+
+### Notes
+- This is Phase 1 of 3 of the Industry Agents rebuild. Phase 2 (a real server-side scheduler via Vercel Cron, replacing the client-side browser-tab-dependent scan) and Phase 3 ("Analyze online presence," lead-level conversation forking, and the extended Knowledge Base approval queue) are tracked separately and not yet built. Actually routing an agent's drafts through its selected provider/model (rather than the shared platform key) is part of that same follow-up work -- for now, selecting a provider/model and saving its key is fully wired up and persisted, but every agent still drafts through the existing platform Gemini integration under the hood.
+
 ## [1.30.1] - 2026-09-26
 
 ### Fixed

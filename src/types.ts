@@ -449,38 +449,48 @@ export interface StoredFile {
 }
 
 // ----------------------------------------------------------------------------
-// Industry Playbooks — configurable, user-defined AI management profiles per
+// Industry Agents — configurable, user-defined AI management profiles per
 // industry (matches the freeform `industry` field on Lead/Company — see
 // src/data/industries.ts for the standard picklist, custom values still
-// work). One playbook per industry controls three things at once wherever
+// work). One agent per industry controls three things at once wherever
 // that industry's leads/contacts/companies are touched by AI:
 //   - email tone & talking points (bulk Email Marketing campaigns AND the
 //     single-recipient "Generate Personalized Email" feature)
 //   - lead qualification/scoring guidance (fed into /api/ai/lead-analysis)
 //   - follow-up cadence & preferred channel defaults
 // Not a hard-coded list of exactly N industries -- the user manages however
-// many they want from the Industry Playbooks view.
+// many they want from the Industry Agents view.
 // ----------------------------------------------------------------------------
 export type PreferredOutreachChannel = "Email" | "WhatsApp" | "Call" | "Mixed";
 
-export interface IndustryPlaybook {
+// Which AI provider/model an Industry Agent uses to draft its follow-ups,
+// replies, and negotiation offers. Each tenant brings its own API key per
+// provider (see TenantAIProviderConfig on Tenant) -- there is no
+// Aargard-subsidized platform key for this feature.
+export type AIProvider = "openai" | "gemini";
+
+export interface IndustryAgent {
   id: string;
   industry: string; // freeform, ideally matches src/data/industries.ts INDUSTRIES
   isActive: boolean;
-  // Optional Product/Service this playbook is pitching -- when set, its
+  // Optional Product/Service this agent is pitching -- when set, its
   // name and pitch are fed into the AI as extra context for every
-  // auto-drafted follow-up/reply/negotiation offer this playbook's agent
+  // auto-drafted follow-up/reply/negotiation offer this agent
   // generates, the same way a campaign's Product/Service picker seeds its
   // generated email copy.
   productId?: string;
-  // By default this playbook's agent works EVERY Lead/Company whose
+  // By default this agent works EVERY Lead/Company whose
   // Industry field matches `industry` above (case-insensitive). These are
   // opt-outs on top of that automatic match -- ids listed here are excluded
   // even though their industry matches, so you can see the full matching
-  // list when setting up the playbook and uncheck specific businesses you
+  // list when setting up the agent and uncheck specific businesses you
   // don't want the agent touching, without having to change their industry.
   excludedLeadIds?: string[];
   excludedCompanyIds?: string[];
+  // Which AI provider/model drafts this agent's messages. modelName is a
+  // value from AI_PROVIDER_MODELS[modelProvider] (src/lib/aiProviders.ts).
+  modelProvider: AIProvider;
+  modelName: string;
   // Email tone & talking points
   tone: string; // e.g. "Consultative and data-driven, minimal hype"
   talkingPoints: string[]; // key value props / hooks to lean on
@@ -494,17 +504,27 @@ export interface IndustryPlaybook {
   followUpFrequencyDays: number;
   followUpCount: number;
   // Autonomous agent behavior -- when enabled, AarPex periodically scans
-  // this industry's leads/contacts (while the app is open) for due
-  // follow-ups and inbound replies and drafts proposed actions into the
-  // Agent Approvals queue for the user to approve/edit/reject. Nothing is
-  // ever sent without an explicit approval.
+  // this industry's leads/contacts for due follow-ups and inbound replies
+  // and drafts proposed actions into the Agent Approvals queue for the user
+  // to approve/edit/reject. Nothing is ever sent without an explicit
+  // approval.
   autoRunEnabled: boolean;
+  // How often (in minutes) this agent's scan should run once auto-run is
+  // on. Floor of 15 minutes -- enforced in the UI and again server-side
+  // once the Phase 2 scheduler lands. Distinct from followUpFrequencyDays,
+  // which is the cadence of follow-ups to a given lead/company, not how
+  // often the agent checks for due work.
+  frequencyMinutes: number;
+  // Set by the scan itself (client-side today, server-side from Phase 2)
+  // each time it actually runs for this agent -- used to show real
+  // "last checked" status instead of an assumed one.
+  lastScanAt?: string;
   // Negotiation guardrails: the ceiling the agent may propose (0 disables
   // price/terms negotiation entirely for this industry) and free-text
-  // guidance on acceptable terms (e.g. "annual prepay only", "no discount
+  // conditions on acceptable terms (e.g. "annual prepay only", "no discount
   // below $500 deals"). The agent never exceeds maxDiscountPercent.
   maxDiscountPercent: number;
-  negotiationGuidance?: string;
+  negotiationConditions?: string;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -512,7 +532,7 @@ export interface IndustryPlaybook {
 
 // ----------------------------------------------------------------------------
 // Agent Approvals -- the human-in-the-loop queue every autonomous or
-// negotiation action from an Industry Playbook-enabled agent passes through.
+// negotiation action from an Industry Agent passes through.
 // Nothing an agent drafts is ever sent to a prospect until a user approves
 // it here (or edits it first). Populated either on-demand (a rep clicks
 // "Propose Offer" on a lead/contact) or by the periodic background scan for
@@ -532,11 +552,11 @@ export interface AgentAction {
   subject: string;
   body: string;
   // Why the agent is proposing this -- shown to the user for context, e.g.
-  // "No response in 8 days (playbook cadence: every 7 days)" or "Detected a
+  // "No response in 8 days (agent cadence: every 7 days)" or "Detected a
   // reply in the inbox on 2026-09-26".
   reasoning: string;
   // negotiation_offer only -- the specific discount being proposed, capped
-  // at the playbook's maxDiscountPercent at generation time.
+  // at the agent's maxDiscountPercent at generation time.
   proposedDiscountPercent?: number;
   productId?: string;
   // Best-effort snippet of the inbound message that triggered this (reply
@@ -988,6 +1008,18 @@ export interface TenantWhatsAppConfig {
   statusMessage?: string;
 }
 
+// One shared API key per AI provider per tenant -- used by every Industry
+// Agent that picks that provider (see IndustryAgent.modelProvider). Same
+// shape/status convention as TenantStripeConfig/TenantWebmailConfig: the
+// tenant brings their own credential, AarPex never subsidizes usage.
+export interface TenantAIProviderConfig {
+  isEnabled: boolean;
+  apiKey: string;
+  lastVerifiedAt?: string;
+  status: "unconfigured" | "connected" | "invalid_key" | "testing";
+  statusMessage?: string;
+}
+
 export interface TenantMember {
   userId: string;
   name: string;
@@ -1074,6 +1106,9 @@ export interface Tenant {
    * to the one with isDefault:true); see TenantWebmailConfig.id. */
   webmailConfigs: TenantWebmailConfig[];
   whatsappConfig?: TenantWhatsAppConfig;
+  /** One shared key per AI provider, used by every Industry Agent on this
+   * tenant configured to use that provider. Keyed by AIProvider. */
+  aiProviderConfigs?: Partial<Record<AIProvider, TenantAIProviderConfig>>;
   supabaseConfig?: SupabaseConfig;
   auditLog?: AuditLogEntry[];
 }

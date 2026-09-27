@@ -64,7 +64,7 @@ export const Sidebar: React.FC = () => {
     switchTenant,
     products,
     knowledgeBase,
-    industryPlaybooks,
+    industryAgents,
     agentActions,
     storedFiles,
     setCreateTenantModalOpen,
@@ -110,7 +110,7 @@ export const Sidebar: React.FC = () => {
     { name: "Tasks", icon: CheckSquare, badge: pendingTasksCount, category: "Productivity" },
     { name: "AI Insights", icon: Sparkles, badge: "AI", badgeColor: "bg-[#252a36] text-teal-300 border border-[#3d4455] font-semibold", category: "Intelligence" },
     { name: "Knowledge Base", icon: BookOpen, badge: knowledgeBase?.length || undefined, category: "Intelligence" },
-    { name: "Industry Playbooks", icon: BookMarked, badge: industryPlaybooks?.length || undefined, category: "Intelligence" },
+    { name: "Industry Agents", icon: BookMarked, badge: industryAgents?.length || undefined, category: "Intelligence" },
     {
       name: "Agent Approvals",
       icon: Bot,

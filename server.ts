@@ -714,7 +714,7 @@ app.post("/api/ai/email-campaign", async (req, res) => {
       senderCompany,
       productName, // optional: the specific product/service this campaign is pitching
       productPitch, // optional: that product's marketing pitch, to seed the email copy
-      playbook, // optional: IndustryPlaybook fields for the audience's industry -- see src/types.ts
+      agent, // optional: IndustryAgent fields for the audience's industry -- see src/types.ts
     } = req.body;
 
     const totalSteps = 1 + Math.max(0, Number(followUpCount) || 0);
@@ -757,23 +757,23 @@ app.post("/api/ai/email-campaign", async (req, res) => {
         }. Weave its concrete value into the opening and the call-to-action.`
       : "";
 
-    // Industry Playbook: when the audience is predominantly (or entirely) in
-    // one industry with a configured playbook, its tone/talking
+    // Industry Agent: when the audience is predominantly (or entirely) in
+    // one industry with a configured agent, its tone/talking
     // points/pain points override the generic technique-driven copy above --
     // this is what makes bulk campaigns "industry-aware" per the Industry
-    // Playbooks feature.
-    const playbookLine = playbook
-      ? `\n\nIndustry Playbook for "${playbook.industry}" — follow this guidance closely, it overrides generic phrasing:
-- Tone to use: ${playbook.tone || "professional and direct"}
-- Talking points to weave in: ${(playbook.talkingPoints || []).join(", ") || "none specified"}
-- Common pain points in this industry to speak to: ${(playbook.painPoints || []).join(", ") || "none specified"}
-${playbook.objectionNotes ? `- Objection handling notes: ${playbook.objectionNotes}` : ""}`
+    // Industry Agents feature.
+    const agentLine = agent
+      ? `\n\nIndustry Agent for "${agent.industry}" — follow this guidance closely, it overrides generic phrasing:
+- Tone to use: ${agent.tone || "professional and direct"}
+- Talking points to weave in: ${(agent.talkingPoints || []).join(", ") || "none specified"}
+- Common pain points in this industry to speak to: ${(agent.painPoints || []).join(", ") || "none specified"}
+${agent.objectionNotes ? `- Objection handling notes: ${agent.objectionNotes}` : ""}`
       : "";
 
     const prompt = `You are a world-class B2B email marketing strategist writing an outbound email SEQUENCE for ${senderCompany || "a B2B company"}.
 
 Audience: ${audienceCount || (audienceSample || []).length || "several"} ${audienceType === "Contacts" ? "existing contacts" : "sales leads"}.
-Sample of who's in this audience: ${sampleLine}${productLine}${playbookLine}
+Sample of who's in this audience: ${sampleLine}${productLine}${agentLine}
 
 Write a sequence of exactly ${totalSteps} email(s): step 1 is the initial outreach, steps 2+ are follow-ups spaced ${cadenceDays} day(s) apart (cadence: ${frequency || "Weekly"}).
 
@@ -842,7 +842,7 @@ Return pure JSON only, no markdown fences, in this exact shape:
 // plus whatever activity/notes history exists for it.
 app.post("/api/ai/lead-analysis", async (req, res) => {
   try {
-    const { lead, activities, playbook } = req.body;
+    const { lead, activities, agent } = req.body;
     if (!lead) {
       return res.status(400).json({ error: "Lead data is required" });
     }
@@ -883,12 +883,12 @@ Lead Info:
 - Tags: ${(lead.tags || []).join(", ") || "None"}
 - Recent Activities: ${(activities || []).slice(0, 5).map((a: any) => `${a.type}: ${a.description}`).join("; ") || "None recorded"}
 ${
-  playbook
+  agent
     ? `
-Industry Playbook for "${playbook.industry}" — apply this guidance when scoring and recommending next steps:
-- Qualification guidance: ${playbook.qualificationGuidance || "None specified"}
-- Preferred outreach channel for this industry: ${playbook.preferredChannel || "Email"}
-- Standard follow-up cadence for this industry: every ${playbook.followUpFrequencyDays || 7} day(s), ${playbook.followUpCount ?? 2} follow-up(s) total
+Industry Agent for "${agent.industry}" — apply this guidance when scoring and recommending next steps:
+- Qualification guidance: ${agent.qualificationGuidance || "None specified"}
+- Preferred outreach channel for this industry: ${agent.preferredChannel || "Email"}
+- Standard follow-up cadence for this industry: every ${agent.followUpFrequencyDays || 7} day(s), ${agent.followUpCount ?? 2} follow-up(s) total
 Prefer this channel/cadence in your recommendations unless the lead's own data clearly suggests otherwise.`
     : ""
 }
@@ -976,7 +976,7 @@ Return pure valid JSON only.`;
 // AI Personalized Email — single-recipient email generation (distinct from
 // the bulk Email Marketing campaign generator above). Draws on the
 // recipient's individual knowledge base entries (manual notes + prior
-// AI-extracted summaries), their matching Industry Playbook, and recent
+// AI-extracted summaries), their matching Industry Agent, and recent
 // activity to draft one specific, ready-to-send email rather than a
 // merge-tag template. Returned subject/body are meant to prefill the
 // EmailComposeModal for the rep to review before sending.
@@ -989,8 +989,8 @@ app.post("/api/ai/personalized-email", async (req, res) => {
       recipientIndustry,
       knowledgeEntries, // string[] -- content of linked KnowledgeBaseEntry rows (manual + AI-extracted)
       activities, // recent Activity rows for this lead/contact
-      playbook, // optional IndustryPlaybook for recipientIndustry
-      productName, // optional: the specific product/service to center this email on (from the playbook's Product/Service picker)
+      agent, // optional IndustryAgent for recipientIndustry
+      productName, // optional: the specific product/service to center this email on (from the agent's Product/Service picker)
       productPitch, // optional: that product's marketing pitch
       senderName,
       senderCompany,
@@ -1016,12 +1016,12 @@ app.post("/api/ai/personalized-email", async (req, res) => {
             .map((a: any) => `${a.type}: ${a.description}`)
             .join("; ")}`
         : "";
-    const playbookLine = playbook
-      ? `\n\nIndustry Playbook for "${playbook.industry}" — follow this guidance:
-- Tone: ${playbook.tone || "professional and direct"}
-- Talking points to weave in: ${(playbook.talkingPoints || []).join(", ") || "none specified"}
-- Common pain points to speak to: ${(playbook.painPoints || []).join(", ") || "none specified"}
-${playbook.objectionNotes ? `- Objection handling notes: ${playbook.objectionNotes}` : ""}`
+    const agentLine = agent
+      ? `\n\nIndustry Agent for "${agent.industry}" — follow this guidance:
+- Tone: ${agent.tone || "professional and direct"}
+- Talking points to weave in: ${(agent.talkingPoints || []).join(", ") || "none specified"}
+- Common pain points to speak to: ${(agent.painPoints || []).join(", ") || "none specified"}
+${agent.objectionNotes ? `- Objection handling notes: ${agent.objectionNotes}` : ""}`
       : "";
     const productLine = productName
       ? `\n\nCenter this email specifically around the following product/service rather than speaking generically: "${productName}"${
@@ -1033,12 +1033,12 @@ ${playbook.objectionNotes ? `- Objection handling notes: ${playbook.objectionNot
     const fallbackBody = `Dear ${firstName},\n\nI wanted to reach out directly given your role${
       recipientJobTitle ? ` as ${recipientJobTitle}` : ""
     } at ${recipientCompany || "your company"}. ${
-      playbook?.painPoints?.[0] ? `Teams in ${playbook.industry} often deal with ${playbook.painPoints[0].toLowerCase()}, and that's exactly where we can help.` : "I think there's a strong fit worth a short conversation."
+      agent?.painPoints?.[0] ? `Teams in ${agent.industry} often deal with ${agent.painPoints[0].toLowerCase()}, and that's exactly where we can help.` : "I think there's a strong fit worth a short conversation."
     }\n\nWould you be open to a quick call this week?\n\nBest regards,\n${senderName || "Account Executive"}\n${senderCompany || ""}`;
 
     const prompt = `You are an expert B2B sales rep at ${senderCompany || "our company"} writing ONE specific, personalized email to a single named recipient — not a template with merge tags. Write it as if you did real research on them.
 
-Recipient: ${recipientName}${recipientJobTitle ? `, ${recipientJobTitle}` : ""} at ${recipientCompany || "their company"}${recipientIndustry ? ` (industry: ${recipientIndustry})` : ""}.${knowledgeLine}${activityLine}${playbookLine}${productLine}
+Recipient: ${recipientName}${recipientJobTitle ? `, ${recipientJobTitle}` : ""} at ${recipientCompany || "their company"}${recipientIndustry ? ` (industry: ${recipientIndustry})` : ""}.${knowledgeLine}${activityLine}${agentLine}${productLine}
 ${goal ? `\n\nGoal of this specific email: ${goal}` : ""}
 
 Write a subject line and email body. Reference at least one concrete, specific detail from what we know about them if anything specific was provided above — avoid generic filler. Keep the body under 180 words, end with one clear call-to-action, and sign off with the sender's name and company.
@@ -1124,7 +1124,7 @@ Keep "summary" under 120 words. If there's genuinely little to go on, say so pla
 });
 
 // AI Negotiation Offer — drafts a specific price/terms offer for one
-// recipient, gated by the Industry Playbook's maxDiscountPercent (a hard
+// recipient, gated by the Industry Agent's maxDiscountPercent (a hard
 // ceiling the server itself enforces, not just a prompt instruction) so an
 // AI hallucination can never propose more than the workspace configured.
 // Like the other single-recipient generators, this only DRAFTS an offer --
@@ -1141,8 +1141,8 @@ app.post("/api/ai/negotiation-offer", async (req, res) => {
       productPrice,
       productPricingModel,
       currency,
-      maxDiscountPercent, // ceiling from the Industry Playbook -- enforced below
-      negotiationGuidance,
+      maxDiscountPercent, // ceiling from the Industry Agent -- enforced below
+      negotiationConditions,
       knowledgeEntries,
       activities,
       requestContext, // optional: what prompted this, e.g. "they asked for a lower price"
@@ -1207,7 +1207,7 @@ Product/service: ${productName || "our solution"}, list price ${cur} ${Number(pr
 ${requestContext ? `\nContext for this offer: ${requestContext}` : ""}
 
 HARD RULE: you may NOT propose a discount greater than ${ceiling}% off list price under any circumstances, even if the prospect is pushing harder. Anchor lower than the ceiling when reasonable (e.g. propose half the ceiling first) so there's room to move if they push back, unless the context above indicates they've already pushed hard, in which case you may go closer to the ceiling.
-${negotiationGuidance ? `\nAdditional negotiation guidance for this industry: ${negotiationGuidance}` : ""}
+${negotiationConditions ? `\nAdditional negotiation guidance for this industry: ${negotiationConditions}` : ""}
 
 Write a subject and email body proposing a SPECIFIC discount percentage and resulting price (compute it correctly from the list price). Keep it under 160 words, professional, and end with a clear next step.
 
@@ -1530,8 +1530,8 @@ const VALID_NAV_VIEWS = [
 // always shows every action to the user for explicit confirmation before
 // calling the corresponding CRUD function -- this endpoint only proposes.
 // ----------------------------------------------------------------------------
-// "playbook" and "agent_action" extend chat control to the Industry
-// Playbook agents: toggling a playbook's auto-run/negotiation settings, and
+// "industry_agent" and "agent_action" extend chat control to Industry
+// Agents: toggling an agent's auto-run/negotiation settings, and
 // approving/rejecting items already sitting in the Agent Approvals queue.
 // "negotiation_offer"/"personalized_email" let the chat trigger the same
 // single-recipient drafts the Lead/Contact drawers do -- both only ever
@@ -1539,7 +1539,7 @@ const VALID_NAV_VIEWS = [
 // client still needs a separate send/approve step.
 const ACTION_ENTITIES = [
   "lead", "contact", "company", "deal", "task", "activity", "invoice",
-  "playbook", "agent_action", "negotiation_offer", "personalized_email",
+  "industry_agent", "agent_action", "negotiation_offer", "personalized_email",
 ] as const;
 type ActionEntity = (typeof ACTION_ENTITIES)[number];
 const ENTITY_ALLOWED_TYPES: Record<ActionEntity, Array<"create" | "update" | "delete">> = {
@@ -1550,7 +1550,7 @@ const ENTITY_ALLOWED_TYPES: Record<ActionEntity, Array<"create" | "update" | "de
   task: ["create", "update", "delete"],
   activity: ["create", "delete"],
   invoice: ["create", "update", "delete"],
-  playbook: ["update"],
+  industry_agent: ["update"],
   agent_action: ["update"],
   negotiation_offer: ["create"],
   personalized_email: ["create"],
@@ -1591,7 +1591,7 @@ app.post("/api/ai/chat-assistant", async (req, res) => {
       insight: "AI Insights", campaign: "Email Marketing", "email market": "Email Marketing",
       inbox: "Inbox", repl: "Inbox", report: "Reports", setting: "Settings",
       dashboard: "Dashboard", "ceo note": "CEO Notes", journal: "CEO Notes", memoir: "CEO Notes",
-      "knowledge base": "Knowledge Base", playbook: "Knowledge Base",
+      "knowledge base": "Knowledge Base", "industry agent": "Industry Agents",
     };
     let fallbackNav: string | null = null;
     if (/\b(show|open|go to|take me|navigate|view)\b/.test(lowerMsg)) {
@@ -1612,7 +1612,7 @@ app.post("/api/ai/chat-assistant", async (req, res) => {
     const tasks: Array<{ id: string; name: string }> = lk.tasks || [];
     const invoices: Array<{ id: string; name: string }> = lk.invoices || [];
     const pipelines: Array<{ id: string; name: string; stages: Array<{ id: string; name: string }> }> = lk.pipelines || [];
-    const playbooks: Array<{ id: string; name: string }> = lk.playbooks || [];
+    const industryAgents: Array<{ id: string; name: string }> = lk.industryAgents || [];
     const agentActions: Array<{ id: string; name: string }> = lk.agentActions || [];
 
     const fallbackReply = fallbackNav
@@ -1667,7 +1667,7 @@ Deals: ${JSON.stringify(deals.map((d) => d.name)).slice(0, 4000)}
 Tasks: ${JSON.stringify(tasks.map((t) => t.name)).slice(0, 2000)}
 Invoices: ${JSON.stringify(invoices.map((i) => i.name)).slice(0, 2000)}
 Pipelines: ${JSON.stringify(pipelines.map((p) => ({ name: p.name, stages: p.stages.map((s) => s.name) })))}
-Industry Playbooks (agents): ${JSON.stringify(playbooks.map((p) => p.name)).slice(0, 2000)}
+Industry Agents: ${JSON.stringify(industryAgents.map((p) => p.name)).slice(0, 2000)}
 Pending Agent Approvals (queued drafts awaiting your decision): ${JSON.stringify(agentActions.map((a) => a.name)).slice(0, 3000)}
 
 Recent conversation (oldest first):
@@ -1680,9 +1680,9 @@ Reply conversationally and concisely (2-4 sentences, no bullet points). If the u
 If the user is asking you to CREATE, UPDATE, or DELETE something, populate "actions" (an array, empty if none). Each action:
 {
   "type": "create" | "update" | "delete",
-  "entity": "lead" | "contact" | "company" | "deal" | "task" | "activity" | "invoice" | "playbook" | "agent_action" | "negotiation_offer" | "personalized_email",
+  "entity": "lead" | "contact" | "company" | "deal" | "task" | "activity" | "invoice" | "industry_agent" | "agent_action" | "negotiation_offer" | "personalized_email",
   "summary": "short human-readable one-line description of exactly what this will do, written for a confirmation prompt",
-  "target": string | null,       // REQUIRED for update/delete: the name of the existing record being changed, exactly as it appears in the lists above (an Industry Playbook's name is its industry; an Agent Approval's name is listed above too). null for create.
+  "target": string | null,       // REQUIRED for update/delete: the name of the existing record being changed, exactly as it appears in the lists above (an Industry Agent's name is its industry; an Agent Approval's name is listed above too). null for create.
   "companyRef": string | null,   // for contact/deal/invoice/task/activity: the company name involved (existing, from the list above)
   "contactRef": string | null,   // for deal/invoice/task/activity/negotiation_offer/personalized_email: the contact name involved, if any
   "leadRef": string | null,      // for negotiation_offer/personalized_email: the lead name involved, if any (use leadRef OR contactRef, never both)
@@ -1703,9 +1703,9 @@ Field guidance per entity (only include what the user actually said or clearly i
 - task: title, dueDate (YYYY-MM-DD), priority ("Low"|"Medium"|"High"|"Urgent"), status ("To Do"|"In Progress"|"Completed"|"Cancelled"), notes (related company/contact/deal via companyRef/contactRef/dealRef)
 - activity: type ("Call"|"Meeting"|"Email"|"WhatsApp"|"Follow-up"|"Demo"|"Proposal"|"Note"), description, outcome, nextAction (related company/contact/deal via companyRef/contactRef/dealRef)
 - invoice: dueDate (YYYY-MM-DD), items (array of {description, quantity, unitPrice}), notes (company via companyRef required, contact/deal optional via contactRef/dealRef)
-- playbook (update only, target = the industry's playbook name from the list above): autoRunEnabled (boolean -- "turn on/off the agent" for that industry means this), maxDiscountPercent (number 0-100 -- "let it negotiate up to X%"), negotiationGuidance (string). Only include the field(s) the user actually asked to change.
+- industry_agent (update only, target = the industry agent's industry name from the list above): autoRunEnabled (boolean -- "turn on/off the agent" for that industry means this), maxDiscountPercent (number 0-100 -- "let it negotiate up to X%"), negotiationConditions (string). Only include the field(s) the user actually asked to change.
 - agent_action (update only, target = the pending item's name from the list above): decision ("approve" | "reject") -- this is how the user approves/rejects/sends/dismisses a queued drafted follow-up, reply, or offer from the chat. "approve" sends it exactly as drafted; the user can't edit the text through chat, only approve or reject -- if they want it changed first, tell them to edit it from the Agent Approvals page instead of proposing an action.
-- negotiation_offer (create only): identify the recipient via leadRef OR contactRef (never both). Drafts a price/terms offer capped by that recipient's industry playbook and queues it into Agent Approvals -- it does not send anything.
+- negotiation_offer (create only): identify the recipient via leadRef OR contactRef (never both). Drafts a price/terms offer capped by that recipient's industry agent and queues it into Agent Approvals -- it does not send anything.
 - personalized_email (create only): identify the recipient via leadRef OR contactRef (never both). Drafts a one-off personalized email for that recipient and hands it to the email composer for review -- it does not send anything.
 
 For update actions, put ONLY the fields being changed inside "fields". Never propose an action against a record that isn't in the lists above -- if the user references something that doesn't exist, say so in your reply instead and don't fabricate an action for it.
@@ -1739,7 +1739,7 @@ Return pure JSON only, no markdown fences: {"reply": string, "navigateTo": strin
                 : entity === "deal" ? byName(deals)
                 : entity === "task" ? byName(tasks)
                 : entity === "invoice" ? byName(invoices)
-                : entity === "playbook" ? byName(playbooks)
+                : entity === "industry_agent" ? byName(industryAgents)
                 : entity === "agent_action" ? byName(agentActions)
                 : [];
               const resolved = resolveByName(list, a.target);

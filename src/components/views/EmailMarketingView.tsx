@@ -319,7 +319,7 @@ const CampaignCard: React.FC<{
 // New Campaign Wizard
 // ----------------------------------------------------------------------------
 const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const { leads, contacts, companies, products, industryPlaybooks, getPlaybookForIndustry, activeTenant, currentUser, addEmailCampaign, addActivity } = useCRM();
+  const { leads, contacts, companies, products, industryAgents, getAgentForIndustry, activeTenant, currentUser, addEmailCampaign, addActivity } = useCRM();
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [name, setName] = useState("");
@@ -327,8 +327,8 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   const [audienceSearch, setAudienceSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string>("");
-  const [selectedPlaybookId, setSelectedPlaybookId] = useState<string>("");
-  const [playbookManuallySet, setPlaybookManuallySet] = useState(false);
+  const [selectedAgentId, setSelectedAgentId] = useState<string>("");
+  const [agentManuallySet, setAgentManuallySet] = useState(false);
   const [selectedMailboxId, setSelectedMailboxId] = useState<string>(
     () => getMailboxById(activeTenant)?.id || ""
   );
@@ -352,7 +352,7 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     }
   };
   // Industry-aware bulk generation: auto-detect the dominant industry among
-  // the currently selected audience and pre-select its playbook (if one
+  // the currently selected audience and pre-select its agent (if one
   // exists), while still letting the user override the pick manually.
   const dominantIndustry = useMemo(() => {
     if (selectedIds.length === 0) return "";
@@ -373,14 +373,14 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   }, [selectedIds, audienceType, leads, contacts, companies]);
 
   React.useEffect(() => {
-    if (playbookManuallySet) return;
+    if (agentManuallySet) return;
     if (!dominantIndustry) return;
-    const match = getPlaybookForIndustry(dominantIndustry);
-    setSelectedPlaybookId(match?.id || "");
+    const match = getAgentForIndustry(dominantIndustry);
+    setSelectedAgentId(match?.id || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dominantIndustry]);
 
-  const selectedPlaybook = industryPlaybooks.find((p) => p.id === selectedPlaybookId) || null;
+  const selectedAgent = industryAgents.find((p) => p.id === selectedAgentId) || null;
 
   const [frequency, setFrequency] = useState<EmailFrequency>("Weekly");
   const [customDays, setCustomDays] = useState(10);
@@ -475,13 +475,13 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           senderCompany: activeTenant?.companyName || activeTenant?.name,
           productName: selectedProduct?.name,
           productPitch: selectedProduct?.pitch,
-          playbook: selectedPlaybook
+          agent: selectedAgent
             ? {
-                industry: selectedPlaybook.industry,
-                tone: selectedPlaybook.tone,
-                talkingPoints: selectedPlaybook.talkingPoints,
-                painPoints: selectedPlaybook.painPoints,
-                objectionNotes: selectedPlaybook.objectionNotes,
+                industry: selectedAgent.industry,
+                tone: selectedAgent.tone,
+                talkingPoints: selectedAgent.talkingPoints,
+                painPoints: selectedAgent.painPoints,
+                objectionNotes: selectedAgent.objectionNotes,
               }
             : undefined,
         }),
@@ -688,34 +688,34 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                 </div>
               )}
 
-              {industryPlaybooks.length > 0 && (
+              {industryAgents.length > 0 && (
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1.5 flex items-center gap-1.5">
                     <BookMarked className="w-3.5 h-3.5 text-teal-400" />
-                    Industry Playbook <span className="text-slate-500 font-normal">(optional -- makes AI copy industry-aware)</span>
+                    Industry Agent <span className="text-slate-500 font-normal">(optional -- makes AI copy industry-aware)</span>
                   </label>
                   <select
-                    value={selectedPlaybookId}
+                    value={selectedAgentId}
                     onChange={(e) => {
-                      setSelectedPlaybookId(e.target.value);
-                      setPlaybookManuallySet(true);
+                      setSelectedAgentId(e.target.value);
+                      setAgentManuallySet(true);
                     }}
                     className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
                   >
                     <option value="">None — generic tone</option>
-                    {industryPlaybooks.map((p) => (
+                    {industryAgents.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.industry}
                       </option>
                     ))}
                   </select>
-                  {dominantIndustry && !playbookManuallySet && selectedPlaybook && (
+                  {dominantIndustry && !agentManuallySet && selectedAgent && (
                     <p className="text-[10px] text-teal-400 mt-1">
                       Auto-selected from your audience's dominant industry ({dominantIndustry}).
                     </p>
                   )}
-                  {selectedPlaybook && (
-                    <p className="text-[11px] text-slate-400 mt-1.5 line-clamp-2">{selectedPlaybook.tone}</p>
+                  {selectedAgent && (
+                    <p className="text-[11px] text-slate-400 mt-1.5 line-clamp-2">{selectedAgent.tone}</p>
                   )}
                 </div>
               )}

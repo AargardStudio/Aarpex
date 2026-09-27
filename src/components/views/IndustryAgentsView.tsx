@@ -28,9 +28,10 @@ import {
   Inbox as InboxIcon,
   AlertTriangle,
 } from "lucide-react";
-import { IndustryPlaybook, PreferredOutreachChannel, AgentAction } from "../../types";
+import { IndustryAgent, PreferredOutreachChannel, AgentAction, AIProvider } from "../../types";
 import { INDUSTRIES } from "../../data/industries";
 import { normalizeIndustry, summarizeIndustryUsage, findCloseIndustryMatches, IndustryUsage } from "../../lib/industryMatch";
+import { AI_PROVIDER_MODELS, AI_PROVIDER_LABELS, defaultModelFor } from "../../lib/aiProviders";
 
 function csv(list: string[] | undefined): string {
   return (list || []).join(", ");
@@ -74,7 +75,7 @@ const actionTypeLabel: Record<AgentAction["actionType"], string> = {
   negotiation_offer: "Negotiation offer",
 };
 
-const emptyDraft = (): Omit<IndustryPlaybook, "id" | "createdAt" | "updatedAt" | "createdBy"> => ({
+const emptyDraft = (): Omit<IndustryAgent, "id" | "createdAt" | "updatedAt" | "createdBy"> => ({
   industry: INDUSTRIES[0],
   isActive: true,
   productId: undefined,
@@ -89,22 +90,30 @@ const emptyDraft = (): Omit<IndustryPlaybook, "id" | "createdAt" | "updatedAt" |
   followUpFrequencyDays: 7,
   followUpCount: 2,
   autoRunEnabled: false,
+  frequencyMinutes: 15,
+  modelProvider: "gemini",
+  modelName: defaultModelFor("gemini"),
   maxDiscountPercent: 0,
-  negotiationGuidance: "",
+  negotiationConditions: "",
 });
+
+// Frequency floor, in minutes, confirmed for this feature -- the UI never
+// lets a user save anything below this, and Phase 2's server-side
+// scheduler will enforce the same floor independent of the browser.
+const MIN_FREQUENCY_MINUTES = 15;
 
 // ----------------------------------------------------------------------------
 // First-time explanation banner -- item 22 of the UX redesign spec: a
 // lightweight, dismissible explanation of the whole model (match -> AI
 // prepares -> you approve -> AarPex sends), shown once before a user has
-// ever needed to open Instructions to understand what a Playbook is.
+// ever needed to open Instructions to understand what an Agent is.
 // ----------------------------------------------------------------------------
-const PLAYBOOKS_INTRO_KEY = "aarpex_playbooks_intro_dismissed";
+const AGENTS_INTRO_KEY = "aarpex_agents_intro_dismissed";
 
-const PlaybooksIntroBanner: React.FC = () => {
+const AgentsIntroBanner: React.FC = () => {
   const [dismissed, setDismissed] = useState<boolean>(() => {
     try {
-      return localStorage.getItem(PLAYBOOKS_INTRO_KEY) === "1";
+      return localStorage.getItem(AGENTS_INTRO_KEY) === "1";
     } catch {
       return false;
     }
@@ -117,7 +126,7 @@ const PlaybooksIntroBanner: React.FC = () => {
         Automate outreach by industry
       </div>
       <p className="text-slate-300">
-        A Playbook continuously finds businesses in a matching industry, prepares personalized outreach for them, and
+        A Agent continuously finds businesses in a matching industry, prepares personalized outreach for them, and
         puts every proposed message in your approval queue -- nothing is ever sent without you approving it first.
       </p>
       <div className="flex items-center flex-wrap gap-1.5 text-[11px] text-slate-400 font-semibold">
@@ -132,7 +141,7 @@ const PlaybooksIntroBanner: React.FC = () => {
       <button
         onClick={() => {
           try {
-            localStorage.setItem(PLAYBOOKS_INTRO_KEY, "1");
+            localStorage.setItem(AGENTS_INTRO_KEY, "1");
           } catch {
             /* best-effort only */
           }
@@ -147,20 +156,20 @@ const PlaybooksIntroBanner: React.FC = () => {
 };
 
 // ----------------------------------------------------------------------------
-// Create / Edit modal -- one playbook per industry. Every field here is
+// Create / Edit modal -- one agent per industry. Every field here is
 // plain guidance text/lists fed straight into the AI prompts for email
 // generation, lead qualification, and follow-up scheduling -- there's no
 // hidden scoring formula, so what's written here is exactly what the AI
 // sees.
 // ----------------------------------------------------------------------------
-const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: () => void }> = ({
+const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => void }> = ({
   editing,
   onClose,
 }) => {
   const {
-    addIndustryPlaybook,
-    updateIndustryPlaybook,
-    industryPlaybooks,
+    addIndustryAgent,
+    updateIndustryAgent,
+    industryAgents,
     products,
     leads,
     rawCompanies,
@@ -170,7 +179,7 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
     activeTenant,
     setActiveNav,
   } = useCRM() as any;
-  const [draft, setDraft] = useState<Omit<IndustryPlaybook, "id" | "createdAt" | "updatedAt" | "createdBy">>(
+  const [draft, setDraft] = useState<Omit<IndustryAgent, "id" | "createdAt" | "updatedAt" | "createdBy">>(
     editing
       ? {
           industry: editing.industry,
@@ -187,11 +196,19 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
           followUpFrequencyDays: editing.followUpFrequencyDays,
           followUpCount: editing.followUpCount,
           autoRunEnabled: editing.autoRunEnabled,
+          frequencyMinutes: editing.frequencyMinutes || MIN_FREQUENCY_MINUTES,
+          modelProvider: editing.modelProvider || "gemini",
+          modelName: editing.modelName || defaultModelFor(editing.modelProvider || "gemini"),
           maxDiscountPercent: editing.maxDiscountPercent,
-          negotiationGuidance: editing.negotiationGuidance || "",
+          negotiationConditions: editing.negotiationConditions || "",
         }
       : emptyDraft()
   );
+  // Whether this tenant has actually configured an API key for the
+  // provider this agent is currently set to use -- surfaced as a plain
+  // warning rather than silently letting the agent be saved unusable.
+  const providerConfig = activeTenant?.aiProviderConfigs?.[draft.modelProvider as AIProvider];
+  const providerConfigured = !!providerConfig?.isEnabled && !!providerConfig?.apiKey;
   const [isSaving, setIsSaving] = useState(false);
   const [matchSearch, setMatchSearch] = useState("");
   const [matchFilter, setMatchFilter] = useState<"all" | "companies" | "leads">("all");
@@ -210,9 +227,9 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
 
   const duplicateIndustry =
     !editing &&
-    industryPlaybooks.some((p) => normalizeIndustry(p.industry) === normalizeIndustry(draft.industry));
+    industryAgents.some((p) => normalizeIndustry(p.industry) === normalizeIndustry(draft.industry));
 
-  // "Matching Businesses" -- every playbook already applies to every
+  // "Matching Businesses" -- every agent already applies to every
   // Lead/Company whose Industry field matches this one, automatically and
   // invisibly. This surfaces exactly who that is right now (live, as the
   // Industry field above is edited) and lets specific businesses be opted
@@ -273,8 +290,8 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
       ? []
       : matchingCompanies.filter((c: any) => !matchSearchLc || (c.name || "").toLowerCase().includes(matchSearchLc));
 
-  // Editing an existing, already-saved Playbook and changing the Industry
-  // text changes WHO this Playbook applies to -- surfaced as an explicit
+  // Editing an existing, already-saved Agent and changing the Industry
+  // text changes WHO this Agent applies to -- surfaced as an explicit
   // "change audience?" warning (item 14) rather than a silent side effect
   // of editing a text field.
   const isChangingIndustry = !!editing && normalizeIndustry(editing.industry) !== industryLc && industryLc.length > 0;
@@ -286,12 +303,12 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
     return priorLeads + priorCompanies;
   })();
 
-  // This Playbook's own slice of the shared Agent Approvals queue --
-  // AgentAction has no direct playbookId, but every action the scan creates
-  // for a playbook is stamped with that exact playbook.industry string (see
+  // This Agent's own slice of the shared Agent Approvals queue --
+  // AgentAction has no direct agentId, but every action the scan creates
+  // for an agent is stamped with that exact agent.industry string (see
   // runAgentScan in CRMContext.tsx), so an exact-string filter is reliable
-  // here (not normalizeIndustry -- we want THIS playbook's own actions, not
-  // every playbook that happens to normalize the same).
+  // here (not normalizeIndustry -- we want THIS agent's own actions, not
+  // every agent that happens to normalize the same).
   const ownActions: AgentAction[] = editing
     ? (agentActions || []).filter((a: AgentAction) => a.industry === editing.industry)
     : [];
@@ -303,7 +320,7 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
   // Monitoring status -- deliberately never claims continuous monitoring.
   // This app has no server-side scheduler; the scan only runs while this
   // browser tab is open (see runAgentScan in CRMContext.tsx), so the
-  // honest states are: off, off-because-playbook-paused, checking right
+  // honest states are: off, off-because-agent-paused, checking right
   // now, or "browser monitoring" with a last-checked time -- never a plain
   // green "always on".
   const monitoringState: "off" | "checking" | "browser" | "not_yet" = !draft.autoRunEnabled || !draft.isActive
@@ -314,9 +331,9 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
     ? "browser"
     : "not_yet";
 
-  const handleTogglePlaybookActive = () => {
+  const handleToggleAgentActive = () => {
     if (draft.isActive) {
-      if (!confirm("Pause this Playbook?\n\nPausing stops it from generating new automated actions. Anything already waiting in your approval queue stays there for you to review.")) {
+      if (!confirm("Pause this Agent?\n\nPausing stops it from generating new automated actions. Anything already waiting in your approval queue stays there for you to review.")) {
         return;
       }
     }
@@ -328,9 +345,9 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
     setIsSaving(true);
     try {
       if (editing) {
-        updateIndustryPlaybook(editing.id, draft);
+        updateIndustryAgent(editing.id, draft);
       } else {
-        addIndustryPlaybook(draft);
+        addIndustryAgent(draft);
       }
       onClose();
     } finally {
@@ -346,7 +363,7 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
             <div className="w-8 h-8 rounded-lg bg-teal-500/10 border border-teal-500/30 text-teal-400 flex items-center justify-center">
               <BookMarked className="w-4 h-4" />
             </div>
-            <h2 className="text-sm font-bold text-white">{editing ? "Edit Industry Playbook" : "New Industry Playbook"}</h2>
+            <h2 className="text-sm font-bold text-white">{editing ? "Edit Industry Agent" : "New Industry Agent"}</h2>
           </div>
           <button
             onClick={onClose}
@@ -362,19 +379,19 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
               <label className="block text-slate-300 font-semibold mb-1">Industry *</label>
               <input
                 type="text"
-                list="playbook-industry-suggestions"
+                list="agent-industry-suggestions"
                 value={draft.industry}
                 onChange={(e) => setDraft((p) => ({ ...p, industry: e.target.value }))}
                 placeholder="e.g. Healthcare & Wellness"
                 className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
               />
-              <datalist id="playbook-industry-suggestions">
+              <datalist id="agent-industry-suggestions">
                 {INDUSTRIES.map((ind) => (
                   <option key={ind} value={ind} />
                 ))}
               </datalist>
               {duplicateIndustry && (
-                <p className="text-rose-400 mt-1">A playbook for this industry already exists -- edit that one instead.</p>
+                <p className="text-rose-400 mt-1">A agent for this industry already exists -- edit that one instead.</p>
               )}
               <p className="text-slate-500 mt-1">
                 Match this to the Industry field on your Leads/Companies exactly so it auto-applies.
@@ -419,10 +436,10 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
             </div>
 
             <div>
-              <label className="block text-slate-300 font-semibold mb-1">Playbook</label>
+              <label className="block text-slate-300 font-semibold mb-1">Agent</label>
               <button
                 type="button"
-                onClick={handleTogglePlaybookActive}
+                onClick={handleToggleAgentActive}
                 className={`w-full px-3 py-2 rounded-lg border font-bold flex items-center justify-center gap-1.5 transition-colors ${
                   draft.isActive
                     ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
@@ -433,7 +450,7 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
                 {draft.isActive ? "Active" : "Paused"}
               </button>
               {!draft.isActive && (
-                <p className="text-slate-500 mt-1">This Playbook is not generating new actions.</p>
+                <p className="text-slate-500 mt-1">This Agent is not generating new actions.</p>
               )}
             </div>
 
@@ -456,22 +473,22 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
                   ))}
                 </select>
                 <p className="text-slate-500 mt-1">
-                  When set, this product's name and pitch are fed into every follow-up, reply, and offer this playbook's agent drafts.
+                  When set, this product's name and pitch are fed into every follow-up, reply, and offer this agent's agent drafts.
                 </p>
               </div>
             )}
           </div>
 
-          {/* "Who will this Playbook reach?" -- item 4: the audience summary
+          {/* "Who will this Agent reach?" -- item 4: the audience summary
               must be visible before anything is activated, not buried in a
               tooltip or the Instructions page. */}
           <div className="p-3.5 bg-[#121418] rounded-xl border border-[#2d323f] space-y-1.5">
             <div className="flex items-center gap-1.5 text-teal-300 font-bold">
               <Users className="w-3.5 h-3.5" />
-              Who will this Playbook reach?
+              Who will this Agent reach?
             </div>
             <p className="text-slate-300">
-              This Playbook automatically works with every business whose industry matches{" "}
+              This Agent automatically works with every business whose industry matches{" "}
               <span className="font-semibold text-white">"{draft.industry || "..."}"</span>.
             </p>
             <p className="text-slate-400">
@@ -490,9 +507,9 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
             <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2 text-amber-100">
               <div className="flex items-center gap-1.5 font-bold text-amber-300">
                 <AlertTriangle className="w-3.5 h-3.5" />
-                Change which businesses this Playbook applies to?
+                Change which businesses this Agent applies to?
               </div>
-              <p>Changing the industry changes who this Playbook works with.</p>
+              <p>Changing the industry changes who this Agent works with.</p>
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="px-2 py-1 rounded-md bg-[#181b21] border border-[#2d323f]">
                   Current: <span className="font-bold text-white">"{editing!.industry}"</span> -- {priorMatchCount} matching
@@ -506,12 +523,12 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
           )}
 
           {/* Automation model, made explicit -- items 7 & 10. Shown right in
-              the Playbook itself so this is answerable without opening
+              the Agent itself so this is answerable without opening
               Instructions. */}
           <div className="p-3.5 bg-[#121418] rounded-xl border border-[#2d323f] space-y-2.5">
             <div className="flex items-center gap-1.5 text-teal-300 font-bold">
               <Bot className="w-3.5 h-3.5" />
-              How this Playbook works
+              How this Agent works
             </div>
             <div className="flex items-center flex-wrap gap-1.5 text-[11px] font-semibold">
               <span className="px-2 py-1 rounded-md bg-[#181b21] border border-[#2d323f] text-slate-300">1. Match</span>
@@ -525,7 +542,7 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
             <ol className="space-y-1 text-slate-400 list-decimal list-inside">
               <li>Businesses with the selected industry are automatically eligible.</li>
               <li>While enabled, AarPex periodically checks for a due follow-up or an inbound reply worth acting on.</li>
-              <li>The AI prepares a personalized message using this Playbook's settings and linked Product.</li>
+              <li>The AI prepares a personalized message using this Agent's settings and linked Product.</li>
               <li>The proposed action appears in your Agent Approvals queue -- reviewable, editable, or rejectable.</li>
               <li>Only after you approve it does AarPex actually send anything.</li>
             </ol>
@@ -539,14 +556,14 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
               <Mail className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold">Email connection required. </span>
-                This Playbook can still identify matching businesses and prepare proposed actions, but AarPex can't
+                This Agent can still identify matching businesses and prepare proposed actions, but AarPex can't
                 send anything you approve until a mailbox is connected in Settings.
               </div>
             </div>
           )}
 
-          {/* Real-time status for an existing Playbook -- items 9, 11, 16.
-              Only shown once a Playbook exists to have a history at all. */}
+          {/* Real-time status for an existing Agent -- items 9, 11, 16.
+              Only shown once an Agent exists to have a history at all. */}
           {editing && (
             <div className="p-3.5 bg-[#121418] rounded-xl border border-[#2d323f] space-y-3">
               <div className="flex items-center gap-1.5 text-teal-300 font-bold">
@@ -556,7 +573,7 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
               {monitoringState === "off" && (
                 <div className="flex items-center gap-2 text-slate-500">
                   <span className="w-2 h-2 rounded-full bg-slate-600" />
-                  Not monitoring -- {!draft.isActive ? "this Playbook is paused." : "automated monitoring is off below."}
+                  Not monitoring -- {!draft.isActive ? "this Agent is paused." : "automated monitoring is off below."}
                 </div>
               )}
               {monitoringState === "checking" && (
@@ -572,7 +589,7 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
                     Browser monitoring -- last checked {timeAgo(lastAgentScanAt)}
                   </div>
                   <p className="text-slate-500">
-                    AarPex checks this Playbook while this workspace is open in a browser tab. There's no
+                    AarPex checks this Agent while this workspace is open in a browser tab. There's no
                     server-side scheduler yet, so it does not run in the background when no tab is open.
                   </p>
                 </div>
@@ -618,7 +635,7 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
               <div className="pt-2 border-t border-[#2d323f] space-y-1.5">
                 <div className="text-slate-400 font-semibold">Agent activity</div>
                 {recentActivity.length === 0 ? (
-                  <p className="text-slate-500">No agent activity yet -- proposed actions and activity will show up here as this Playbook runs.</p>
+                  <p className="text-slate-500">No agent activity yet -- proposed actions and activity will show up here as this Agent runs.</p>
                 ) : (
                   recentActivity.map((a) => (
                     <div key={a.id} className="p-2 bg-[#181b21] border border-[#2d323f] rounded-lg">
@@ -647,7 +664,7 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
             </div>
           )}
 
-          {/* Matching Businesses -- this playbook's agent works EVERY
+          {/* Matching Businesses -- this agent's agent works EVERY
               Lead/Company whose Industry matches the field above,
               automatically. This makes that otherwise-invisible audience
               visible and lets specific ones be opted out. */}
@@ -657,14 +674,14 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
               Matching Businesses
             </div>
             <p className="text-slate-500">
-              This playbook's agent automatically works every Lead and Company below, because their Industry field matches "{draft.industry || "..."}" above.
-              Uncheck any you want to leave out -- this only affects this Playbook and never changes the business's own Industry field or removes it from AarPex.
+              This agent's agent automatically works every Lead and Company below, because their Industry field matches "{draft.industry || "..."}" above.
+              Uncheck any you want to leave out -- this only affects this Agent and never changes the business's own Industry field or removes it from AarPex.
             </p>
 
             {matchingLeads.length === 0 && matchingCompanies.length === 0 ? (
               <div className="p-3 bg-[#181b21] border border-[#2d323f] rounded-lg text-slate-500 space-y-2">
                 <p>
-                  No leads or companies currently have this industry -- nothing for this playbook to work yet. Set a
+                  No leads or companies currently have this industry -- nothing for this agent to work yet. Set a
                   lead's or company's Industry field to "{draft.industry || "this industry"}" from its profile to include it.
                 </p>
                 {closeIndustryMatches.length > 0 && (
@@ -732,7 +749,7 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
                           return (
                             <label
                               key={l.id}
-                              title={`Included because this Lead's Industry ("${l.industry}") matches this Playbook's Industry ("${draft.industry}").`}
+                              title={`Included because this Lead's Industry ("${l.industry}") matches this Agent's Industry ("${draft.industry}").`}
                               className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-[#181b21] cursor-pointer"
                             >
                               <input
@@ -762,7 +779,7 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
                           return (
                             <label
                               key={c.id}
-                              title={`Included because this Company's Industry ("${c.industry}") matches this Playbook's Industry ("${draft.industry}").`}
+                              title={`Included because this Company's Industry ("${c.industry}") matches this Agent's Industry ("${draft.industry}").`}
                               className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-[#181b21] cursor-pointer"
                             >
                               <input
@@ -786,7 +803,7 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
                   )}
                 </div>
                 {excludedLeadIds.length + excludedCompanyIds.length === 0 && (
-                  <p className="text-slate-600">No businesses are excluded from this Playbook.</p>
+                  <p className="text-slate-600">No businesses are excluded from this Agent.</p>
                 )}
               </>
             )}
@@ -930,6 +947,57 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
               you to review -- nothing is ever sent without your approval.
             </p>
 
+            <div className="pt-2 border-t border-[#2d323f]/80 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">AI provider</label>
+                <select
+                  value={draft.modelProvider}
+                  onChange={(e) => {
+                    const provider = e.target.value as AIProvider;
+                    setDraft((p) => ({ ...p, modelProvider: provider, modelName: defaultModelFor(provider) }));
+                  }}
+                  className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg"
+                >
+                  {(Object.keys(AI_PROVIDER_MODELS) as AIProvider[]).map((provider) => (
+                    <option key={provider} value={provider}>{AI_PROVIDER_LABELS[provider]}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Model</label>
+                <select
+                  value={draft.modelName}
+                  onChange={(e) => setDraft((p) => ({ ...p, modelName: e.target.value }))}
+                  className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg"
+                >
+                  {AI_PROVIDER_MODELS[draft.modelProvider as AIProvider].map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Check every (minutes)</label>
+                <input
+                  type="number"
+                  min={MIN_FREQUENCY_MINUTES}
+                  value={draft.frequencyMinutes}
+                  onChange={(e) =>
+                    setDraft((p) => ({ ...p, frequencyMinutes: Math.max(MIN_FREQUENCY_MINUTES, Number(e.target.value) || MIN_FREQUENCY_MINUTES) }))
+                  }
+                  className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+                />
+              </div>
+            </div>
+            {!providerConfigured && (
+              <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start gap-2 text-amber-200">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>
+                  No {AI_PROVIDER_LABELS[draft.modelProvider as AIProvider]} API key is on file for this workspace yet -- add
+                  one in Settings before turning monitoring on, or this agent won't be able to draft anything.
+                </span>
+              </div>
+            )}
+
             <div className="pt-2 border-t border-[#2d323f]/80 space-y-2">
               <label className="block text-slate-400 font-semibold mb-1 flex items-center gap-1">
                 <Percent className="w-3 h-3" /> Max discount the agent may propose
@@ -953,8 +1021,8 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
               )}
               <textarea
                 rows={2}
-                value={draft.negotiationGuidance}
-                onChange={(e) => setDraft((p) => ({ ...p, negotiationGuidance: e.target.value }))}
+                value={draft.negotiationConditions}
+                onChange={(e) => setDraft((p) => ({ ...p, negotiationConditions: e.target.value }))}
                 placeholder={`Any other negotiation guidance, e.g. "annual prepay only", "no discount below $500 deals"`}
                 className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg resize-none focus:outline-none focus:border-teal-400"
               />
@@ -962,7 +1030,7 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
           </div>
 
           {/* "Ready to activate" summary -- item 8, shown before a brand new
-              Playbook is created so nothing about what's about to happen is
+              Agent is created so nothing about what's about to happen is
               a surprise. */}
           {!editing && (
             <div className="p-3.5 bg-teal-500/5 border border-teal-500/25 rounded-xl space-y-1.5">
@@ -1000,7 +1068,7 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
             disabled={isSaving || !draft.industry.trim() || duplicateIndustry}
             className="px-4 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white rounded-lg font-bold"
           >
-            {isSaving ? "Saving..." : editing ? "Save Changes" : "Activate Playbook"}
+            {isSaving ? "Saving..." : editing ? "Save Changes" : "Activate Agent"}
           </button>
         </div>
       </div>
@@ -1008,20 +1076,20 @@ const PlaybookFormModal: React.FC<{ editing: IndustryPlaybook | null; onClose: (
   );
 };
 
-const PlaybookCard: React.FC<{ playbook: IndustryPlaybook; onEdit: () => void }> = ({ playbook, onEdit }) => {
-  const { deleteIndustryPlaybook, updateIndustryPlaybook, leads, rawCompanies, products, agentActions, lastAgentScanAt, isAgentScanRunning, setActiveNav } = useCRM() as any;
-  const linkedProduct = playbook.productId ? products.find((p: any) => p.id === playbook.productId) : null;
-  const ChannelIcon = channelIcon(playbook.preferredChannel);
-  const industryLc = normalizeIndustry(playbook.industry);
+const AgentCard: React.FC<{ agent: IndustryAgent; onEdit: () => void }> = ({ agent, onEdit }) => {
+  const { deleteIndustryAgent, updateIndustryAgent, leads, rawCompanies, products, agentActions, lastAgentScanAt, isAgentScanRunning, setActiveNav } = useCRM() as any;
+  const linkedProduct = agent.productId ? products.find((p: any) => p.id === agent.productId) : null;
+  const ChannelIcon = channelIcon(agent.preferredChannel);
+  const industryLc = normalizeIndustry(agent.industry);
   const matchingLeadCount = leads.filter((l: any) => normalizeIndustry(l.industry) === industryLc).length;
   const matchingCompanyCount = (rawCompanies || []).filter((c: any) => normalizeIndustry(c.industry) === industryLc).length;
-  const excludedCount = (playbook.excludedLeadIds || []).length + (playbook.excludedCompanyIds || []).length;
+  const excludedCount = (agent.excludedLeadIds || []).length + (agent.excludedCompanyIds || []).length;
   const matchCount = matchingLeadCount + matchingCompanyCount - excludedCount;
   const pendingCount = ((agentActions || []) as AgentAction[]).filter(
-    (a) => a.industry === playbook.industry && a.status === "pending"
+    (a) => a.industry === agent.industry && a.status === "pending"
   ).length;
 
-  const monitoringState: "off" | "checking" | "browser" | "not_yet" = !playbook.autoRunEnabled || !playbook.isActive
+  const monitoringState: "off" | "checking" | "browser" | "not_yet" = !agent.autoRunEnabled || !agent.isActive
     ? "off"
     : isAgentScanRunning
     ? "checking"
@@ -1030,12 +1098,12 @@ const PlaybookCard: React.FC<{ playbook: IndustryPlaybook; onEdit: () => void }>
     : "not_yet";
 
   const handleTogglePause = () => {
-    if (playbook.isActive) {
-      if (!confirm("Pause this Playbook?\n\nPausing stops it from generating new automated actions. Anything already waiting in your approval queue stays there for you to review.")) {
+    if (agent.isActive) {
+      if (!confirm("Pause this Agent?\n\nPausing stops it from generating new automated actions. Anything already waiting in your approval queue stays there for you to review.")) {
         return;
       }
     }
-    updateIndustryPlaybook(playbook.id, { isActive: !playbook.isActive });
+    updateIndustryAgent(agent.id, { isActive: !agent.isActive });
   };
 
   return (
@@ -1043,15 +1111,15 @@ const PlaybookCard: React.FC<{ playbook: IndustryPlaybook; onEdit: () => void }>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-sm font-bold text-white truncate">{playbook.industry}</h3>
+            <h3 className="text-sm font-bold text-white truncate">{agent.industry}</h3>
             <span
               className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                playbook.isActive
+                agent.isActive
                   ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
                   : "bg-slate-500/15 text-slate-400 border-slate-500/30"
               }`}
             >
-              {playbook.isActive ? "Active" : "Paused"}
+              {agent.isActive ? "Active" : "Paused"}
             </span>
             {monitoringState === "browser" && (
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-500/15 text-amber-300 border-amber-500/30" title={`Last checked ${timeAgo(lastAgentScanAt)}`}>
@@ -1070,15 +1138,15 @@ const PlaybookCard: React.FC<{ playbook: IndustryPlaybook; onEdit: () => void }>
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <button onClick={handleTogglePause} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#252a36]" title={playbook.isActive ? "Pause Playbook" : "Resume Playbook"}>
-            {playbook.isActive ? <PauseCircle className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
+          <button onClick={handleTogglePause} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#252a36]" title={agent.isActive ? "Pause Agent" : "Resume Agent"}>
+            {agent.isActive ? <PauseCircle className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
           </button>
           <button onClick={onEdit} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#252a36]" title="Edit">
             <Pencil className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => {
-              if (confirm(`Delete the "${playbook.industry}" playbook? This can't be undone.`)) deleteIndustryPlaybook(playbook.id);
+              if (confirm(`Delete the "${agent.industry}" agent? This can't be undone.`)) deleteIndustryAgent(agent.id);
             }}
             className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-[#252a36]"
             title="Delete"
@@ -1095,11 +1163,11 @@ const PlaybookCard: React.FC<{ playbook: IndustryPlaybook; onEdit: () => void }>
         </span>
       )}
 
-      {playbook.tone && <p className="text-xs text-slate-300 leading-relaxed">{playbook.tone}</p>}
+      {agent.tone && <p className="text-xs text-slate-300 leading-relaxed">{agent.tone}</p>}
 
-      {playbook.talkingPoints.length > 0 && (
+      {agent.talkingPoints.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {playbook.talkingPoints.map((t) => (
+          {agent.talkingPoints.map((t) => (
             <span key={t} className="text-[10px] px-2 py-0.5 bg-[#252a36] border border-[#3d4455] text-slate-300 rounded-full">
               {t}
             </span>
@@ -1110,22 +1178,22 @@ const PlaybookCard: React.FC<{ playbook: IndustryPlaybook; onEdit: () => void }>
       <div className="flex items-center gap-3 pt-2 border-t border-[#2d323f] text-[11px] text-slate-400 flex-wrap">
         <span className="flex items-center gap-1">
           <ChannelIcon className="w-3.5 h-3.5 text-teal-400" />
-          {playbook.preferredChannel}
+          {agent.preferredChannel}
         </span>
         <span className="flex items-center gap-1">
           <Clock className="w-3.5 h-3.5 text-teal-400" />
-          Every {playbook.followUpFrequencyDays}d &bull; {playbook.followUpCount} follow-ups
+          Every {agent.followUpFrequencyDays}d &bull; {agent.followUpCount} follow-ups
         </span>
-        {playbook.autoRunEnabled && (
+        {agent.autoRunEnabled && (
           <span className="flex items-center gap-1 text-emerald-300">
             <Bot className="w-3.5 h-3.5" />
             Monitoring on
           </span>
         )}
-        {playbook.maxDiscountPercent > 0 && (
+        {agent.maxDiscountPercent > 0 && (
           <span className="flex items-center gap-1 text-amber-300">
             <Percent className="w-3.5 h-3.5" />
-            Up to {playbook.maxDiscountPercent}% off
+            Up to {agent.maxDiscountPercent}% off
           </span>
         )}
       </div>
@@ -1144,18 +1212,18 @@ const PlaybookCard: React.FC<{ playbook: IndustryPlaybook; onEdit: () => void }>
   );
 };
 
-export const IndustryPlaybooksView: React.FC = () => {
-  const { industryPlaybooks } = useCRM();
+export const IndustryAgentsView: React.FC = () => {
+  const { industryAgents } = useCRM();
   const [isFormOpen, setFormOpen] = useState(false);
-  const [editingPlaybook, setEditingPlaybook] = useState<IndustryPlaybook | null>(null);
+  const [editingAgent, setEditingAgent] = useState<IndustryAgent | null>(null);
 
   return (
-    <div id="industry-playbooks-view" className="space-y-5 animate-in fade-in duration-200 text-slate-100">
+    <div id="industry-agents-view" className="space-y-5 animate-in fade-in duration-200 text-slate-100">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-bold text-white flex items-center gap-2">
             <BookMarked className="w-5 h-5 text-teal-400" />
-            Industry Playbooks
+            Industry Agents
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
             Configure how AI manages leads and contacts per industry -- email tone &amp; talking points, qualification
@@ -1165,34 +1233,34 @@ export const IndustryPlaybooksView: React.FC = () => {
         </div>
         <button
           onClick={() => {
-            setEditingPlaybook(null);
+            setEditingAgent(null);
             setFormOpen(true);
           }}
           className="px-3.5 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm shrink-0"
         >
           <Plus className="w-3.5 h-3.5" />
-          New Playbook
+          New Agent
         </button>
       </div>
 
-      <PlaybooksIntroBanner />
+      <AgentsIntroBanner />
 
-      {industryPlaybooks.length === 0 ? (
+      {industryAgents.length === 0 ? (
         <div className="p-10 text-center bg-[#181b21] rounded-2xl border border-[#2d323f] text-slate-400 text-xs space-y-2">
           <BookMarked className="w-8 h-8 text-slate-600 mx-auto" />
           <p>
-            No industry playbooks yet. Create one for any industry you sell into -- AarPex will use it to tailor email
+            No industry agents yet. Create one for any industry you sell into -- AarPex will use it to tailor email
             copy, qualification, and follow-up automatically.
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {industryPlaybooks.map((p) => (
-            <PlaybookCard
+          {industryAgents.map((p) => (
+            <AgentCard
               key={p.id}
-              playbook={p}
+              agent={p}
               onEdit={() => {
-                setEditingPlaybook(p);
+                setEditingAgent(p);
                 setFormOpen(true);
               }}
             />
@@ -1201,11 +1269,11 @@ export const IndustryPlaybooksView: React.FC = () => {
       )}
 
       {isFormOpen && (
-        <PlaybookFormModal
-          editing={editingPlaybook}
+        <AgentFormModal
+          editing={editingAgent}
           onClose={() => {
             setFormOpen(false);
-            setEditingPlaybook(null);
+            setEditingAgent(null);
           }}
         />
       )}
