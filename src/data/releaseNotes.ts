@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.32.2",
+    date: "2026-09-27",
+    headline: "Industry Agents & Agent Approvals Now Actually Save",
+    tagline: "A database audit found eleven columns the app was writing that had never been created -- which silently blocked saving for entire features, even though everything looked right on screen.",
+    highlights: [
+      {
+        title: "Agents stop disappearing",
+        description: "Industry Agents could not be saved to the server at all, so any agent beyond the first vanished on reload. The missing columns behind that are now in place.",
+      },
+      {
+        title: "Approvals queue persists",
+        description: "Actions drafted by a running agent were being rejected by the database and never stored. They now save correctly, including for bulk-imported leads.",
+      },
+      {
+        title: "Audited end to end",
+        description: "Every synced table was checked field by field against the live database, so the same class of silent save failure is now accounted for rather than discovered one feature at a time.",
+      },
+    ],
+  },
+  {
     version: "1.32.1",
     date: "2026-09-27",
     headline: "Fixed: Custom Industries Not Matching Their Agent",

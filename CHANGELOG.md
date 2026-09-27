@@ -13,6 +13,19 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.32.2] - 2026-09-27
+
+### Fixed
+- **Schema drift repair -- the actual root cause of Industry Agents, Agent Approvals, and several other things silently not saving.** `tenantDataSync.ts`'s `toRow()` is fully mechanical: it snake_cases *every* field present on an app object and writes it to that entity's Supabase table. Nothing links `src/types.ts` to the real database schema, so any field added to an interface silently starts being written -- and if no migration ever added the matching column, PostgREST rejects **the entire row**, not just the unknown field. One missing column therefore breaks persistence for a whole table while the UI still looks correct, because the local React/localStorage write succeeds.
+- Audited every synced table by diffing each TypeScript interface against the columns the migrations actually create, then verified the result against the live database. Eleven columns were being written but had never been created. New `supabase/migrations/0016_schema_drift_repair.sql` adds them all:
+  - `industry_agents`: `product_id` (added with product linking in v1.27.0), `excluded_lead_ids` and `excluded_company_ids` (added with the Matching Businesses opt-out checkboxes in v1.28.0) -- these three are why Industry Agents could not save at all, so any agent beyond the first vanished on reload.
+  - `companies`: `client_category`. `leads`: `client_category`, `social_links`. `activities`: `lead_id`. `knowledge_base`: `linked_file_id`.
+- **Agent Approvals now save.** `agent_actions.lead_id`/`contact_id`/`product_id` were declared `uuid`, but the ids written to them are app record ids that are frequently not uuids (bulk-imported leads get ids shaped like `lead_imp_<timestamp>_<index>`), so Postgres rejected the insert outright (22P02) and the table sat permanently empty. None of the three are foreign keys, so they are now `text`.
+
+### Notes
+- Known remaining issue, deliberately not bundled into this release: every synced table still declares `id uuid primary key`, while `importLeadsFromSpreadsheet`, lead-to-company conversion, `addActivity`, `addTask`, `addComment`, and `addPipeline` all generate non-uuid text ids -- so those specific records can never sync regardless of which columns exist (visible as `tasks` sitting at 0 rows and `activities` at 4). Newer code paths correctly use `crypto.randomUUID()`. Resolving it means either widening those id columns to text or switching the app to uuids everywhere and remapping existing local ids plus every cross-reference pointing at them -- an architectural call with real data-migration consequences.
+- `public.email_campaigns` is altered by migrations 0004 and 0005 but is never created by any migration in the repo; it exists in the live database, so it was created outside this directory and its shape can't be verified from source control.
+
 ## [1.32.1] - 2026-09-27
 
 ### Fixed
