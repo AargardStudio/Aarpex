@@ -285,7 +285,29 @@ async function performSync(table: TenantTable, tenantId: string, rows: Array<Rec
     }
 
     const supabase = getSupabaseAuthClient();
-    const dbRows = rows.filter((r) => r && r.id).map((r) => toRow(table, tenantId, r));
+
+    // Collapse duplicate ids before upserting. Postgres refuses an
+    // `on conflict do update` whose batch touches the same row twice --
+    // "ON CONFLICT DO UPDATE command cannot affect row a second time"
+    // (a 500 from PostgREST, not a 400), which fails the entire chunk.
+    // Local state can legitimately end up holding two entries with one id:
+    // a lead converted to a company twice, a re-import that re-adds an
+    // existing record, or a merge that didn't drop its source row. Keeping
+    // the LAST occurrence matches the app's own precedence -- later entries
+    // are the more recently written ones.
+    const byId = new Map<string, Record<string, any>>();
+    let duplicateCount = 0;
+    for (const r of rows) {
+      if (!r || !r.id) continue;
+      if (byId.has(r.id)) duplicateCount += 1;
+      byId.set(r.id, r);
+    }
+    if (duplicateCount > 0) {
+      console.warn(
+        `[tenantDataSync] ${duplicateCount} duplicate ${table} id(s) collapsed before upsert -- local state holds the same id more than once.`
+      );
+    }
+    const dbRows = Array.from(byId.values()).map((r) => toRow(table, tenantId, r));
 
     if (dbRows.length > 0) {
       // A single bad row anywhere in the batch (a bulk import with one

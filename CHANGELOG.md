@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.32.6] - 2026-09-28
+
+### Fixed
+- **Duplicate ids in local state failed an entire table's sync with a 500.** Postgres refuses an `on conflict do update` whose batch touches the same row twice (`ON CONFLICT DO UPDATE command cannot affect row a second time`) -- which surfaces as a 500 from PostgREST rather than a 400, failing the whole chunk. Local state can legitimately hold two entries under one id: a lead converted to a company twice, a re-import that re-adds an existing record, or a merge that didn't drop its source row. `performSync` now collapses duplicates by id before upserting, keeping the last occurrence (matching the app's own precedence), and logs a warning naming the table and count so the underlying duplication is still visible rather than silently papered over.
+
 ## [1.32.5] - 2026-09-28
 
 ### Fixed
