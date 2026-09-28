@@ -29,10 +29,18 @@ import {
   Percent,
   Pencil,
   Check,
+  LayoutGrid,
+  Briefcase,
+  Receipt,
+  ListChecks,
+  Bot,
+  ShieldCheck,
+  Trash2,
 } from "lucide-react";
 import { apiFetch } from "../../lib/apiClient";
 import { sanitizeIndustryText } from "../../lib/industryMatch";
 import { INDUSTRIES } from "../../data/industries";
+import type { SocialLink, TaskPriority } from "../../types";
 
 interface AnalysisResult {
   qualificationScore: number;
@@ -88,9 +96,15 @@ export const LeadProfileDrawer: React.FC = () => {
     getAgentForIndustry,
     products,
     addAgentAction,
+    deals,
+    pipelines,
+    tasks,
+    invoices,
+    agentActions,
+    setActiveNav,
   } = useCRM();
 
-  const [activeTab, setActiveTab] = useState<"overview" | "timeline" | "ai" | "knowledge">("overview");
+  const [activeTab, setActiveTab] = useState<"360" | "overview" | "timeline" | "ai" | "knowledge">("overview");
   const [timelineChannelFilter, setTimelineChannelFilter] = useState<"all" | "Email" | "WhatsApp">("all");
   const [newActivityType, setNewActivityType] = useState<any>("Call");
   const [newActivityDesc, setNewActivityDesc] = useState("");
@@ -112,6 +126,32 @@ export const LeadProfileDrawer: React.FC = () => {
   const [isEditingIndustry, setIsEditingIndustry] = useState(false);
   const [industryDraft, setIndustryDraft] = useState("");
 
+  // Edit Profile mode -- covers every core Lead field besides industry
+  // (already independently editable above) and the system-managed fields
+  // (leadScore, createdDate, convertedDealId). Draft state is local and
+  // only committed to the CRM (in a single updateLead call) on Save;
+  // Cancel just discards it.
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileDraft, setProfileDraft] = useState<{
+    name: string;
+    company: string;
+    jobTitle: string;
+    email: string;
+    phone: string;
+    whatsapp: string;
+    website: string;
+    country: string;
+    city: string;
+    source: string;
+    priority: TaskPriority;
+    estimatedValue: number;
+    clientCategory: string;
+    notes: string;
+    tags: string[];
+    socialLinks: SocialLink[];
+  } | null>(null);
+  const [tagDraftText, setTagDraftText] = useState("");
+
   if (!selectedLeadId) return null;
   const lead = leads.find((l) => l.id === selectedLeadId);
   if (!lead) return null;
@@ -124,6 +164,25 @@ export const LeadProfileDrawer: React.FC = () => {
   const latestNextAction = leadActivities.find((a) => a.nextAction)?.nextAction || lead.nextFollowUp;
   const rating = getLeadRating(lead.leadScore);
   const agent = getAgentForIndustry(lead.industry);
+
+  // 360deg Profile tab data -- aggregates what's already scattered across
+  // Deals/Tasks/Invoices/Activities/Agent Approvals/Knowledge Base for this
+  // one lead, cross-referencing the same way DealsView resolves a stage's
+  // display name (pipeline lookup by pipelineId, then stage lookup by
+  // stageId within it).
+  const convertedDeal = lead.convertedDealId ? deals.find((d) => d.id === lead.convertedDealId) : undefined;
+  const convertedDealPipeline = convertedDeal ? pipelines.find((p) => p.id === convertedDeal.pipelineId) : undefined;
+  const convertedDealStage = convertedDealPipeline?.stages.find((s) => s.id === convertedDeal?.stageId);
+  const dealInvoices = convertedDeal ? invoices.filter((i) => i.dealId === convertedDeal.id) : [];
+  const dealInvoicesTotal = dealInvoices.reduce((sum, i) => sum + (i.total || 0), 0);
+  const dealTasks = convertedDeal ? tasks.filter((t) => t.dealId === convertedDeal.id) : [];
+  const dealTasksOpen = dealTasks.filter((t) => t.status !== "Completed" && t.status !== "Cancelled").length;
+  const dealTasksCompleted = dealTasks.filter((t) => t.status === "Completed").length;
+
+  const leadAgentActions = agentActions.filter((a) => a.leadId === lead.id);
+  const leadAgentActionsPending = leadAgentActions.filter((a) => a.status === "pending");
+  const leadAgentActionsApproved = leadAgentActions.filter((a) => a.status === "approved").length;
+  const leadAgentActionsRejected = leadAgentActions.filter((a) => a.status === "rejected").length;
 
   // Industry is the field Industry Agents match against to decide which
   // leads their AI agent works -- there was previously no way to set or
@@ -139,6 +198,91 @@ export const LeadProfileDrawer: React.FC = () => {
     if (industryDraft.trim()) updateLead(lead.id, { industry: sanitizeIndustryText(industryDraft) });
     setIsEditingIndustry(false);
   };
+  const handleStartEditProfile = () => {
+    setProfileDraft({
+      name: lead.name || "",
+      company: lead.company || "",
+      jobTitle: lead.jobTitle || "",
+      email: lead.email || "",
+      phone: lead.phone || "",
+      whatsapp: lead.whatsapp || "",
+      website: lead.website || "",
+      country: lead.country || "",
+      city: lead.city || "",
+      source: lead.source || "",
+      priority: lead.priority,
+      estimatedValue: lead.estimatedValue || 0,
+      clientCategory: lead.clientCategory || "",
+      notes: lead.notes || "",
+      tags: lead.tags || [],
+      socialLinks: lead.socialLinks || [],
+    });
+    setTagDraftText("");
+    setIsEditingProfile(true);
+  };
+  const handleCancelEditProfile = () => {
+    setIsEditingProfile(false);
+    setProfileDraft(null);
+    setTagDraftText("");
+  };
+  const handleSaveProfile = () => {
+    if (!profileDraft) return;
+    updateLead(lead.id, {
+      name: profileDraft.name.trim() || lead.name,
+      company: profileDraft.company.trim(),
+      jobTitle: profileDraft.jobTitle.trim(),
+      email: profileDraft.email.trim(),
+      phone: profileDraft.phone.trim(),
+      whatsapp: profileDraft.whatsapp.trim(),
+      website: profileDraft.website.trim(),
+      country: profileDraft.country.trim(),
+      city: profileDraft.city.trim(),
+      source: profileDraft.source.trim(),
+      priority: profileDraft.priority,
+      estimatedValue: Number(profileDraft.estimatedValue) || 0,
+      clientCategory: profileDraft.clientCategory.trim(),
+      notes: profileDraft.notes,
+      tags: profileDraft.tags,
+      socialLinks: profileDraft.socialLinks,
+    });
+    setIsEditingProfile(false);
+    setProfileDraft(null);
+    setTagDraftText("");
+  };
+  const handleAddDraftTag = () => {
+    const t = tagDraftText.trim();
+    if (!t || !profileDraft) return;
+    if (!profileDraft.tags.includes(t)) {
+      setProfileDraft({ ...profileDraft, tags: [...profileDraft.tags, t] });
+    }
+    setTagDraftText("");
+  };
+  const handleRemoveDraftTag = (tag: string) => {
+    if (!profileDraft) return;
+    setProfileDraft({ ...profileDraft, tags: profileDraft.tags.filter((t) => t !== tag) });
+  };
+  const handleAddDraftSocialLink = () => {
+    if (!profileDraft) return;
+    setProfileDraft({
+      ...profileDraft,
+      socialLinks: [
+        ...profileDraft.socialLinks,
+        { id: `sl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, platform: "", url: "" },
+      ],
+    });
+  };
+  const handleUpdateDraftSocialLink = (id: string, updates: Partial<SocialLink>) => {
+    if (!profileDraft) return;
+    setProfileDraft({
+      ...profileDraft,
+      socialLinks: profileDraft.socialLinks.map((s) => (s.id === id ? { ...s, ...updates } : s)),
+    });
+  };
+  const handleRemoveDraftSocialLink = (id: string) => {
+    if (!profileDraft) return;
+    setProfileDraft({ ...profileDraft, socialLinks: profileDraft.socialLinks.filter((s) => s.id !== id) });
+  };
+
   const candidateProduct =
     products.find(
       (p) => p.status === "Active" && (p.targetCriteria.industries.length === 0 || p.targetCriteria.industries.includes(lead.industry))
@@ -360,50 +504,283 @@ export const LeadProfileDrawer: React.FC = () => {
       : "bg-slate-100 text-slate-700 border-slate-200";
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-2xs animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/60 backdrop-blur-2xs animate-in fade-in duration-150">
       <div className="w-full max-w-3xl bg-white h-full shadow-2xl flex flex-col border-l border-slate-200 overflow-hidden animate-in slide-in-from-right duration-200">
         {/* Header */}
         <div className="p-6 border-b border-slate-200 bg-slate-50/70">
           <div className="flex items-start justify-between">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-600 to-cyan-600 text-white flex items-center justify-center font-bold text-xl shadow-md">
+            <div className="flex items-start gap-4 flex-1 min-w-0">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-600 to-cyan-600 text-white flex items-center justify-center font-bold text-xl shadow-md shrink-0">
                 {lead.name.charAt(0)}
               </div>
-              <div>
-                <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">{lead.name}</h2>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 ${ratingBadge}`}>
-                    {rating === "Hot" && <Flame className="w-2.5 h-2.5 fill-rose-600" />}
-                    {rating}
-                  </span>
-                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                    {lead.status}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 mt-2">
-                  <span>{lead.jobTitle || "No title on file"}</span>
-                  <span className="flex items-center gap-1">
-                    <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                    {lead.company || "No company on file"}
-                  </span>
-                  {lead.socialLinks && lead.socialLinks.length > 0 && (
-                    <span className="flex items-center gap-1.5">
-                      {lead.socialLinks.map((link) => {
-                        const { Icon, className } = socialIconFor(link.platform);
-                        return (
-                          <a key={link.id} href={link.url} target="_blank" rel="noreferrer" title={`${link.platform}: ${link.url}`} className={`${className} hover:opacity-70 transition-opacity`}>
-                            <Icon className="w-3.5 h-3.5" />
-                          </a>
-                        );
-                      })}
+              {!isEditingProfile ? (
+                <div className="min-w-0">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">{lead.name}</h2>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 ${ratingBadge}`}>
+                      {rating === "Hot" && <Flame className="w-2.5 h-2.5 fill-rose-600" />}
+                      {rating}
                     </span>
-                  )}
-                  <span className="text-slate-400">
-                    Rep: <strong>{lead.salesperson}</strong>
-                  </span>
-                  <span className="font-mono font-bold text-slate-700">${(lead.estimatedValue || 0).toLocaleString()}</span>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                      {lead.status}
+                    </span>
+                    <button
+                      onClick={handleStartEditProfile}
+                      className="text-slate-400 hover:text-indigo-600 p-1 rounded hover:bg-slate-200/60 transition-colors"
+                      title="Edit Profile"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 mt-2">
+                    <span>{lead.jobTitle || "No title on file"}</span>
+                    <span className="flex items-center gap-1">
+                      <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                      {lead.company || "No company on file"}
+                    </span>
+                    {lead.socialLinks && lead.socialLinks.length > 0 && (
+                      <span className="flex items-center gap-1.5">
+                        {lead.socialLinks.map((link) => {
+                          const { Icon, className } = socialIconFor(link.platform);
+                          return (
+                            <a key={link.id} href={link.url} target="_blank" rel="noreferrer" title={`${link.platform}: ${link.url}`} className={`${className} hover:opacity-70 transition-opacity`}>
+                              <Icon className="w-3.5 h-3.5" />
+                            </a>
+                          );
+                        })}
+                      </span>
+                    )}
+                    <span className="text-slate-400">
+                      Rep: <strong>{lead.salesperson}</strong>
+                    </span>
+                    <span className="font-mono font-bold text-slate-700">${(lead.estimatedValue || 0).toLocaleString()}</span>
+                  </div>
                 </div>
-              </div>
+              ) : profileDraft ? (
+                <div className="min-w-0 flex-1 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Edit Profile</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={handleSaveProfile}
+                        className="px-2.5 py-1 bg-indigo-600 text-white rounded text-[11px] font-semibold flex items-center gap-1"
+                        title="Save"
+                      >
+                        <Check className="w-3 h-3" /> Save
+                      </button>
+                      <button
+                        onClick={handleCancelEditProfile}
+                        className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded text-[11px] font-semibold"
+                        title="Cancel"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    <label className="text-[11px] text-slate-500">
+                      Name
+                      <input
+                        type="text"
+                        value={profileDraft.name}
+                        onChange={(e) => setProfileDraft({ ...profileDraft, name: e.target.value })}
+                        className="mt-0.5 w-full px-2 py-1 border border-slate-300 rounded text-xs text-slate-800"
+                      />
+                    </label>
+                    <label className="text-[11px] text-slate-500">
+                      Company
+                      <input
+                        type="text"
+                        value={profileDraft.company}
+                        onChange={(e) => setProfileDraft({ ...profileDraft, company: e.target.value })}
+                        className="mt-0.5 w-full px-2 py-1 border border-slate-300 rounded text-xs text-slate-800"
+                      />
+                    </label>
+                    <label className="text-[11px] text-slate-500">
+                      Job Title
+                      <input
+                        type="text"
+                        value={profileDraft.jobTitle}
+                        onChange={(e) => setProfileDraft({ ...profileDraft, jobTitle: e.target.value })}
+                        className="mt-0.5 w-full px-2 py-1 border border-slate-300 rounded text-xs text-slate-800"
+                      />
+                    </label>
+                    <label className="text-[11px] text-slate-500">
+                      Email
+                      <input
+                        type="email"
+                        value={profileDraft.email}
+                        onChange={(e) => setProfileDraft({ ...profileDraft, email: e.target.value })}
+                        className="mt-0.5 w-full px-2 py-1 border border-slate-300 rounded text-xs text-slate-800"
+                      />
+                    </label>
+                    <label className="text-[11px] text-slate-500">
+                      Phone
+                      <input
+                        type="text"
+                        value={profileDraft.phone}
+                        onChange={(e) => setProfileDraft({ ...profileDraft, phone: e.target.value })}
+                        className="mt-0.5 w-full px-2 py-1 border border-slate-300 rounded text-xs text-slate-800"
+                      />
+                    </label>
+                    <label className="text-[11px] text-slate-500">
+                      WhatsApp
+                      <input
+                        type="text"
+                        value={profileDraft.whatsapp}
+                        onChange={(e) => setProfileDraft({ ...profileDraft, whatsapp: e.target.value })}
+                        className="mt-0.5 w-full px-2 py-1 border border-slate-300 rounded text-xs text-slate-800"
+                      />
+                    </label>
+                    <label className="text-[11px] text-slate-500">
+                      Website
+                      <input
+                        type="text"
+                        value={profileDraft.website}
+                        onChange={(e) => setProfileDraft({ ...profileDraft, website: e.target.value })}
+                        className="mt-0.5 w-full px-2 py-1 border border-slate-300 rounded text-xs text-slate-800"
+                      />
+                    </label>
+                    <label className="text-[11px] text-slate-500">
+                      Country
+                      <input
+                        type="text"
+                        value={profileDraft.country}
+                        onChange={(e) => setProfileDraft({ ...profileDraft, country: e.target.value })}
+                        className="mt-0.5 w-full px-2 py-1 border border-slate-300 rounded text-xs text-slate-800"
+                      />
+                    </label>
+                    <label className="text-[11px] text-slate-500">
+                      City
+                      <input
+                        type="text"
+                        value={profileDraft.city}
+                        onChange={(e) => setProfileDraft({ ...profileDraft, city: e.target.value })}
+                        className="mt-0.5 w-full px-2 py-1 border border-slate-300 rounded text-xs text-slate-800"
+                      />
+                    </label>
+                    <label className="text-[11px] text-slate-500">
+                      Source
+                      <input
+                        type="text"
+                        value={profileDraft.source}
+                        onChange={(e) => setProfileDraft({ ...profileDraft, source: e.target.value })}
+                        className="mt-0.5 w-full px-2 py-1 border border-slate-300 rounded text-xs text-slate-800"
+                      />
+                    </label>
+                    <label className="text-[11px] text-slate-500">
+                      Priority
+                      <select
+                        value={profileDraft.priority}
+                        onChange={(e) => setProfileDraft({ ...profileDraft, priority: e.target.value as TaskPriority })}
+                        className="mt-0.5 w-full px-2 py-1 border border-slate-300 rounded text-xs text-slate-800 bg-white"
+                      >
+                        <option>Low</option>
+                        <option>Medium</option>
+                        <option>High</option>
+                        <option>Urgent</option>
+                      </select>
+                    </label>
+                    <label className="text-[11px] text-slate-500">
+                      Estimated Value
+                      <input
+                        type="number"
+                        value={profileDraft.estimatedValue}
+                        onChange={(e) => setProfileDraft({ ...profileDraft, estimatedValue: Number(e.target.value) })}
+                        className="mt-0.5 w-full px-2 py-1 border border-slate-300 rounded text-xs text-slate-800"
+                      />
+                    </label>
+                    <label className="text-[11px] text-slate-500">
+                      Client Category
+                      <input
+                        type="text"
+                        value={profileDraft.clientCategory}
+                        onChange={(e) => setProfileDraft({ ...profileDraft, clientCategory: e.target.value })}
+                        className="mt-0.5 w-full px-2 py-1 border border-slate-300 rounded text-xs text-slate-800"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="block text-[11px] text-slate-500">
+                    Notes
+                    <textarea
+                      value={profileDraft.notes}
+                      onChange={(e) => setProfileDraft({ ...profileDraft, notes: e.target.value })}
+                      rows={2}
+                      className="mt-0.5 w-full px-2 py-1 border border-slate-300 rounded text-xs text-slate-800"
+                    />
+                  </label>
+
+                  <div>
+                    <span className="text-[11px] text-slate-500 block mb-1">Tags</span>
+                    <div className="flex flex-wrap gap-1.5 mb-1.5">
+                      {profileDraft.tags.map((tag) => (
+                        <span key={tag} className="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-600 rounded-md text-[11px] flex items-center gap-1">
+                          #{tag}
+                          <button onClick={() => handleRemoveDraftTag(tag)} className="text-slate-400 hover:text-rose-500">
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        placeholder="Add tag"
+                        value={tagDraftText}
+                        onChange={(e) => setTagDraftText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddDraftTag();
+                          }
+                        }}
+                        className="px-2 py-1 border border-slate-300 rounded text-xs flex-1"
+                      />
+                      <button
+                        onClick={handleAddDraftTag}
+                        className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded text-[11px] font-semibold flex items-center gap-1"
+                      >
+                        <Plus className="w-3 h-3" /> Add
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] text-slate-500 block mb-1">Social Links</span>
+                    <div className="space-y-1.5">
+                      {profileDraft.socialLinks.map((link) => (
+                        <div key={link.id} className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            placeholder="Platform"
+                            value={link.platform}
+                            onChange={(e) => handleUpdateDraftSocialLink(link.id, { platform: e.target.value })}
+                            className="w-28 px-2 py-1 border border-slate-300 rounded text-xs"
+                          />
+                          <input
+                            type="text"
+                            placeholder="URL"
+                            value={link.url}
+                            onChange={(e) => handleUpdateDraftSocialLink(link.id, { url: e.target.value })}
+                            className="flex-1 px-2 py-1 border border-slate-300 rounded text-xs"
+                          />
+                          <button onClick={() => handleRemoveDraftSocialLink(link.id)} className="text-slate-400 hover:text-rose-500">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={handleAddDraftSocialLink}
+                      className="mt-1.5 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded text-[11px] font-semibold flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" /> Add Social Link
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             {/* Acquisition action buttons -- Email + WhatsApp only, no SMS */}
@@ -461,6 +838,7 @@ export const LeadProfileDrawer: React.FC = () => {
         {/* Tabs */}
         <div className="flex border-b border-slate-200 px-6 bg-white overflow-x-auto">
           {[
+            { id: "360", label: "360° Profile", icon: LayoutGrid },
             { id: "overview", label: "Overview", icon: Building2 },
             { id: "timeline", label: `Activity (${leadActivities.length})`, icon: CalendarCheck },
             { id: "ai", label: "AI Analysis", icon: Sparkles, badge: "AI" },
@@ -490,6 +868,282 @@ export const LeadProfileDrawer: React.FC = () => {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 text-xs text-slate-700 bg-slate-50/40 custom-scrollbar">
+          {activeTab === "360" && (
+            <div className="space-y-5">
+              {/* Contact & Identity */}
+              <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-2xs space-y-4">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-slate-400" /> Contact &amp; Identity
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Name</span>
+                    <span className="font-medium text-slate-800">{lead.name || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Company</span>
+                    <span className="font-medium text-slate-800">{lead.company || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Job Title</span>
+                    <span className="font-medium text-slate-800">{lead.jobTitle || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Email</span>
+                    <span className="font-medium text-slate-800">{lead.email || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Phone</span>
+                    <span className="font-medium text-slate-800">{lead.phone || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">WhatsApp</span>
+                    <span className="font-medium text-slate-800">{lead.whatsapp || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Website</span>
+                    <span className="font-medium text-slate-800">{lead.website || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Location</span>
+                    <span className="font-medium text-slate-800">{[lead.city, lead.country].filter(Boolean).join(", ") || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Source</span>
+                    <span className="font-medium text-slate-800">{lead.source || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Client Category</span>
+                    <span className="font-medium text-slate-800">{lead.clientCategory || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Industry</span>
+                    <span className="font-medium text-slate-800">{lead.industry || "—"}</span>
+                  </div>
+                </div>
+                {lead.tags && lead.tags.length > 0 && (
+                  <div>
+                    <span className="text-slate-400 block text-[11px] mb-1.5">Tags</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {lead.tags.map((tag) => (
+                        <span key={tag} className="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-600 rounded-md text-[11px]">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {lead.socialLinks && lead.socialLinks.length > 0 && (
+                  <div>
+                    <span className="text-slate-400 block text-[11px] mb-1.5">Social Links</span>
+                    <div className="flex flex-wrap gap-3">
+                      {lead.socialLinks.map((link) => {
+                        const { Icon, className } = socialIconFor(link.platform);
+                        return (
+                          <a
+                            key={link.id}
+                            href={link.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            title={`${link.platform}: ${link.url}`}
+                            className={`flex items-center gap-1 text-[11px] font-medium ${className} hover:opacity-70 transition-opacity`}
+                          >
+                            <Icon className="w-3.5 h-3.5" />
+                            {link.platform || link.url}
+                          </a>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Deal & Revenue */}
+              <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-2xs space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Briefcase className="w-3.5 h-3.5 text-slate-400" /> Deal &amp; Revenue
+                </h3>
+                {convertedDeal ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div>
+                        <span className="text-slate-400 block text-[11px]">Stage</span>
+                        <span className="font-medium text-slate-800">{convertedDealStage?.name || "—"}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[11px]">Deal Value</span>
+                        <span className="font-medium text-slate-800 font-mono">
+                          {convertedDeal.currency} {(convertedDeal.dealValue || 0).toLocaleString()}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[11px]">Status</span>
+                        <span className="font-medium text-slate-800">{convertedDeal.status}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[11px]">Priority</span>
+                        <span className="font-medium text-slate-800">{convertedDeal.priority}</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                      <div className="p-2.5 bg-slate-50/70 border border-slate-200 rounded-lg flex items-center gap-2">
+                        <Receipt className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <div>
+                          <div className="text-slate-400 text-[10.5px]">Invoices</div>
+                          <div className="font-medium text-slate-800">
+                            {dealInvoices.length} · {convertedDeal.currency} {dealInvoicesTotal.toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-2.5 bg-slate-50/70 border border-slate-200 rounded-lg flex items-center gap-2">
+                        <ListChecks className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <div>
+                          <div className="text-slate-400 text-[10.5px]">Tasks</div>
+                          <div className="font-medium text-slate-800">
+                            {dealTasksOpen} open · {dealTasksCompleted} completed
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-5 space-y-2.5">
+                    <p className="text-slate-400">Not yet converted to a Deal.</p>
+                    <button
+                      onClick={handleConvert}
+                      className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5"
+                    >
+                      <span>Convert Lead</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Engagement */}
+              <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <CalendarCheck className="w-3.5 h-3.5 text-slate-400" /> Engagement
+                  </h3>
+                  <span className="text-[11px] text-slate-400">{leadActivities.length} total activities</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Last Contact</span>
+                    <span className="font-medium text-slate-800">{lead.lastContact || "—"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[11px]">Next Follow-Up</span>
+                    <span className="font-medium text-slate-800">{lead.nextFollowUp || "—"}</span>
+                  </div>
+                </div>
+                <div className="space-y-2 pt-2 border-t border-slate-100">
+                  {leadActivities.slice(0, 3).map((act) => (
+                    <div key={act.id} className="p-2.5 bg-slate-50/70 border border-slate-200 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-slate-700">{act.type}</span>
+                        <span className="text-[10px] text-slate-400">{act.date}</span>
+                      </div>
+                      <p className="text-slate-600 mt-0.5">{act.description}</p>
+                    </div>
+                  ))}
+                  {leadActivities.length === 0 && <div className="text-center text-slate-400 py-3">No activity logged yet for this lead.</div>}
+                </div>
+              </div>
+
+              {/* Industry Agent */}
+              <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-2xs space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Bot className="w-3.5 h-3.5 text-slate-400" /> Industry Agent
+                </h3>
+                {agent ? (
+                  <div className="flex items-center justify-between p-2.5 bg-slate-50/70 border border-slate-200 rounded-lg">
+                    <div>
+                      <div className="font-medium text-slate-800">{agent.industry}</div>
+                      <div className="text-[11px] text-slate-400">Matches this lead's industry</div>
+                    </div>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        agent.isActive ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200"
+                      }`}
+                    >
+                      {agent.isActive ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-slate-400">No matching Industry Agent is currently active for this lead's industry.</p>
+                )}
+
+                <div className="pt-2 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-slate-400" /> Agent Approvals for this lead
+                    </span>
+                    <div className="flex items-center gap-1.5 text-[10px]">
+                      <span className="px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                        {leadAgentActionsPending.length} pending
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        {leadAgentActionsApproved} approved
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                        {leadAgentActionsRejected} rejected
+                      </span>
+                    </div>
+                  </div>
+                  {leadAgentActionsPending.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {leadAgentActionsPending.slice(0, 3).map((a) => (
+                        <div key={a.id} className="flex items-center justify-between p-2 bg-slate-50/70 border border-slate-200 rounded-lg">
+                          <span className="text-slate-700 truncate">{a.subject}</span>
+                          <button
+                            onClick={() => setActiveNav("Agent Approvals")}
+                            className="text-indigo-600 font-semibold hover:underline text-[11px] shrink-0 ml-2"
+                          >
+                            Review →
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    leadAgentActions.length > 0 && (
+                      <button onClick={() => setActiveNav("Agent Approvals")} className="text-indigo-600 font-semibold hover:underline text-[11px]">
+                        View all in Agent Approvals →
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+
+              {/* Knowledge Base */}
+              <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <BookMarked className="w-3.5 h-3.5 text-slate-400" /> Knowledge Base
+                  </h3>
+                  <span className="text-[11px] text-slate-400">{linkedKnowledge.length} entries</span>
+                </div>
+                {linkedKnowledge.length === 0 ? (
+                  <p className="text-slate-400">No knowledge base entries linked to this lead yet.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {linkedKnowledge.map((entry) => (
+                      <button
+                        key={entry.id}
+                        onClick={() => setActiveTab("knowledge")}
+                        className="w-full text-left p-2.5 bg-slate-50/70 border border-slate-200 rounded-lg hover:border-indigo-300 transition-colors flex items-center justify-between gap-2"
+                      >
+                        <span className="text-slate-700 font-medium truncate">{entry.title}</span>
+                        <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {activeTab === "overview" && (
             <div className="space-y-5">
               <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-2xs space-y-4">

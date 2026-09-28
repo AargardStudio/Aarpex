@@ -817,7 +817,8 @@ app.post("/api/ai/email-campaign", async (req, res) => {
 - Tone to use: ${agent.tone || "professional and direct"}
 - Talking points to weave in: ${(agent.talkingPoints || []).join(", ") || "none specified"}
 - Common pain points in this industry to speak to: ${(agent.painPoints || []).join(", ") || "none specified"}
-${agent.objectionNotes ? `- Objection handling notes: ${agent.objectionNotes}` : ""}`
+${agent.objectionNotes ? `- Objection handling notes: ${agent.objectionNotes}` : ""}
+${agent.customInstructions ? `- Additional instructions: ${agent.customInstructions}` : ""}`
       : "";
 
     const prompt = `You are a world-class B2B email marketing strategist writing an outbound email SEQUENCE for ${senderCompany || "a B2B company"}.
@@ -1071,7 +1072,8 @@ app.post("/api/ai/personalized-email", async (req, res) => {
 - Tone: ${agent.tone || "professional and direct"}
 - Talking points to weave in: ${(agent.talkingPoints || []).join(", ") || "none specified"}
 - Common pain points to speak to: ${(agent.painPoints || []).join(", ") || "none specified"}
-${agent.objectionNotes ? `- Objection handling notes: ${agent.objectionNotes}` : ""}`
+${agent.objectionNotes ? `- Objection handling notes: ${agent.objectionNotes}` : ""}
+${agent.customInstructions ? `- Additional instructions: ${agent.customInstructions}` : ""}`
       : "";
     const productLine = productName
       ? `\n\nCenter this email specifically around the following product/service rather than speaking generically: "${productName}"${

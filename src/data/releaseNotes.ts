@@ -23,6 +23,34 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.2.0",
+    date: "2026-09-28",
+    headline: "Full Lead Editing, a 360° Profile, and Smarter Agents",
+    tagline: "Edit any lead in place, see everything connected to it on one screen, and take direct control of your Industry Agents.",
+    highlights: [
+      {
+        title: "Edit any lead's details",
+        description: "Name, company, contact info, priority, value, notes, tags, and social links -- all editable right from the lead's profile with one click.",
+      },
+      {
+        title: "360° Customer Profile",
+        description: "One tab rolling up a lead's deal, invoices, tasks, activity history, matching Industry Agent, and Knowledge Base entries.",
+      },
+      {
+        title: "Pick an industry from a dropdown",
+        description: "Industry Agents now use a proper dropdown of your existing industries, with an option to type a new one.",
+      },
+      {
+        title: "Custom instructions for your agents",
+        description: "Give any Industry Agent free-text guidance that gets folded into every AI draft it writes, on top of tone and talking points.",
+      },
+      {
+        title: "Run an agent on demand",
+        description: "Don't wait for the next automatic cycle -- click \"Run Now\" on any agent, or \"Check All Agents Now\" to run them all immediately.",
+      },
+    ],
+  },
+  {
     version: "2.1.0",
     date: "2026-09-28",
     headline: "Bulk Actions Everywhere",

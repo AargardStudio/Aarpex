@@ -388,6 +388,11 @@ export interface IndustryAgent {
   // Lead qualification / scoring guidance -- free-text guidance fed into the
   // AI qualification prompt, not a rigid formula, so it stays flexible.
   qualificationGuidance?: string;
+  // Free-text catch-all behaviour customization layered on top of
+  // tone/talkingPoints/painPoints/objectionNotes -- for anything those
+  // don't cover, e.g. "always mention our 24/7 support", "never discuss
+  // pricing before qualifying budget", "keep emails under 100 words".
+  customInstructions?: string;
   // Follow-up cadence & channel defaults
   preferredChannel: PreferredOutreachChannel;
   followUpFrequencyDays: number;

@@ -13,6 +13,18 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-09-28
+
+### Added
+- **Lead editing.** Every core Lead field can now be edited in place from the profile drawer -- name, company, job title, email, phone, WhatsApp, website, country, city, source, priority, estimated value, client category, notes, tags, and social links -- via a new pencil button next to the lead's name that switches the header into an edit form. Save writes every changed field in a single update; Cancel discards the draft. Status is intentionally left out (it's still changed from the kanban/table status control), and industry, lead score, created date, and the converted-deal link are read-only here, unchanged from before.
+- **360° Customer Profile tab on the Lead drawer**, first in the tab order: one screen rolling up everything connected to a lead -- contact & identity, the linked deal's stage/value/status plus its invoice and task counts (or a "Convert Lead" prompt if it hasn't converted yet), engagement (activity count, 3 most recent, last contact / next follow-up), the matching Industry Agent and this lead's pending/approved/rejected agent actions (with a jump to Agent Approvals), and linked Knowledge Base entries.
+- **Industry dropdown in Industry Agents.** The industry field is now a real dropdown of every existing industry value instead of a free-text box with autocomplete suggestions, plus an "Other (type your own)..." option that reveals a text field for a new industry. Editing an agent that already has a custom industry opens straight into that mode.
+- **Industry Agent behavior customization.** Agents now have a free-text "Custom Instructions" field, layered into every AI draft prompt (personalized emails, negotiation offers) alongside the existing tone/talking points/pain points/objection-handling guidance, for anything those structured fields don't cover.
+- **Instant / manual agent trigger.** Each Industry Agent card has a "Run Now" button that checks that agent's leads immediately instead of waiting for the automatic 10-minute cycle (only requires the agent to be active, not auto-run-enabled), plus a page-level "Check All Agents Now" button. Cards show a "Last checked Xm ago" readout. The existing automatic scan (15s after load, then every 10 minutes for active + auto-run agents) is unchanged; manual and automatic runs share the same single-flight guard so they can't overlap.
+
+### Fixed
+- **Grey/inconsistent overlay when opening a lead profile.** The drawer's backdrop used `bg-slate-900/40`, an opacity variant not covered by the app's global dark-overlay override, so it rendered as Tailwind's lighter native color instead of matching every other modal/drawer in the app. Now uses `bg-slate-900/60`, the same covered variant used elsewhere, for a consistent dark overlay.
+
 ## [2.1.0] - 2026-09-28
 
 ### Added

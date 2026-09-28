@@ -304,13 +304,23 @@ interface CRMContextType {
   bulkSetIndustryAgentActive: (ids: string[], isActive: boolean) => void;
   bulkDeleteIndustryAgents: (ids: string[]) => void;
   getAgentForIndustry: (industry: string | undefined) => IndustryAgent | undefined;
-  // Honest status for the autonomous scan (see runAgentScan below): when it
+  // Honest status for the autonomous scan (see runAgentScanForAgents below): when it
   // last actually ran in this browser tab, and whether one is running right
   // now. There is no server-side scheduler, so this is the ONLY source of
   // truth for "is this actually being monitored" -- the UI must never claim
   // continuous monitoring beyond what these two fields can support.
   lastAgentScanAt: string | null;
   isAgentScanRunning: boolean;
+  // Manual "Run Now" trigger -- reuses the exact same scan logic as the
+  // automatic interval (see runAgentScanForAgents in the provider), but
+  // lets a user force a scan on demand instead of waiting for the next
+  // 10-minute tick. With an agentId, scans only that agent (still requires
+  // it to be isActive, but -- unlike the automatic interval -- does NOT
+  // require autoRunEnabled, since manually clicking "Run Now" is itself
+  // the explicit intent). With no agentId, sweeps every isActive agent
+  // regardless of autoRunEnabled. No-ops (and resolves to false) if the
+  // targeted agent is paused, or if a scan is already in flight.
+  runAgentScanNow: (agentId?: string) => Promise<boolean>;
 
   // Agent Approvals -- the human-in-the-loop queue every autonomous or
   // negotiation action proposes into before anything reaches a prospect.
@@ -732,16 +742,32 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   });
 
-  useEffect(() => {
-    if (!activeTenantId) return;
+  // Tracks isAgentScanRunning synchronously alongside the state value --
+  // runAgentScanNow (below) needs to check "is a scan already in flight"
+  // at call time, before its own async work starts, and reading state
+  // directly in a plain (non-effect) callback can be stale.
+  const isAgentScanRunningRef = React.useRef(false);
+  const setScanRunning = (v: boolean) => {
+    isAgentScanRunningRef.current = v;
+    setIsAgentScanRunning(v);
+  };
 
-    const runAgentScan = async () => {
-      setIsAgentScanRunning(true);
-      setLastAgentScanAt(new Date().toISOString());
+  // Shared scan implementation -- runs the exact same follow-up-drafting /
+  // reply-detection pass against whatever list of agents it's given.
+  // Used by both the automatic interval below (which always passes
+  // isActive && autoRunEnabled agents) and runAgentScanNow (the manual
+  // "Run Now" trigger, which relaxes the autoRunEnabled requirement).
+  // Reads the rest of its working state (leads, activities, knowledge
+  // base, tenant, user, products) off agentScanStateRef so it never goes
+  // stale without needing to be re-created on every state change.
+  const runAgentScanForAgents = React.useCallback(async (targetAgents: IndustryAgent[]) => {
+    if (targetAgents.length === 0) return;
+    setScanRunning(true);
+    setLastAgentScanAt(new Date().toISOString());
+    try {
       const {
         leads: curLeads,
         activities: curActivities,
-        industryAgents: curAgents,
         agentActions: curAgentActions,
         knowledgeBase: curKnowledge,
         activeTenant: curTenant,
@@ -749,11 +775,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         products: curProducts,
       } = agentScanStateRef.current;
 
-      const autoAgents = curAgents.filter((p) => p.isActive && p.autoRunEnabled);
-      if (autoAgents.length === 0) {
-        setIsAgentScanRunning(false);
-        return;
-      }
+      const autoAgents = targetAgents;
 
       // Auto-extracted knowledge base -- for industries running on autopilot,
       // the agent builds each lead's individual "AI-Extracted Summary" itself
@@ -1011,18 +1033,66 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ...prev,
         ]);
       }
-      setIsAgentScanRunning(false);
+
+      // Wire up lastScanAt -- stamp every agent this pass actually covered
+      // with the time it ran, in a single batched setIndustryAgents update
+      // (rather than one updateIndustryAgent call per agent) so scanning
+      // several agents in one pass doesn't trigger N separate re-renders/
+      // syncs, same principle as the bulk-action helpers above.
+      const scannedIds = new Set(autoAgents.map((a) => a.id));
+      const scannedAt = new Date().toISOString();
+      setIndustryAgents((prev) =>
+        prev.map((p) => (scannedIds.has(p.id) ? { ...p, lastScanAt: scannedAt, updatedAt: scannedAt } : p))
+      );
+    } finally {
+      setScanRunning(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!activeTenantId) return;
+
+    const runAutoScan = () => {
+      const { industryAgents: curAgents } = agentScanStateRef.current;
+      const autoAgents = curAgents.filter((p) => p.isActive && p.autoRunEnabled);
+      void runAgentScanForAgents(autoAgents);
     };
 
     // Run once shortly after mount/tenant switch, then on a slow interval --
     // this hits AI + IMAP endpoints, so it deliberately doesn't run often.
-    const initialTimer = setTimeout(runAgentScan, 15000);
-    const interval = setInterval(runAgentScan, 10 * 60 * 1000);
+    const initialTimer = setTimeout(runAutoScan, 15000);
+    const interval = setInterval(runAutoScan, 10 * 60 * 1000);
     return () => {
       clearTimeout(initialTimer);
       clearInterval(interval);
     };
-  }, [activeTenantId]);
+  }, [activeTenantId, runAgentScanForAgents]);
+
+  // Manual "Run Now" trigger -- see the CRMContextType field comment for
+  // full behavior. Single-flight with the automatic interval: both paths
+  // share isAgentScanRunningRef, so a manual click while either kind of
+  // scan is already running is a no-op (resolves false) rather than
+  // overlapping two scans.
+  const runAgentScanNow = React.useCallback(
+    async (agentId?: string): Promise<boolean> => {
+      if (isAgentScanRunningRef.current) return false;
+      const { industryAgents: curAgents } = agentScanStateRef.current;
+
+      let targets: IndustryAgent[];
+      if (agentId) {
+        const agent = curAgents.find((a) => a.id === agentId);
+        if (!agent || !agent.isActive) return false;
+        targets = [agent];
+      } else {
+        targets = curAgents.filter((a) => a.isActive);
+      }
+      if (targets.length === 0) return false;
+
+      await runAgentScanForAgents(targets);
+      return true;
+    },
+    [runAgentScanForAgents]
+  );
 
   // Best-effort: flush any still-pending (debounced) Supabase table syncs
   // the moment the tab is hidden (switched away from, closed, or the
@@ -3044,6 +3114,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         getAgentForIndustry,
         lastAgentScanAt,
         isAgentScanRunning,
+        runAgentScanNow,
 
         agentActions,
         addAgentAction,

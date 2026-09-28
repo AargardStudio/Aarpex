@@ -27,6 +27,7 @@ import {
   Radio,
   Inbox as InboxIcon,
   AlertTriangle,
+  Zap,
 } from "lucide-react";
 import { IndustryAgent, PreferredOutreachChannel, AgentAction, AIProvider } from "../../types";
 import { INDUSTRIES } from "../../data/industries";
@@ -84,6 +85,7 @@ const emptyDraft = (): Omit<IndustryAgent, "id" | "createdAt" | "updatedAt" | "c
   talkingPoints: [],
   painPoints: [],
   objectionNotes: "",
+  customInstructions: "",
   qualificationGuidance: "",
   preferredChannel: "Email",
   followUpFrequencyDays: 7,
@@ -189,6 +191,7 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
           talkingPoints: editing.talkingPoints,
           painPoints: editing.painPoints,
           objectionNotes: editing.objectionNotes || "",
+          customInstructions: editing.customInstructions || "",
           qualificationGuidance: editing.qualificationGuidance || "",
           preferredChannel: editing.preferredChannel,
           followUpFrequencyDays: editing.followUpFrequencyDays,
@@ -203,6 +206,14 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
       : emptyDraft()
   );
   const [isSaving, setIsSaving] = useState(false);
+  // Whether the Industry field is in "type your own" mode -- the select's
+  // real option list is INDUSTRIES plus a synthetic "Other" entry, so an
+  // agent whose industry is already a custom value (not on the standard
+  // list) needs to open in custom-input mode too, rather than silently
+  // resetting to the first INDUSTRIES option.
+  const [customIndustryMode, setCustomIndustryMode] = useState<boolean>(
+    () => !!draft.industry && !INDUSTRIES.includes(draft.industry)
+  );
   const [matchSearch, setMatchSearch] = useState("");
   const [matchFilter, setMatchFilter] = useState<"all" | "companies" | "leads">("all");
 
@@ -377,19 +388,40 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-slate-300 font-semibold mb-1">Industry *</label>
-              <input
-                type="text"
-                list="agent-industry-suggestions"
-                value={draft.industry}
-                onChange={(e) => setDraft((p) => ({ ...p, industry: e.target.value }))}
-                placeholder="e.g. Healthcare & Wellness"
+              <select
+                value={customIndustryMode ? "__custom__" : draft.industry}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "__custom__") {
+                    setCustomIndustryMode(true);
+                    setDraft((p) => ({ ...p, industry: "" }));
+                  } else {
+                    setCustomIndustryMode(false);
+                    setDraft((p) => ({ ...p, industry: val }));
+                  }
+                }}
                 className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
-              />
-              <datalist id="agent-industry-suggestions">
+              >
+                <option value="" disabled>
+                  Select an industry…
+                </option>
                 {INDUSTRIES.map((ind) => (
-                  <option key={ind} value={ind} />
+                  <option key={ind} value={ind}>
+                    {ind}
+                  </option>
                 ))}
-              </datalist>
+                <option value="__custom__">Other (type your own)…</option>
+              </select>
+              {customIndustryMode && (
+                <input
+                  type="text"
+                  autoFocus
+                  value={draft.industry}
+                  onChange={(e) => setDraft((p) => ({ ...p, industry: e.target.value }))}
+                  placeholder="e.g. Healthcare & Wellness"
+                  className="w-full mt-2 px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+                />
+              )}
               {duplicateIndustry && (
                 <p className="text-rose-400 mt-1">A agent for this industry already exists -- edit that one instead.</p>
               )}
@@ -415,7 +447,10 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
                           <button
                             key={u.raw}
                             type="button"
-                            onClick={() => setDraft((p) => ({ ...p, industry: u.raw }))}
+                            onClick={() => {
+                              setCustomIndustryMode(!INDUSTRIES.includes(u.raw));
+                              setDraft((p) => ({ ...p, industry: u.raw }));
+                            }}
                             className={`px-2 py-1 rounded-md border text-[11px] transition-colors ${
                               isCurrent
                                 ? "bg-teal-500/15 border-teal-500/40 text-teal-300"
@@ -862,6 +897,18 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
                 className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg resize-none focus:outline-none focus:border-teal-400"
               />
             </div>
+            <div>
+              <label className="block text-slate-400 font-semibold mb-1 flex items-center gap-1">
+                <Sparkles className="w-3 h-3" /> Additional / custom instructions
+              </label>
+              <textarea
+                rows={2}
+                value={draft.customInstructions}
+                onChange={(e) => setDraft((p) => ({ ...p, customInstructions: e.target.value }))}
+                placeholder='e.g. "Always mention our 24/7 support", "never discuss pricing before qualifying budget", "keep emails under 100 words"'
+                className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg resize-none focus:outline-none focus:border-teal-400"
+              />
+            </div>
           </div>
 
           {/* Qualification guidance */}
@@ -1077,7 +1124,8 @@ const AgentCard: React.FC<{
   selected: boolean;
   onToggleSelected: () => void;
 }> = ({ agent, onEdit, selected, onToggleSelected }) => {
-  const { deleteIndustryAgent, updateIndustryAgent, leads, rawCompanies, products, agentActions, lastAgentScanAt, isAgentScanRunning, setActiveNav } = useCRM() as any;
+  const { deleteIndustryAgent, updateIndustryAgent, leads, rawCompanies, products, agentActions, lastAgentScanAt, isAgentScanRunning, runAgentScanNow, setActiveNav } = useCRM() as any;
+  const [isRunningNow, setIsRunningNow] = useState(false);
   const linkedProduct = agent.productId ? products.find((p: any) => p.id === agent.productId) : null;
   const ChannelIcon = channelIcon(agent.preferredChannel);
   const industryLc = normalizeIndustry(agent.industry);
@@ -1104,6 +1152,16 @@ const AgentCard: React.FC<{
       }
     }
     updateIndustryAgent(agent.id, { isActive: !agent.isActive });
+  };
+
+  const handleRunNow = async () => {
+    if (!agent.isActive || isAgentScanRunning || isRunningNow) return;
+    setIsRunningNow(true);
+    try {
+      await runAgentScanNow(agent.id);
+    } finally {
+      setIsRunningNow(false);
+    }
   };
 
   return (
@@ -1147,6 +1205,14 @@ const AgentCard: React.FC<{
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={handleRunNow}
+            disabled={!agent.isActive || isAgentScanRunning || isRunningNow}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#252a36] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-400"
+            title={!agent.isActive ? "Activate this agent first" : isAgentScanRunning || isRunningNow ? "A scan is already running" : "Run Now -- check this agent's leads immediately"}
+          >
+            <Zap className={`w-3.5 h-3.5 ${isRunningNow ? "animate-pulse" : ""}`} />
+          </button>
           <button onClick={handleTogglePause} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#252a36]" title={agent.isActive ? "Pause Agent" : "Resume Agent"}>
             {agent.isActive ? <PauseCircle className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
           </button>
@@ -1193,6 +1259,12 @@ const AgentCard: React.FC<{
           <Clock className="w-3.5 h-3.5 text-teal-400" />
           Every {agent.followUpFrequencyDays}d &bull; {agent.followUpCount} follow-ups
         </span>
+        {agent.lastScanAt && (
+          <span className="flex items-center gap-1" title={new Date(agent.lastScanAt).toLocaleString()}>
+            <Zap className="w-3.5 h-3.5 text-teal-400" />
+            Last checked {timeAgo(agent.lastScanAt)}
+          </span>
+        )}
         {agent.autoRunEnabled && (
           <span className="flex items-center gap-1 text-emerald-300">
             <Bot className="w-3.5 h-3.5" />
@@ -1222,10 +1294,22 @@ const AgentCard: React.FC<{
 };
 
 export const IndustryAgentsView: React.FC = () => {
-  const { industryAgents, bulkSetIndustryAgentActive, bulkDeleteIndustryAgents } = useCRM() as any;
+  const { industryAgents, bulkSetIndustryAgentActive, bulkDeleteIndustryAgents, runAgentScanNow, isAgentScanRunning } = useCRM() as any;
   const [isFormOpen, setFormOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<IndustryAgent | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isCheckingAll, setIsCheckingAll] = useState(false);
+
+  const activeAgentCount = industryAgents.filter((a: IndustryAgent) => a.isActive).length;
+  const handleCheckAllNow = async () => {
+    if (isAgentScanRunning || isCheckingAll || activeAgentCount === 0) return;
+    setIsCheckingAll(true);
+    try {
+      await runAgentScanNow();
+    } finally {
+      setIsCheckingAll(false);
+    }
+  };
 
   // No search/filter in this view -- industryAgents itself is "the list
   // currently visible", so that's what select-all/staleness track.
@@ -1292,16 +1376,29 @@ export const IndustryAgentsView: React.FC = () => {
             Industry field matches.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setEditingAgent(null);
-            setFormOpen(true);
-          }}
-          className="px-3.5 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm shrink-0"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          New Agent
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {industryAgents.length > 0 && (
+            <button
+              onClick={handleCheckAllNow}
+              disabled={isAgentScanRunning || isCheckingAll || activeAgentCount === 0}
+              title={activeAgentCount === 0 ? "No active agents to check" : "Run every active agent's scan right now"}
+              className="px-3.5 py-2 bg-[#181b21] border border-[#2d323f] hover:bg-[#252a36] disabled:opacity-40 disabled:cursor-not-allowed text-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5"
+            >
+              <Zap className={`w-3.5 h-3.5 ${isCheckingAll ? "animate-pulse" : ""}`} />
+              Check All Agents Now
+            </button>
+          )}
+          <button
+            onClick={() => {
+              setEditingAgent(null);
+              setFormOpen(true);
+            }}
+            className="px-3.5 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New Agent
+          </button>
+        </div>
       </div>
 
       <AgentsIntroBanner />
