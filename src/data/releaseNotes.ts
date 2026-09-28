@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.32.4",
+    date: "2026-09-28",
+    headline: "Approve & Send Now Tells You The Truth",
+    tagline: "Approved messages could be marked sent when nothing actually left the building -- and a bad recipient address was being blamed on your mailbox connection.",
+    highlights: [
+      {
+        title: "No more phantom sends",
+        description: "If a workspace has no SMTP password saved, messages were only ever simulated -- but were still logged as delivered. They now stay in the queue with a clear explanation instead.",
+      },
+      {
+        title: "Bad addresses are named",
+        description: "Recipient addresses imported from spreadsheets often carry hidden trailing line breaks, or aren't addresses at all. These are now cleaned automatically, and anything genuinely unusable is reported by name rather than as a mailbox error.",
+      },
+      {
+        title: "Only real deliveries count",
+        description: "A send is reported successful only if the mail server actually accepted a recipient -- not merely because the connection worked.",
+      },
+    ],
+  },
+  {
     version: "1.32.3",
     date: "2026-09-28",
     headline: "Saving Is Fully Fixed",

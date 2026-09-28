@@ -3088,6 +3088,40 @@ app.post("/api/webmail/verify", async (req, res) => {
 });
 
 // Helper to format multiple attachments for nodemailer
+// Splits whatever a caller passed as `to`/`cc`/`bcc` (a single string, a
+// comma/semicolon-separated string, or an array) into individually trimmed,
+// validated addresses.
+//
+// This exists because recipient addresses in AarPex come from imported and
+// scraped record data, where trailing newlines ("info@example.com\n"),
+// trailing spaces, and non-addresses (a literal "x") are all common. Three
+// things go wrong if they're passed through untouched:
+//   1. An address containing a newline is an SMTP header-injection vector.
+//   2. nodemailer reports a useless "No recipients defined" for input it
+//      can't parse, which surfaces to the user as a generic send failure.
+//   3. Some malformed addresses are accepted by the relay and then silently
+//      bounce, so the app reports "sent" for mail nobody receives.
+// Validation is deliberately shape-level (non-empty local part, a single @,
+// a dotted domain, no whitespace) -- enough to catch real breakage without
+// pretending to know which addresses actually exist.
+const EMAIL_SHAPE_RE = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
+
+function normalizeRecipients(input: any): { valid: string[]; invalid: string[] } {
+  const raw: any[] = Array.isArray(input) ? input : [input];
+  const valid: string[] = [];
+  const invalid: string[] = [];
+  for (const entry of raw) {
+    if (entry === null || entry === undefined) continue;
+    for (const piece of String(entry).split(/[,;]/)) {
+      const candidate = piece.trim();
+      if (!candidate) continue;
+      if (EMAIL_SHAPE_RE.test(candidate)) valid.push(candidate);
+      else invalid.push(candidate);
+    }
+  }
+  return { valid, invalid };
+}
+
 function formatNodemailerAttachments(attachments: any[]): any[] {
   if (!Array.isArray(attachments) || attachments.length === 0) return [];
   return attachments.map((att: any) => {
@@ -3215,9 +3249,25 @@ app.post("/api/webmail/send-email", async (req, res) => {
       attachments = [],
     } = req.body;
 
-    if (!to) {
-      return res.status(400).json({ success: false, error: "Recipient email (to) is required." });
+    // Recipient addresses reach us straight from imported/scraped record
+    // data, which in practice carries trailing newlines, stray spaces, and
+    // occasionally isn't an address at all (a literal "x"). Passing those to
+    // nodemailer either throws an opaque "No recipients defined" or, worse,
+    // appears to succeed -- and an address containing a newline is header
+    // injection, so it must never reach the SMTP envelope as-is. Normalize
+    // and validate here, where every caller benefits, and say exactly which
+    // address was rejected rather than failing the whole send anonymously.
+    const normalizedTo = normalizeRecipients(to);
+    if (normalizedTo.valid.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: normalizedTo.invalid.length
+          ? `No valid recipient address. Rejected: ${normalizedTo.invalid.join(", ")}`
+          : "Recipient email (to) is required.",
+        invalidRecipients: normalizedTo.invalid,
+      });
     }
+    const toList = normalizedTo.valid;
 
     // Default to configured Hostinger/SMTP credentials or simulation if not yet populated
     const senderEmail = email && email.trim() ? email.trim() : "billing@apexcrm.enterprise";
@@ -3245,35 +3295,61 @@ app.post("/api/webmail/send-email", async (req, res) => {
 
       const info = await transporter.sendMail({
         from: fromHeader,
-        to,
-        cc: cc || undefined,
-        bcc: bcc || undefined,
+        to: toList,
+        cc: normalizeRecipients(cc).valid.join(", ") || undefined,
+        bcc: normalizeRecipients(bcc).valid.join(", ") || undefined,
         subject: subject || "Notification from CRM",
         text: body || "",
         html: html || (body ? `<div style="font-family: sans-serif; white-space: pre-wrap; color: #1e293b; font-size: 14px; line-height: 1.6;">${body}</div>` : undefined),
         attachments: formattedAttachments,
       });
 
+      // Report what the relay actually did with each address. An SMTP server
+      // can accept the connection and still reject individual recipients, so
+      // "no exception was thrown" is not the same as "it was sent" -- without
+      // `accepted`/`rejected` the app would mark a rejected send as delivered.
+      const accepted: string[] = (info as any).accepted || [];
+      const rejected: string[] = (info as any).rejected || [];
+      if (accepted.length === 0) {
+        return res.status(400).json({
+          success: false,
+          liveMode: true,
+          error: `The mail server rejected every recipient${rejected.length ? `: ${rejected.join(", ")}` : ""}.`,
+          rejected,
+          smtpResponse: (info as any).response,
+        });
+      }
+
       return res.json({
         success: true,
         liveMode: true,
         messageId: info.messageId,
-        to,
+        to: toList,
+        accepted,
+        rejected,
+        smtpResponse: (info as any).response,
+        invalidRecipients: normalizedTo.invalid,
         subject,
         attachmentsCount: formattedAttachments.length,
-        message: `Email dispatched successfully to ${Array.isArray(to) ? to.join(", ") : to} with ${formattedAttachments.length} file attachment(s).`,
+        message: `Email dispatched successfully to ${accepted.join(", ")} with ${formattedAttachments.length} file attachment(s).`,
       });
     }
 
-    // High-fidelity instant simulation mode for workspaces without live credentials
+    // No SMTP password on file, so nothing can actually be relayed. This used
+    // to return success:true with an invented messageId, which callers can't
+    // distinguish from a real send -- the app logged "Delivered", marked the
+    // approval sent, and the message existed nowhere. Be explicit instead:
+    // liveMode:false plus simulated:true, so a caller that doesn't understand
+    // simulation can't mistake it for delivery.
     return res.json({
       success: true,
       liveMode: false,
+      simulated: true,
       messageId: `msg_sim_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      to,
+      to: toList,
       subject,
       attachmentsCount: formattedAttachments.length,
-      message: `Email queued & dispatched via CRM Mail Gateway to ${Array.isArray(to) ? to.join(", ") : to} (${formattedAttachments.length} file attachment(s)). Connect your SMTP password in Settings → Webmail for direct live relay.`,
+      message: `Simulated only -- nothing was actually sent to ${toList.join(", ")}. Add this mailbox's SMTP password in Settings → Webmail to send for real.`,
     });
   } catch (err: any) {
     console.error("Error in /api/webmail/send-email:", err);

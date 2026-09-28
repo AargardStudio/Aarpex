@@ -3093,7 +3093,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           smtpHost: mailCfg?.smtpHost || "smtp.hostinger.com",
           smtpPort: mailCfg?.smtpPort || 465,
           smtpEncryption: mailCfg?.smtpEncryption || "SSL",
-          to: action.recipientEmail,
+          to: (action.recipientEmail || "").trim(),
           subject,
           body,
           attachments: [],
@@ -3102,6 +3102,17 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const data = await res.json();
       if (!data.success) {
         resolveAgentAction(id, "pending", { reasoning: `${action.reasoning} — last send attempt failed: ${data.error || "unknown error"}` });
+        return false;
+      }
+      // success:true alone isn't delivery. The endpoint also answers
+      // success:true in simulation mode (no SMTP password on file), where
+      // nothing is actually relayed. Marking those approved is how a queue
+      // ends up full of "sent" messages that no one ever received, so treat
+      // a simulated send as a failure the user has to act on.
+      if (data.simulated || data.liveMode === false) {
+        resolveAgentAction(id, "pending", {
+          reasoning: `${action.reasoning} — not sent: this workspace has no SMTP password saved, so the message was only simulated. Add it in Settings → Webmail.`,
+        });
         return false;
       }
       addActivity({

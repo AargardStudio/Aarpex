@@ -13,6 +13,14 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.32.4] - 2026-09-28
+
+### Fixed
+- **"Approve & Send" could report a message as sent when nothing was relayed.** `/api/webmail/send-email` answers `success: true` in two very different situations: a real SMTP dispatch, and simulation mode when the workspace has no SMTP password saved (where it invents a `messageId` and sends nothing). The Agent Approvals path only checked `success`, so a simulated send was logged to the record's timeline as "Delivered" and the queued item was marked approved -- producing a queue full of messages nobody ever received. Simulation now also returns `simulated: true`, its `message` says plainly that nothing was sent, and the client treats it as a failure that leaves the item pending with an explanation instead of silently "approving" it.
+- **Recipient addresses are normalized and validated before they reach the mail server.** Addresses come from imported/scraped record data, and in practice carry trailing newlines (`info@example.com\n`), trailing spaces, or aren't addresses at all (one queued action's recipient was the single character `x`). Passing those to nodemailer produced an opaque `No recipients defined` that surfaced as a generic "check your mailbox connection" -- pointing at the mailbox when the mailbox was fine and the address was the problem. `to`/`cc`/`bcc` now accept a string, a comma/semicolon-separated list, or an array; each address is trimmed and shape-checked; and a rejected send names the exact offending address. An address containing a newline is also a header-injection vector, so it must never reach the SMTP envelope untouched.
+- **A send is now only reported as successful if the mail server actually accepted a recipient.** An SMTP server can accept the connection and still reject individual recipients, so "nodemailer didn't throw" was being treated as delivery. The response now carries `accepted`, `rejected`, and the raw `smtpResponse`, and a send where every recipient was rejected returns an error instead of success.
+- Cleaned the stored data this was corrupting: trailing whitespace/newlines trimmed from `recipient_email` on queued agent actions and from `email` on leads, contacts, and companies. Addresses themselves were not otherwise altered.
+
 ## [1.32.3] - 2026-09-28
 
 ### Fixed
