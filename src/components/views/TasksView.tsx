@@ -15,10 +15,9 @@ import {
 export const TasksView: React.FC = () => {
   const {
     tasks,
-    companies,
+    deals,
     toggleTaskStatus,
     deleteTask,
-    setSelectedCompanyId,
     setQuickCreateOpen,
     setQuickCreateType,
   } = useCRM();
@@ -27,14 +26,14 @@ export const TasksView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
 
   const filteredTasks = tasks.filter((t) => {
-    const comp = companies.find((c) => c.id === t.companyId);
+    const linkedDeal = t.dealId ? deals.find((d) => d.id === t.dealId) : null;
     const matchesFilter =
       filter === "All" ||
       (filter === "Pending" && t.status !== "Completed") ||
       (filter === "Completed" && t.status === "Completed");
     const matchesSearch =
       t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (comp && comp.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      (linkedDeal && linkedDeal.name.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesFilter && matchesSearch;
   });
 
@@ -86,7 +85,7 @@ export const TasksView: React.FC = () => {
       {/* Task List */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs divide-y divide-slate-100">
         {filteredTasks.map((t) => {
-          const comp = companies.find((c) => c.id === t.companyId);
+          const linkedDeal = t.dealId ? deals.find((d) => d.id === t.dealId) : null;
           const isCompleted = t.status === "Completed";
           const isOverdue =
             !isCompleted && new Date(t.dueDate) < new Date();
@@ -119,14 +118,11 @@ export const TasksView: React.FC = () => {
                     {t.title}
                   </div>
                   <div className="flex items-center gap-3 text-[11px] text-slate-500">
-                    {comp && (
-                      <button
-                        onClick={() => setSelectedCompanyId(comp.id)}
-                        className="hover:text-indigo-600 flex items-center gap-1"
-                      >
+                    {linkedDeal && (
+                      <span className="flex items-center gap-1">
                         <Building2 className="w-3 h-3 text-slate-400" />
-                        <span>{comp.name}</span>
-                      </button>
+                        <span>{linkedDeal.name}</span>
+                      </span>
                     )}
                     <span className="flex items-center gap-1">
                       <Calendar className="w-3 h-3 text-slate-400" />

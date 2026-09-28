@@ -146,7 +146,7 @@ export const FileManagerView: React.FC = () => {
   // and hands the parsed rows off to the matching entity view's import
   // modal via pendingBulkImport -- so a file already sitting in the File
   // Manager can be reused for a bulk create/update without re-uploading it.
-  const handleUseForBulkImport = async (file: StoredFile, entity: "contact" | "company" | "deal") => {
+  const handleUseForBulkImport = async (file: StoredFile, entity: "deal") => {
     setBusyFileId(file.id);
     setBulkPickerFileId(null);
     try {
@@ -172,8 +172,7 @@ export const FileManagerView: React.FC = () => {
         return;
       }
       setPendingBulkImport({ entity, rows, headers: Array.from(headerSet), filename: file.filename });
-      const navByEntity = { contact: "Contacts", company: "Companies", deal: "Deals" } as const;
-      setActiveNav(navByEntity[entity]);
+      setActiveNav("Deals");
     } catch (err: any) {
       setUploadError(`Couldn't parse "${file.filename}" as a spreadsheet.`);
     } finally {
@@ -319,7 +318,7 @@ export const FileManagerView: React.FC = () => {
                   {bulkPickerFileId === file.id && (
                     <div className="absolute right-0 top-full mt-1 z-10 bg-white border border-slate-200 rounded-lg shadow-lg py-1 w-44 text-xs">
                       <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-slate-400 font-bold">Bulk create/update</div>
-                      {(["contact", "company", "deal"] as const).map((entity) => (
+                      {(["deal"] as const).map((entity) => (
                         <button
                           key={entity}
                           onClick={() => handleUseForBulkImport(file, entity)}

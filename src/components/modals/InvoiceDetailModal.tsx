@@ -11,11 +11,11 @@ interface InvoiceDetailModalProps {
 }
 
 export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice, onClose, onOpenTemplate }) => {
-  const { companies, markInvoicePaid, duplicateInvoice, setQuickCreateOpen, setQuickCreateType, activeTenant } = useCRM();
+  const { deals, markInvoicePaid, duplicateInvoice, setQuickCreateOpen, setQuickCreateType, activeTenant } = useCRM();
 
   if (!invoice) return null;
 
-  const company = companies.find((c) => c.id === invoice.companyId);
+  const linkedDeal = invoice.dealId ? deals.find((d) => d.id === invoice.dealId) : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
@@ -110,11 +110,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({ invoice,
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
                 Billed To:
               </span>
-              <div className="text-sm font-bold text-slate-900">{company?.name}</div>
-              <div className="text-slate-500 text-[11px] mt-0.5">
-                {company?.city}, {company?.country}
-              </div>
-              <div className="text-slate-500 text-[11px]">{company?.email}</div>
+              <div className="text-sm font-bold text-slate-900">{linkedDeal?.name || "Corporate Account"}</div>
             </div>
 
             <div className="text-right">

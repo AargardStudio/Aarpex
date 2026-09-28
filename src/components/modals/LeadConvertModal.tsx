@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useCRM } from "../../context/CRMContext";
 import { Lead } from "../../types";
-import { X, CheckCircle2, ArrowRight, Building2, User, Briefcase } from "lucide-react";
+import { X, CheckCircle2, ArrowRight, Briefcase } from "lucide-react";
 
 interface LeadConvertModalProps {
   lead: Lead | null;
@@ -9,16 +9,16 @@ interface LeadConvertModalProps {
 }
 
 export const LeadConvertModal: React.FC<LeadConvertModalProps> = ({ lead, onClose }) => {
-  const { convertLead, setSelectedCompanyId, setActiveNav } = useCRM();
+  const { convertLead, setActiveNav } = useCRM();
   const [createDeal, setCreateDeal] = useState(true);
 
   if (!lead) return null;
 
   const handleConvert = () => {
-    const result = convertLead(lead.id, createDeal);
+    convertLead(lead.id, createDeal);
     onClose();
-    if (result.company) {
-      setSelectedCompanyId(result.company.id);
+    if (createDeal) {
+      setActiveNav("Deals");
     }
   };
 
@@ -29,10 +29,10 @@ export const LeadConvertModal: React.FC<LeadConvertModalProps> = ({ lead, onClos
           <div>
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-teal-400" />
-              Convert Lead to Qualified Accounts
+              Convert Lead
             </h3>
             <p className="text-slate-400 text-[11px]">
-              Transforms {lead.name} into interconnected CRM entities
+              Marks {lead.name} as converted and optionally opens a deal
             </p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-[#252a36]">
@@ -42,28 +42,10 @@ export const LeadConvertModal: React.FC<LeadConvertModalProps> = ({ lead, onClos
 
         <div className="p-6 space-y-4">
           <p className="text-slate-300 leading-relaxed">
-            Converting <strong className="text-white">{lead.name}</strong> from <strong className="text-teal-300">{lead.company}</strong> will automatically generate the following linked records:
+            Converting <strong className="text-white">{lead.name}</strong> from <strong className="text-teal-300">{lead.company}</strong> will mark this lead as converted:
           </p>
 
           <div className="space-y-3 bg-[#121418] p-4 rounded-xl border border-[#2d323f]">
-            <div className="flex items-start gap-3">
-              <Building2 className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-bold text-white">New / Linked Company</span>
-                <div className="text-slate-400 text-[11px]">{lead.company} ({lead.city || "Headquarters"})</div>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <User className="w-4 h-4 text-slate-300 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-bold text-white">Primary Contact</span>
-                <div className="text-slate-400 text-[11px]">
-                  {lead.name} — {lead.jobTitle || "Director"} ({lead.email})
-                </div>
-              </div>
-            </div>
-
             <div className="flex items-start gap-3">
               <Briefcase className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" />
               <div className="flex-1">

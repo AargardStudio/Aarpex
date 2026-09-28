@@ -1,10 +1,12 @@
 // Shared "who should we sell this to" matching logic for Products/Services.
-// Used by both the Products page (to show live matching companies/leads/
-// contacts on a product record) and Email Marketing (to pre-select a
-// campaign's audience from a chosen product). Keeping this in one place
-// means the two features can never silently disagree on what "matches"
-// means.
-import { Company, Contact, Lead, Product } from "../types";
+// Used by both the Products page (to show live matching leads on a product
+// record) and Email Marketing (to pre-select a campaign's audience from a
+// chosen product). Keeping this in one place means the two features can
+// never silently disagree on what "matches" means.
+//
+// Companies and Contacts no longer exist as entities in this CRM -- matching
+// is Lead-only.
+import { Lead, Product } from "../types";
 
 function norm(value?: string | null): string {
   return (value || "").trim().toLowerCase();
@@ -26,17 +28,6 @@ function matchesTags(tags: string[] | undefined, list: string[]): boolean {
   return list.some((v) => normTags.includes(norm(v)));
 }
 
-export function companyMatchesProduct(company: Company, product: Product): boolean {
-  const c = product.targetCriteria;
-  return (
-    matchesList(company.industry, c.industries) &&
-    matchesList(company.clientCategory, c.clientCategories) &&
-    matchesList(company.country, c.countries) &&
-    (!c.companyStatuses || c.companyStatuses.length === 0 || c.companyStatuses.includes(company.status)) &&
-    matchesTags(company.tags, c.tags)
-  );
-}
-
 export function leadMatchesProduct(lead: Lead, product: Product): boolean {
   const c = product.targetCriteria;
   return (
@@ -48,32 +39,16 @@ export function leadMatchesProduct(lead: Lead, product: Product): boolean {
   );
 }
 
-export function contactMatchesProduct(contact: Contact, product: Product, companies: Company[]): boolean {
-  const c = product.targetCriteria;
-  const company = companies.find((co) => co.id === contact.companyId);
-  return (
-    matchesList(company?.industry, c.industries) &&
-    matchesList(company?.clientCategory, c.clientCategories) &&
-    matchesList(contact.country, c.countries) &&
-    matchesList(contact.leadSource, c.leadSources) &&
-    matchesTags(contact.tags, c.tags)
-  );
-}
-
 export interface ProductMatches {
-  companies: Company[];
   leads: Lead[];
-  contacts: Contact[];
 }
 
 export function computeProductMatches(
   product: Product,
-  data: { companies: Company[]; leads: Lead[]; contacts: Contact[] }
+  data: { leads: Lead[] }
 ): ProductMatches {
   return {
-    companies: data.companies.filter((co) => companyMatchesProduct(co, product)),
     leads: data.leads.filter((l) => leadMatchesProduct(l, product)),
-    contacts: data.contacts.filter((ct) => contactMatchesProduct(ct, product, data.companies)),
   };
 }
 

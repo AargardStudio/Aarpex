@@ -53,7 +53,7 @@ export const LeadAIAnalysisModal: React.FC<{ lead: Lead; onClose: () => void }> 
   const [error, setError] = useState(false);
 
   const leadActivities = (activities || []).filter(
-    (a: any) => a.description?.toLowerCase().includes(lead.name.toLowerCase()) || a.companyId === lead.convertedCompanyId
+    (a: any) => a.description?.toLowerCase().includes(lead.name.toLowerCase()) || a.leadId === lead.id
   );
 
   useEffect(() => {

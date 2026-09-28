@@ -136,13 +136,11 @@ const EntryEditorModal: React.FC<{
   entry: KnowledgeBaseEntry | null;
   onClose: () => void;
 }> = ({ isOpen, category, entry, onClose }) => {
-  const { addKnowledgeBaseEntry, updateKnowledgeBaseEntry, generateKnowledgeBaseDraftFromUrl, leads, contacts, companies } = useCRM();
+  const { addKnowledgeBaseEntry, updateKnowledgeBaseEntry, generateKnowledgeBaseDraftFromUrl, leads } = useCRM();
   const [title, setTitle] = useState(entry?.title || "");
   const [content, setContent] = useState(entry?.content || "");
   const [tagsInput, setTagsInput] = useState((entry?.tags || []).join(", "));
   const [linkedLeadIds, setLinkedLeadIds] = useState<string[]>(entry?.linkedLeadIds || []);
-  const [linkedContactIds, setLinkedContactIds] = useState<string[]>(entry?.linkedContactIds || []);
-  const [linkedCompanyIds, setLinkedCompanyIds] = useState<string[]>(entry?.linkedCompanyIds || []);
   const [sourceUrl, setSourceUrl] = useState(entry?.sourceUrl || "");
   const [error, setError] = useState<string | null>(null);
 
@@ -156,8 +154,6 @@ const EntryEditorModal: React.FC<{
       setContent(entry?.content || "");
       setTagsInput((entry?.tags || []).join(", "));
       setLinkedLeadIds(entry?.linkedLeadIds || []);
-      setLinkedContactIds(entry?.linkedContactIds || []);
-      setLinkedCompanyIds(entry?.linkedCompanyIds || []);
       setSourceUrl(entry?.sourceUrl || "");
       setImportUrl(entry?.sourceUrl || "");
       setImportError(null);
@@ -206,8 +202,8 @@ const EntryEditorModal: React.FC<{
 
     const links =
       category === "company"
-        ? { linkedLeadIds, linkedContactIds, linkedCompanyIds }
-        : { linkedLeadIds: [], linkedContactIds: [], linkedCompanyIds: [] };
+        ? { linkedLeadIds }
+        : { linkedLeadIds: [] };
 
     if (entry) {
       updateKnowledgeBaseEntry(entry.id, { title: title.trim(), content: content.trim(), tags, sourceUrl: sourceUrl || undefined, ...links });
@@ -330,18 +326,6 @@ const EntryEditorModal: React.FC<{
                 records={leads.map((l) => ({ id: l.id, name: l.name }))}
                 selectedIds={linkedLeadIds}
                 onChange={setLinkedLeadIds}
-              />
-              <RecordMultiSelect
-                label="Contacts"
-                records={contacts.map((c) => ({ id: c.id, name: `${c.firstName} ${c.lastName || ""}`.trim() }))}
-                selectedIds={linkedContactIds}
-                onChange={setLinkedContactIds}
-              />
-              <RecordMultiSelect
-                label="Companies"
-                records={companies.map((c) => ({ id: c.id, name: c.name }))}
-                selectedIds={linkedCompanyIds}
-                onChange={setLinkedCompanyIds}
               />
             </div>
           )}
@@ -538,16 +522,10 @@ export const KnowledgeBaseView: React.FC = () => {
                 </div>
               )}
 
-              {activeCategory === "company" &&
-                ((entry.linkedLeadIds?.length || 0) +
-                  (entry.linkedContactIds?.length || 0) +
-                  (entry.linkedCompanyIds?.length || 0) >
-                  0) && (
+              {activeCategory === "company" && (entry.linkedLeadIds?.length || 0) > 0 && (
                   <div className="mt-3">
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                      Attached to {(entry.linkedLeadIds?.length || 0)} lead(s),{" "}
-                      {(entry.linkedContactIds?.length || 0)} contact(s),{" "}
-                      {(entry.linkedCompanyIds?.length || 0)} compan{(entry.linkedCompanyIds?.length || 0) === 1 ? "y" : "ies"}
+                      Attached to {(entry.linkedLeadIds?.length || 0)} lead(s)
                     </span>
                   </div>
                 )}

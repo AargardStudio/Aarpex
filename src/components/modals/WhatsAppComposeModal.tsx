@@ -16,8 +16,6 @@ interface WhatsAppComposeModalProps {
   onClose: () => void;
   initialTo?: string;
   initialBody?: string;
-  companyId?: string;
-  contactId?: string;
   leadId?: string;
 }
 
@@ -26,8 +24,6 @@ export const WhatsAppComposeModal: React.FC<WhatsAppComposeModalProps> = ({
   onClose,
   initialTo = "",
   initialBody = "",
-  companyId,
-  contactId,
   leadId,
 }) => {
   const { activeTenant, currentUser, addActivity } = useCRM();
@@ -125,8 +121,6 @@ export const WhatsAppComposeModal: React.FC<WhatsAppComposeModalProps> = ({
 
         addActivity({
           type: "WhatsApp",
-          companyId,
-          contactId,
           leadId,
           date: new Date().toISOString().split("T")[0],
           time: new Date().toTimeString().slice(0, 5),

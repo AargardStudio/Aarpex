@@ -491,16 +491,16 @@ const ProductFormModal: React.FC<{ editing: Product | null; onClose: () => void 
 // criteria, and a live list of matching companies/leads/contacts).
 // ----------------------------------------------------------------------------
 const ProductCard: React.FC<{ product: Product; onEdit: () => void }> = ({ product, onEdit }) => {
-  const { companies, leads, contacts, deleteProduct, runProductAIInsight, setActiveNav, setSelectedCompanyId } = useCRM();
+  const { leads, deleteProduct, runProductAIInsight, setActiveNav } = useCRM();
   const [expanded, setExpanded] = useState(false);
   const [isRunningInsight, setIsRunningInsight] = useState(false);
 
   const matches = useMemo(
-    () => computeProductMatches(product, { companies, leads, contacts }),
-    [product, companies, leads, contacts]
+    () => computeProductMatches(product, { leads }),
+    [product, leads]
   );
   const targeted = hasAnyTargetCriteria(product);
-  const totalMatches = matches.companies.length + matches.leads.length + matches.contacts.length;
+  const totalMatches = matches.leads.length;
 
   const handleRunInsight = async () => {
     setIsRunningInsight(true);
@@ -629,16 +629,7 @@ const ProductCard: React.FC<{ product: Product; onEdit: () => void }> = ({ produ
           </div>
 
           {/* Matches */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            <button
-              onClick={() => setActiveNav("Companies")}
-              className="p-3 bg-[#181b21] rounded-xl border border-[#2d323f] hover:border-teal-500/40 text-left transition-colors"
-            >
-              <div className="flex items-center gap-1.5 text-slate-400 text-[11px] font-semibold">
-                <Building2 className="w-3.5 h-3.5" /> Companies
-              </div>
-              <div className="text-lg font-extrabold text-white mt-0.5">{matches.companies.length}</div>
-            </button>
+          <div className="grid grid-cols-1 gap-2.5">
             <button
               onClick={() => setActiveNav("Leads")}
               className="p-3 bg-[#181b21] rounded-xl border border-[#2d323f] hover:border-teal-500/40 text-left transition-colors"
@@ -648,33 +639,7 @@ const ProductCard: React.FC<{ product: Product; onEdit: () => void }> = ({ produ
               </div>
               <div className="text-lg font-extrabold text-white mt-0.5">{matches.leads.length}</div>
             </button>
-            <button
-              onClick={() => setActiveNav("Contacts")}
-              className="p-3 bg-[#181b21] rounded-xl border border-[#2d323f] hover:border-teal-500/40 text-left transition-colors"
-            >
-              <div className="flex items-center gap-1.5 text-slate-400 text-[11px] font-semibold">
-                <Users className="w-3.5 h-3.5" /> Contacts
-              </div>
-              <div className="text-lg font-extrabold text-white mt-0.5">{matches.contacts.length}</div>
-            </button>
           </div>
-
-          {matches.companies.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {matches.companies.slice(0, 6).map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setSelectedCompanyId(c.id)}
-                  className="text-[11px] px-2.5 py-1 bg-[#181b21] border border-[#2d323f] hover:border-teal-500/40 text-slate-300 hover:text-white rounded-full transition-colors"
-                >
-                  {c.name}
-                </button>
-              ))}
-              {matches.companies.length > 6 && (
-                <span className="text-[11px] px-2.5 py-1 text-slate-500">+{matches.companies.length - 6} more</span>
-              )}
-            </div>
-          )}
         </div>
       )}
     </div>

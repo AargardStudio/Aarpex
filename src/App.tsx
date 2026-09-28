@@ -6,8 +6,6 @@ import { Footer } from "./components/common/Footer";
 import { DashboardView } from "./components/views/DashboardView";
 import { LeadsView } from "./components/views/LeadsView";
 import { DealsView } from "./components/views/DealsView";
-import { CompaniesView } from "./components/views/CompaniesView";
-import { ContactsView } from "./components/views/ContactsView";
 import { PipelinesView } from "./components/views/PipelinesView";
 import { ActivitiesView } from "./components/views/ActivitiesView";
 import { TasksView } from "./components/views/TasksView";
@@ -27,8 +25,6 @@ import { IndustryAgentsView } from "./components/views/IndustryAgentsView";
 import { AgentApprovalsView } from "./components/views/AgentApprovalsView";
 import { FileManagerView } from "./components/views/FileManagerView";
 import { InstructionsView } from "./components/views/InstructionsView";
-import { Company360Drawer } from "./components/company/Company360Drawer";
-import { ContactProfileDrawer } from "./components/contacts/ContactProfileDrawer";
 import { LeadProfileDrawer } from "./components/leads/LeadProfileDrawer";
 import { QuickCreateModal } from "./components/modals/QuickCreateModal";
 import { UserAccessControlModal } from "./components/auth/UserAccessControlModal";
@@ -105,10 +101,6 @@ const CRMMainContent: React.FC = () => {
         return <LeadsView />;
       case "deals":
         return <DealsView />;
-      case "companies":
-        return <CompaniesView />;
-      case "contacts":
-        return <ContactsView />;
       case "pipelines":
         return <PipelinesView />;
       case "activities":
@@ -171,13 +163,8 @@ const CRMMainContent: React.FC = () => {
         </main>
       </div>
 
-      {/* Slide-over 360° Account Intelligence Drawer */}
-      <Company360Drawer />
-
-      {/* Contact & Lead Profile Drawers -- same 360° pattern as Company,
-          scoped to a single person: full record info, AI analyzer inline,
-          and Email/WhatsApp acquisition actions in one place. */}
-      <ContactProfileDrawer />
+      {/* Lead Profile Drawer -- full record info, AI analyzer inline, and
+          Email/WhatsApp acquisition actions in one place. */}
       <LeadProfileDrawer />
 
       {/* Global Quick Record Creation Modal */}
@@ -197,8 +184,6 @@ const CRMMainContent: React.FC = () => {
         initialSubject={emailComposeProps.subject}
         initialBody={emailComposeProps.body}
         initialAttachments={emailComposeProps.attachments}
-        companyId={emailComposeProps.companyId}
-        contactId={emailComposeProps.contactId}
         dealId={emailComposeProps.dealId}
         leadId={emailComposeProps.leadId}
       />
@@ -209,8 +194,6 @@ const CRMMainContent: React.FC = () => {
         onClose={() => setWhatsAppComposeOpen(false)}
         initialTo={whatsappComposeProps.to}
         initialBody={whatsappComposeProps.body}
-        companyId={whatsappComposeProps.companyId}
-        contactId={whatsappComposeProps.contactId}
         leadId={whatsappComposeProps.leadId}
       />
 

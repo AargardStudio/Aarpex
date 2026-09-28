@@ -32,7 +32,7 @@ const TYPE_COLOR: Record<AgentActionType, string> = {
 };
 
 const ActionCard: React.FC<{ action: AgentAction }> = ({ action }) => {
-  const { approveAndSendAgentAction, resolveAgentAction, deleteAgentAction, setSelectedLeadId, setSelectedContactId } = useCRM() as any;
+  const { approveAndSendAgentAction, resolveAgentAction, deleteAgentAction, setSelectedLeadId } = useCRM() as any;
   const [isEditing, setIsEditing] = useState(false);
   const [subjectDraft, setSubjectDraft] = useState(action.subject);
   const [bodyDraft, setBodyDraft] = useState(action.body);
@@ -80,7 +80,7 @@ const ActionCard: React.FC<{ action: AgentAction }> = ({ action }) => {
             )}
           </div>
           <button
-            onClick={() => (action.leadId ? setSelectedLeadId(action.leadId) : action.contactId ? setSelectedContactId(action.contactId) : undefined)}
+            onClick={() => (action.leadId ? setSelectedLeadId(action.leadId) : undefined)}
             className="text-sm font-bold text-white hover:text-teal-300 mt-1 text-left"
           >
             {action.recipientName}

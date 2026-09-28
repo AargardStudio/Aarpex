@@ -24,11 +24,9 @@ export const DealsView: React.FC = () => {
   const {
     deals,
     pipelines,
-    companies,
     moveDealStage,
     updateDeal,
     deleteDeal,
-    setSelectedCompanyId,
     setQuickCreateOpen,
     setQuickCreateType,
     pendingBulkImport,
@@ -50,10 +48,7 @@ export const DealsView: React.FC = () => {
 
   const filteredDeals = deals.filter((deal) => {
     const matchesPipeline = !selectedPipelineId || deal.pipelineId === activePipeline?.id;
-    const comp = companies.find((c) => c.id === deal.companyId);
-    const matchesSearch =
-      deal.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (comp && comp.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesSearch = deal.name.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesPipeline && matchesSearch;
   });
 
@@ -182,7 +177,6 @@ export const DealsView: React.FC = () => {
               {/* Deal Cards */}
               <div className="space-y-2.5 flex-1 overflow-y-auto">
                 {stageDeals.map((deal) => {
-                  const comp = companies.find((c) => c.id === deal.companyId);
                   const isStalled =
                     deal.lastActivity &&
                     Math.round(
@@ -202,15 +196,6 @@ export const DealsView: React.FC = () => {
                           >
                             {deal.name}
                           </button>
-                          {comp && (
-                            <button
-                              onClick={() => setSelectedCompanyId(comp.id)}
-                              className="text-[11px] text-slate-500 hover:text-indigo-600 flex items-center gap-1 font-medium"
-                            >
-                              <Building2 className="w-3 h-3 text-slate-400" />
-                              <span>{comp.name}</span>
-                            </button>
-                          )}
                         </div>
 
                         <div className="text-right shrink-0">

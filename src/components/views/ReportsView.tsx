@@ -3,7 +3,7 @@ import { useCRM } from "../../context/CRMContext";
 import { BarChart3, Download, TrendingUp, CheckCircle2, Clock, DollarSign } from "lucide-react";
 
 export const ReportsView: React.FC = () => {
-  const { deals, companies, invoices, payments, leads } = useCRM();
+  const { deals, invoices, payments, leads } = useCRM();
 
   const wonDeals = deals.filter((d) => d.status === "Won");
   const lostDeals = deals.filter((d) => d.status === "Lost");
@@ -37,11 +37,10 @@ export const ReportsView: React.FC = () => {
   };
 
   const handleExportDeals = () => {
-    const header = ["Deal ID", "Deal Name", "Company ID", "Value", "Status", "Close Date", "Salesperson"];
+    const header = ["Deal ID", "Deal Name", "Value", "Status", "Close Date", "Salesperson"];
     const rows = deals.map((d) => [
       d.id,
       `"${d.name.replace(/"/g, '""')}"`,
-      d.companyId,
       d.dealValue.toString(),
       d.status,
       d.expectedCloseDate,
@@ -51,10 +50,10 @@ export const ReportsView: React.FC = () => {
   };
 
   const handleExportInvoices = () => {
-    const header = ["Invoice #", "Company ID", "Issue Date", "Due Date", "Total", "Paid", "Remaining", "Status"];
+    const header = ["Invoice #", "Deal ID", "Issue Date", "Due Date", "Total", "Paid", "Remaining", "Status"];
     const rows = invoices.map((i) => [
       i.invoiceNumber,
-      i.companyId,
+      i.dealId || "",
       i.issueDate,
       i.dueDate,
       i.total.toString(),
@@ -94,7 +93,7 @@ export const ReportsView: React.FC = () => {
             <span>Export Invoices CSV</span>
           </button>
           <button
-            onClick={() => downloadJSON(companies, "crm_companies_full.json")}
+            onClick={() => downloadJSON({ leads, deals, invoices, payments }, "crm_full_export.json")}
             className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5"
           >
             <Download className="w-3.5 h-3.5" />

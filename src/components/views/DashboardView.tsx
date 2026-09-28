@@ -40,14 +40,11 @@ export const DashboardView: React.FC = () => {
     leads,
     deals,
     invoices,
-    companies,
-    contacts,
     tasks,
     pipelines,
     industryAgents,
     currentUser,
     setActiveNav,
-    setSelectedCompanyId,
     setQuickCreateOpen,
     setQuickCreateType,
     loadSampleData,
@@ -88,8 +85,7 @@ export const DashboardView: React.FC = () => {
     }
   })();
   const gettingStartedSteps = [
-    { label: "Add your first Company", done: companies.length > 0, nav: "Companies" as const },
-    { label: "Add a Contact", done: (contacts?.length || 0) > 0, nav: "Contacts" as const },
+    { label: "Add your first Lead", done: leads.length > 0, nav: "Leads" as const },
     { label: "Create your first Deal", done: deals.length > 0, nav: "Deals" as const },
     {
       label: "Turn on an Industry Agent (optional)",
@@ -285,7 +281,7 @@ export const DashboardView: React.FC = () => {
       )}
 
       {/* Empty-state banner: offer sample data for brand-new, unpopulated workspaces */}
-      {companies.length === 0 && (
+      {leads.length === 0 && deals.length === 0 && (
         <div className="bg-teal-950/40 border border-teal-800/50 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
             <h3 className="text-sm font-bold text-teal-200 flex items-center gap-2">
@@ -293,7 +289,7 @@ export const DashboardView: React.FC = () => {
               This workspace is empty
             </h3>
             <p className="text-xs text-teal-100/70 max-w-xl">
-              Start adding your own companies, deals, and invoices — or load sample data to explore what AarPex can do first.
+              Start adding your own leads, deals, and invoices — or load sample data to explore what AarPex can do first.
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -305,7 +301,7 @@ export const DashboardView: React.FC = () => {
             </button>
             <button
               onClick={() => {
-                setQuickCreateType("company");
+                setQuickCreateType("lead");
                 setQuickCreateOpen(true);
               }}
               className="px-3.5 py-2 bg-[#252a36] hover:bg-[#2f3544] text-white rounded-xl text-xs font-semibold border border-[#3d4455] shadow-sm transition-all"
@@ -624,17 +620,17 @@ export const DashboardView: React.FC = () => {
           </div>
         </div>
 
-        {/* KPI 8: Active Accounts */}
+        {/* KPI 8: Won Deals */}
         <div className="bg-[#181b21] p-3 sm:p-4 rounded-xl border border-[#2d323f] shadow-md text-white transition-all">
           <div className="flex items-center justify-between text-slate-400 text-xs font-medium">
             <span>Customer Base</span>
             <Users className="w-4 h-4 text-teal-400" />
           </div>
           <div className="text-xl sm:text-2xl font-black text-white font-mono mt-2">
-            {companies.length}
+            {wonDeals.length}
           </div>
           <div className="text-[11px] text-teal-400 mt-1">
-            {companies.filter((c) => c.status === "Active Customer").length} active accounts
+            won deals to date
           </div>
         </div>
       </div>
@@ -742,15 +738,15 @@ export const DashboardView: React.FC = () => {
 
           <div className="space-y-2.5 divide-y divide-[#2d323f]">
             {overdueInvoicesList.slice(0, 4).map((inv) => {
-              const comp = companies.find((c) => c.id === inv.companyId);
+              const linkedDeal = inv.dealId ? deals.find((d) => d.id === inv.dealId) : null;
               return (
                 <div key={inv.id} className="pt-2.5 flex items-center justify-between text-xs">
                   <div>
                     <button
-                      onClick={() => comp && setSelectedCompanyId(comp.id)}
+                      onClick={() => setActiveNav("Invoices")}
                       className="font-bold text-slate-100 hover:text-teal-300 text-left block transition-colors"
                     >
-                      {comp?.name || "Customer"}
+                      {linkedDeal?.name || "Customer"}
                     </button>
                     <div className="text-slate-400 text-[11px]">
                       {inv.invoiceNumber} • Due {inv.dueDate}
@@ -801,7 +797,7 @@ export const DashboardView: React.FC = () => {
               .filter((t) => t.status !== "Completed")
               .slice(0, 4)
               .map((tsk) => {
-                const comp = companies.find((c) => c.id === tsk.companyId);
+                const linkedDeal = tsk.dealId ? deals.find((d) => d.id === tsk.dealId) : null;
                 return (
                   <div
                     key={tsk.id}
@@ -810,7 +806,7 @@ export const DashboardView: React.FC = () => {
                     <div>
                       <div className="font-medium text-white">{tsk.title}</div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
-                        {comp?.name} • Due {tsk.dueDate}
+                        {linkedDeal?.name} • Due {tsk.dueDate}
                       </div>
                     </div>
                     <span

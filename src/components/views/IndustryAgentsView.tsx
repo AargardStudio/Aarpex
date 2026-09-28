@@ -80,7 +80,6 @@ const emptyDraft = (): Omit<IndustryAgent, "id" | "createdAt" | "updatedAt" | "c
   isActive: true,
   productId: undefined,
   excludedLeadIds: [],
-  excludedCompanyIds: [],
   tone: "",
   talkingPoints: [],
   painPoints: [],
@@ -186,7 +185,6 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
           isActive: editing.isActive,
           productId: editing.productId,
           excludedLeadIds: editing.excludedLeadIds || [],
-          excludedCompanyIds: editing.excludedCompanyIds || [],
           tone: editing.tone,
           talkingPoints: editing.talkingPoints,
           painPoints: editing.painPoints,
@@ -233,7 +231,10 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
   const matchingLeads = industryLc ? (leads || []).filter((l: any) => normalizeIndustry(l.industry) === industryLc) : [];
   const matchingCompanies = industryLc ? (rawCompanies || []).filter((c: any) => normalizeIndustry(c.industry) === industryLc) : [];
   const excludedLeadIds = draft.excludedLeadIds || [];
-  const excludedCompanyIds = draft.excludedCompanyIds || [];
+  // Companies no longer exist as an entity; matchingCompanies is always
+  // empty, so this stays a static empty list purely to keep the counts
+  // below well-defined without reintroducing a company data model.
+  const excludedCompanyIds: string[] = [];
   const includedCount =
     matchingLeads.length + matchingCompanies.length - excludedLeadIds.length - excludedCompanyIds.length;
 
@@ -268,12 +269,9 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
       return { ...p, excludedLeadIds: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] };
     });
   };
-  const toggleExcludedCompany = (id: string) => {
-    setDraft((p) => {
-      const cur = p.excludedCompanyIds || [];
-      return { ...p, excludedCompanyIds: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] };
-    });
-  };
+  // No-op: companies no longer exist as an entity, so there is nothing to
+  // toggle (matchingCompanies is always empty).
+  const toggleExcludedCompany = (_id: string) => {};
 
   const matchSearchLc = matchSearch.trim().toLowerCase();
   const visibleLeads =
@@ -1080,7 +1078,7 @@ const AgentCard: React.FC<{ agent: IndustryAgent; onEdit: () => void }> = ({ age
   const industryLc = normalizeIndustry(agent.industry);
   const matchingLeadCount = leads.filter((l: any) => normalizeIndustry(l.industry) === industryLc).length;
   const matchingCompanyCount = (rawCompanies || []).filter((c: any) => normalizeIndustry(c.industry) === industryLc).length;
-  const excludedCount = (agent.excludedLeadIds || []).length + (agent.excludedCompanyIds || []).length;
+  const excludedCount = (agent.excludedLeadIds || []).length;
   const matchCount = matchingLeadCount + matchingCompanyCount - excludedCount;
   const pendingCount = ((agentActions || []) as AgentAction[]).filter(
     (a) => a.industry === agent.industry && a.status === "pending"

@@ -17,9 +17,8 @@ import {
 export const ActivitiesView: React.FC = () => {
   const {
     activities,
-    companies,
+    deals,
     deleteActivity,
-    setSelectedCompanyId,
     setQuickCreateOpen,
     setQuickCreateType,
   } = useCRM();
@@ -28,12 +27,12 @@ export const ActivitiesView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
 
   const filteredActivities = activities.filter((act) => {
-    const comp = companies.find((c) => c.id === act.companyId);
+    const linkedDeal = act.dealId ? deals.find((d) => d.id === act.dealId) : null;
     const matchesType = typeFilter === "All" || act.type === typeFilter;
     const matchesSearch =
       act.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (act.outcome && act.outcome.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (comp && comp.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      (linkedDeal && linkedDeal.name.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesType && matchesSearch;
   });
 
@@ -97,7 +96,7 @@ export const ActivitiesView: React.FC = () => {
       {/* Timeline Stream */}
       <div className="relative pl-6 border-l-2 border-slate-200 space-y-4">
         {sortedActivities.map((act) => {
-          const comp = companies.find((c) => c.id === act.companyId);
+          const linkedDeal = act.dealId ? deals.find((d) => d.id === act.dealId) : null;
           const Icon = typeIcons[act.type] || FileText;
 
           return (
@@ -112,14 +111,11 @@ export const ActivitiesView: React.FC = () => {
                     </span>
                     <span className="font-bold text-slate-900 text-xs">{act.type}</span>
                     <span className="text-slate-400 text-xs">• logged by {act.user}</span>
-                    {comp && (
-                      <button
-                        onClick={() => setSelectedCompanyId(comp.id)}
-                        className="font-semibold text-indigo-600 hover:underline flex items-center gap-1 text-xs ml-1"
-                      >
+                    {linkedDeal && (
+                      <span className="font-semibold text-indigo-600 flex items-center gap-1 text-xs ml-1">
                         <Building2 className="w-3 h-3 text-slate-400" />
-                        <span>{comp.name}</span>
-                      </button>
+                        <span>{linkedDeal.name}</span>
+                      </span>
                     )}
                   </div>
 

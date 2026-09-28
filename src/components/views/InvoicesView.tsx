@@ -31,10 +31,9 @@ import { apiFetch } from "../../lib/apiClient";
 export const InvoicesView: React.FC = () => {
   const {
     invoices,
-    companies,
+    deals,
     deleteInvoice,
     markInvoicePaid,
-    setSelectedCompanyId,
     setQuickCreateOpen,
     setQuickCreateType,
     canPerform,
@@ -105,10 +104,10 @@ export const InvoicesView: React.FC = () => {
   };
 
   const filteredInvoices = invoices.filter((inv) => {
-    const comp = companies.find((c) => c.id === inv.companyId);
+    const linkedDeal = inv.dealId ? deals.find((d) => d.id === inv.dealId) : null;
     const matchesSearch =
       inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (comp && comp.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      (linkedDeal && linkedDeal.name.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesStatus = statusFilter === "All" || inv.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -508,7 +507,7 @@ export const InvoicesView: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100 whitespace-nowrap">
               {filteredInvoices.map((inv) => {
-                const comp = companies.find((c) => c.id === inv.companyId);
+                const linkedDeal = inv.dealId ? deals.find((d) => d.id === inv.dealId) : null;
                 const isOverdue =
                   inv.remainingBalance > 0 && new Date(inv.dueDate) < new Date();
 
@@ -519,14 +518,11 @@ export const InvoicesView: React.FC = () => {
                     </td>
 
                     <td className="p-3.5">
-                      {comp ? (
-                        <button
-                          onClick={() => setSelectedCompanyId(comp.id)}
-                          className="font-bold text-slate-800 hover:text-indigo-600 flex items-center gap-1.5"
-                        >
+                      {linkedDeal ? (
+                        <span className="font-bold text-slate-800 flex items-center gap-1.5">
                           <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{comp.name}</span>
-                        </button>
+                          <span>{linkedDeal.name}</span>
+                        </span>
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}

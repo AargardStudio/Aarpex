@@ -319,11 +319,15 @@ const CampaignCard: React.FC<{
 // New Campaign Wizard
 // ----------------------------------------------------------------------------
 const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const { leads, contacts, companies, products, industryAgents, getAgentForIndustry, activeTenant, currentUser, addEmailCampaign, addActivity } = useCRM();
+  const { leads, products, industryAgents, getAgentForIndustry, activeTenant, currentUser, addEmailCampaign, addActivity } = useCRM();
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [name, setName] = useState("");
-  const [audienceType, setAudienceType] = useState<"Leads" | "Contacts">("Leads");
+  // Companies/Contacts no longer exist as entities -- the audience is
+  // always Leads. Kept as a constant (rather than removed outright) so the
+  // rest of this component's "audienceType"-keyed strings/labels below
+  // don't need to change.
+  const audienceType: "Leads" = "Leads";
   const [audienceSearch, setAudienceSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string>("");
@@ -337,16 +341,12 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
 
   const productMatches = useMemo(() => {
     if (!selectedProduct) return null;
-    return computeProductMatches(selectedProduct, { companies, leads, contacts });
-  }, [selectedProduct, companies, leads, contacts]);
+    return computeProductMatches(selectedProduct, { leads });
+  }, [selectedProduct, leads]);
 
   const handleApplyProductAudience = () => {
     if (!productMatches) return;
-    const matchIds =
-      audienceType === "Leads"
-        ? productMatches.leads.map((l) => l.id)
-        : productMatches.contacts.map((c) => c.id);
-    setSelectedIds(matchIds);
+    setSelectedIds(productMatches.leads.map((l) => l.id));
     if (!name.trim() && selectedProduct) {
       setName(`${selectedProduct.name} — Outreach`);
     }
@@ -357,20 +357,13 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   const dominantIndustry = useMemo(() => {
     if (selectedIds.length === 0) return "";
     const industries = selectedIds
-      .map((id) => {
-        if (audienceType === "Leads") {
-          return leads.find((l) => l.id === id)?.industry || "";
-        }
-        const contact = contacts.find((c) => c.id === id);
-        const comp = contact ? companies.find((co) => co.id === contact.companyId) : undefined;
-        return comp?.industry || "";
-      })
+      .map((id) => leads.find((l) => l.id === id)?.industry || "")
       .filter(Boolean);
     if (industries.length === 0) return "";
     const counts = new Map<string, number>();
     industries.forEach((ind) => counts.set(ind, (counts.get(ind) || 0) + 1));
     return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0][0];
-  }, [selectedIds, audienceType, leads, contacts, companies]);
+  }, [selectedIds, leads]);
 
   React.useEffect(() => {
     if (agentManuallySet) return;
@@ -395,24 +388,13 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   const frequencyDays = frequency === "Custom" ? Math.max(1, customDays) : FREQUENCY_DAYS[frequency];
 
   const audiencePool = useMemo(() => {
-    if (audienceType === "Leads") {
-      return leads.map((l) => ({
-        id: l.id,
-        title: l.name,
-        subtitle: `${l.company || "No company"} &bull; ${l.jobTitle || "Unknown role"}`,
-        email: l.email,
-      }));
-    }
-    return contacts.map((c) => {
-      const comp = companies.find((co) => co.id === c.companyId);
-      return {
-        id: c.id,
-        title: `${c.firstName} ${c.lastName || ""}`.trim(),
-        subtitle: `${comp?.name || "No company"} &bull; ${c.position || "Unknown role"}`,
-        email: c.email,
-      };
-    });
-  }, [audienceType, leads, contacts, companies]);
+    return leads.map((l) => ({
+      id: l.id,
+      title: l.name,
+      subtitle: `${l.company || "No company"} &bull; ${l.jobTitle || "Unknown role"}`,
+      email: l.email,
+    }));
+  }, [leads]);
 
   const filteredPool = audiencePool.filter(
     (p) =>
@@ -426,29 +408,15 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   };
 
   const buildRecipients = (): Recipient[] => {
-    if (audienceType === "Leads") {
-      return leads
-        .filter((l) => selectedIds.includes(l.id))
-        .map((l) => ({
-          id: l.id,
-          email: l.email,
-          firstName: (l.name || "").split(" ")[0] || "there",
-          company: l.company || "your company",
-          jobTitle: l.jobTitle || "your role",
-        }));
-    }
-    return contacts
-      .filter((c) => selectedIds.includes(c.id))
-      .map((c) => {
-        const comp = companies.find((co) => co.id === c.companyId);
-        return {
-          id: c.id,
-          email: c.email,
-          firstName: c.firstName || "there",
-          company: comp?.name || "your company",
-          jobTitle: c.position || "your role",
-        };
-      });
+    return leads
+      .filter((l) => selectedIds.includes(l.id))
+      .map((l) => ({
+        id: l.id,
+        email: l.email,
+        firstName: (l.name || "").split(" ")[0] || "there",
+        company: l.company || "your company",
+        jobTitle: l.jobTitle || "your role",
+      }));
   };
 
   const handleGenerate = async () => {
@@ -680,7 +648,7 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                       >
                         <Wand2 className="w-3 h-3" />
                         Use matching {audienceType.toLowerCase()} (
-                        {audienceType === "Leads" ? productMatches?.leads.length ?? 0 : productMatches?.contacts.length ?? 0}
+                        {productMatches?.leads.length ?? 0}
                         )
                       </button>
                     </div>
@@ -722,22 +690,6 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
 
               <div>
                 <label className="block text-slate-300 font-semibold mb-1.5">Audience</label>
-                <div className="flex border border-[#2d323f] bg-[#121418] p-1 rounded-lg w-fit mb-2">
-                  {(["Leads", "Contacts"] as const).map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => {
-                        setAudienceType(t);
-                        setSelectedIds([]);
-                      }}
-                      className={`px-3 py-1 rounded-md font-medium transition-colors ${
-                        audienceType === t ? "bg-teal-600 text-white" : "text-slate-400 hover:text-white"
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
 
                 <div className="relative mb-2">
                   <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -998,7 +950,7 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
 // Campaign Detail — view/edit steps, send due follow-ups
 // ----------------------------------------------------------------------------
 const CampaignDetailModal: React.FC<{ campaign: EmailCampaign; onClose: () => void }> = ({ campaign, onClose }) => {
-  const { leads, contacts, companies, activeTenant, currentUser, updateEmailCampaign, addActivity, checkCampaignReplies } = useCRM();
+  const { leads, activeTenant, currentUser, updateEmailCampaign, addActivity, checkCampaignReplies } = useCRM();
   const [sendingStepId, setSendingStepId] = useState<string | null>(null);
   const [isCheckingReplies, setIsCheckingReplies] = useState(false);
 
@@ -1016,30 +968,16 @@ const CampaignDetailModal: React.FC<{ campaign: EmailCampaign; onClose: () => vo
   // Follow-ups skip anyone who has already replied -- see the Inbox section,
   // which is what populates campaign.repliedAudienceIds.
   const recipients: Recipient[] = useMemo(() => {
-    if (campaign.audienceType === "Leads") {
-      return leads
-        .filter((l) => campaign.audienceIds.includes(l.id) && !repliedIds.includes(l.id))
-        .map((l) => ({
-          id: l.id,
-          email: l.email,
-          firstName: (l.name || "").split(" ")[0] || "there",
-          company: l.company || "your company",
-          jobTitle: l.jobTitle || "your role",
-        }));
-    }
-    return contacts
-      .filter((c) => campaign.audienceIds.includes(c.id) && !repliedIds.includes(c.id))
-      .map((c) => {
-        const comp = companies.find((co) => co.id === c.companyId);
-        return {
-          id: c.id,
-          email: c.email,
-          firstName: c.firstName || "there",
-          company: comp?.name || "your company",
-          jobTitle: c.position || "your role",
-        };
-      });
-  }, [campaign, leads, contacts, companies, repliedIds]);
+    return leads
+      .filter((l) => campaign.audienceIds.includes(l.id) && !repliedIds.includes(l.id))
+      .map((l) => ({
+        id: l.id,
+        email: l.email,
+        firstName: (l.name || "").split(" ")[0] || "there",
+        company: l.company || "your company",
+        jobTitle: l.jobTitle || "your role",
+      }));
+  }, [campaign, leads, repliedIds]);
 
   const today = new Date().toISOString().split("T")[0];
 

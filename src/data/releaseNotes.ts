@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.0.0",
+    date: "2026-09-28",
+    headline: "Companies & Contacts Are Being Rebuilt",
+    tagline: "We've removed Companies and Contacts to rebuild both properly. Your data is safely backed up, and everything else in AarPex keeps working.",
+    highlights: [
+      {
+        title: "Companies and Contacts are temporarily gone",
+        description: "Both pages, and every place that linked to them, have been removed while we rebuild this part of AarPex on a proper foundation. All 1,284 companies and 976 contacts were fully backed up before removal.",
+      },
+      {
+        title: "Everything else keeps working, unlinked",
+        description: "Deals, Invoices, Tasks, Activities, Industry Agents, and the AI Copilot all keep working -- they just no longer point at a Company or Contact record.",
+      },
+    ],
+  },
+  {
     version: "1.33.0",
     date: "2026-09-28",
     headline: "A Cleaner Header",

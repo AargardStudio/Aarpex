@@ -13,6 +13,21 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-28
+
+### Removed
+- **Companies and Contacts have been removed entirely, ahead of a from-scratch rebuild of both on a proper data model.** This is a deliberate, approved, breaking change -- not a bug fix. A full backup of all 1,284 companies and 976 contacts was exported and handed to the workspace owner before anything was touched.
+- Live Supabase migration `0019_drop_companies_contacts.sql` drops every foreign key pointing at `companies`/`contacts` from `activities`, `deals`, `invoices`, `leads`, `payments`, and `tasks`; drops the now-orphaned id columns those tables held (`company_id`, `contact_id`, `converted_company_id`, `linked_company_id`, `linked_contact_id`, and the plain (non-FK) `agent_actions.contact_id`, `industry_agents.excluded_company_ids`, `knowledge_base.linked_company_ids`/`linked_contact_ids`, `stored_files.linked_company_id`/`linked_contact_id`); then drops the `companies` and `contacts` tables themselves.
+- The Companies and Contacts pages, their sidebar nav entries, and the `Company360Drawer`/`ContactProfileDrawer` components are gone from the app. `CRMContext` no longer holds companies/contacts state or CRUD, and `tenantDataSync` no longer syncs either table.
+
+### Changed
+- Every feature that linked to a Company or Contact record now works without one, rather than pointing at nothing: Deals, Invoices, Payments, Tasks, and Activities no longer have a company/contact link (Invoice "Billed To" now shows the linked Deal, falling back to "Corporate Account"); the AI Sales Copilot can no longer create/update/delete Contacts or Companies and its negotiation-offer/personalized-email actions are lead-only now; the AI chat-assistant's action schema (`server.ts`) drops the `contact`/`company` entities and the `companyRef`/`contactRef` fields, so deal/invoice creation through chat no longer requires (and can no longer fail on) an unresolvable company; Knowledge Base entries link to Leads only; Industry Agent matching is lead-only (its "Companies" match count always reads 0 now); Email Marketing's audience is Leads-only; Lead conversion creates a Deal only; and Reports/Revenue roll up by Lead and Deal rather than Company.
+- `QuickCreateModal` and `EntityImportModal` no longer offer Company/Contact as a record type to create or bulk-import.
+- LeadsView's "Sync All to Companies/Contacts" bulk-link action was removed along with the tables it linked to.
+
+### Notes
+- This is a MAJOR version bump because it removes user-facing functionality and a chunk of the data model, not because anything was broken. The Companies/Contacts backup (JSON) was delivered directly to the workspace owner; it is not stored in this repo.
+
 ## [1.33.0] - 2026-09-28
 
 ### Changed

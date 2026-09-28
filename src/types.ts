@@ -168,108 +168,6 @@ export interface User {
   status?: "Active" | "Pending" | "Suspended";
 }
 
-// ----------------------------------------------------------------------------
-// Business Profile — the AI-analysis + call-log layer that rides along with
-// a Company record. A "business profile" isn't a separate entity: it's this
-// bundle of fields living on the Company that gets auto-populated the moment
-// a Lead is added, and shown on the Company 360 drawer's own tab.
-// ----------------------------------------------------------------------------
-export interface CompanyAIAnalysis {
-  healthScore: number;
-  healthStatus: "Healthy" | "Stable" | "At Risk" | "Critical";
-  churnRisk: "Low" | "Medium" | "High" | "Critical";
-  churnReason: string;
-  summary: string;
-  actionableRecommendations: string[];
-  opportunities?: Array<{
-    type: string;
-    title: string;
-    description: string;
-    estimatedValue?: number;
-    confidence?: string;
-  }>;
-  recommendedAction?: string;
-  generatedAt: string;
-  source: "gemini" | "heuristic";
-}
-
-export interface CallLogEntry {
-  id: string;
-  contactId?: string;
-  contactName?: string;
-  date: string;
-  durationMinutes: number;
-  outcome: "Connected" | "No Answer" | "Voicemail" | "Follow-Up Needed" | "Not Interested" | "Closed";
-  summary: string;
-  loggedBy: string;
-  createdAt: string;
-}
-
-export interface Company {
-  id: string;
-  name: string;
-  logo?: string;
-  // Business Profile fields (see above) — all optional so existing
-  // companies created before this feature keep working unchanged.
-  aiAnalysis?: CompanyAIAnalysis;
-  callLog?: CallLogEntry[];
-  sourceLeadId?: string;
-  industry: string;
-  // Classification of the client itself (size/type of buyer), independent
-  // of what industry they're in -- e.g. two Textile & Fashion companies
-  // might be "Enterprise" and "Startup" respectively. See
-  // src/data/industries.ts for the standard picklist (freeform is still
-  // accepted for anything not on it).
-  clientCategory?: string;
-  website: string;
-  country: string;
-  city: string;
-  address: string;
-  phone: string;
-  email: string;
-  primaryContactId?: string;
-  salesperson: string;
-  status: CustomerStatus;
-  customerValue: number;
-  notes: string;
-  tags: string[];
-  createdAt: string;
-
-  // Derived / calculated properties
-  totalRevenue?: number;
-  totalInvoiced?: number;
-  totalPaid?: number;
-  outstandingBalance?: number;
-  overdueBalance?: number;
-  averagePaymentDays?: number;
-  dealsCount?: number;
-  openDealsCount?: number;
-  wonDealsCount?: number;
-  lostDealsCount?: number;
-  lastActivityDate?: string;
-  nextActivityDate?: string;
-}
-
-export interface Contact {
-  id: string;
-  firstName: string;
-  lastName: string;
-  position: string;
-  companyId: string;
-  email: string;
-  phone: string;
-  whatsapp?: string;
-  linkedin?: string;
-  country: string;
-  city: string;
-  status: string;
-  leadSource: string;
-  salesperson: string;
-  notes: string;
-  tags: string[];
-  createdAt: string;
-}
-
 // A lead's social profile -- deliberately open-ended (platform is free
 // text, not a fixed union) so "any other social media link" beyond
 // Instagram/Facebook/LinkedIn/X/TikTok just works without a code change.
@@ -290,7 +188,9 @@ export interface Lead {
   website?: string;
   socialLinks?: SocialLink[];
   industry: string;
-  // See Company.clientCategory -- same idea, set at the lead stage.
+  // Classification of the lead itself (size/type of buyer), independent of
+  // what industry they're in. See src/data/industries.ts for the standard
+  // picklist (freeform is still accepted for anything not on it).
   clientCategory?: string;
   country: string;
   city: string;
@@ -306,13 +206,7 @@ export interface Lead {
   nextFollowUp: string;
   tags: string[];
   notes: string;
-  convertedCompanyId?: string;
   convertedDealId?: string;
-  // Set by "Sync All to Companies/Contacts" (or the per-lead equivalent) --
-  // marks that this lead has a matching Company/Contact record, without
-  // implying a full pipeline conversion the way convertedCompanyId does.
-  linkedCompanyId?: string;
-  linkedContactId?: string;
 }
 
 // ----------------------------------------------------------------------------
@@ -343,13 +237,13 @@ export type ProductStatus = "Active" | "Draft" | "Archived";
 // additive (an empty array/undefined means "no constraint on this field") --
 // a product with no criteria at all simply matches everyone.
 export interface ProductTargetCriteria {
-  industries: string[]; // matches Company.industry / Lead.industry
-  // matches Company.clientCategory / Lead.clientCategory -- optional, an
-  // empty array means "no constraint" same as every other criteria field.
+  industries: string[]; // matches Lead.industry
+  // matches Lead.clientCategory -- optional, an empty array means "no
+  // constraint" same as every other criteria field.
   clientCategories: string[];
   companyStatuses: CustomerStatus[]; // e.g. "Prospect", "Active Customer"
   countries: string[];
-  tags: string[]; // matches Company.tags / Lead.tags / Contact.tags
+  tags: string[]; // matches Lead.tags
   leadSources: string[]; // matches Lead.source
   idealCustomerNotes: string; // free-text description of the ideal buyer
 }
@@ -385,18 +279,17 @@ export interface Product {
 // Knowledge Base — free-text reference material the AI chat assistant is
 // grounded in, split into three categories so the right content shows up in
 // the right place instead of one undifferentiated pile:
-//   - "company": context ABOUT specific leads/contacts/companies -- industry
-//     background, research notes, anything relevant to who you're talking
-//     to. An entry can be attached to as many records as apply (e.g. one
-//     "Healthcare industry context" entry attached to every lead/company in
-//     that vertical) via linkedLeadIds/linkedContactIds/linkedCompanyIds.
-//     An entry with none of those set is still usable as general
-//     company-category reference, just not tied to specific records.
+//   - "company": context ABOUT specific leads -- industry background,
+//     research notes, anything relevant to who you're talking to. An entry
+//     can be attached to as many records as apply (e.g. one "Healthcare
+//     industry context" entry attached to every lead in that vertical) via
+//     linkedLeadIds. An entry with none of those set is still usable as
+//     general company-category reference, just not tied to specific records.
 //   - "product": what you sell -- positioning, pricing rationale, FAQs
 //   - "operator": who YOUR business is (background, service offering) and
 //     how it aligns with what you sell -- so the AI can help position it to
-//     specific leads/companies/contacts. Internal-only: never shown to
-//     prospects/customers as if it were customer-facing copy.
+//     specific leads. Internal-only: never shown to prospects/customers as
+//     if it were customer-facing copy.
 // ----------------------------------------------------------------------------
 export type KnowledgeBaseCategory = "company" | "product" | "operator";
 
@@ -409,8 +302,6 @@ export interface KnowledgeBaseEntry {
   // "company" category only: which specific records this entry is about.
   // Ignored for "product"/"operator" entries.
   linkedLeadIds?: string[];
-  linkedContactIds?: string[];
-  linkedCompanyIds?: string[];
   // Set when this entry was drafted (or last re-drafted) from a webpage via
   // "Generate from a link" -- shown as provenance, never required.
   sourceUrl?: string;
@@ -441,8 +332,6 @@ export interface StoredFile {
   storagePath: string;
   source: StoredFileSource;
   linkedLeadId?: string;
-  linkedContactId?: string;
-  linkedCompanyId?: string;
   linkedDealId?: string;
   uploadedBy: string;
   createdAt: string;
@@ -450,10 +339,10 @@ export interface StoredFile {
 
 // ----------------------------------------------------------------------------
 // Industry Agents — configurable, user-defined AI management profiles per
-// industry (matches the freeform `industry` field on Lead/Company — see
+// industry (matches the freeform `industry` field on Lead — see
 // src/data/industries.ts for the standard picklist, custom values still
 // work). One agent per industry controls three things at once wherever
-// that industry's leads/contacts/companies are touched by AI:
+// that industry's leads are touched by AI:
 //   - email tone & talking points (bulk Email Marketing campaigns AND the
 //     single-recipient "Generate Personalized Email" feature)
 //   - lead qualification/scoring guidance (fed into /api/ai/lead-analysis)
@@ -480,14 +369,13 @@ export interface IndustryAgent {
   // generates, the same way a campaign's Product/Service picker seeds its
   // generated email copy.
   productId?: string;
-  // By default this agent works EVERY Lead/Company whose
-  // Industry field matches `industry` above (case-insensitive). These are
-  // opt-outs on top of that automatic match -- ids listed here are excluded
-  // even though their industry matches, so you can see the full matching
-  // list when setting up the agent and uncheck specific businesses you
-  // don't want the agent touching, without having to change their industry.
+  // By default this agent works EVERY Lead whose Industry field matches
+  // `industry` above (case-insensitive). These are opt-outs on top of that
+  // automatic match -- ids listed here are excluded even though their
+  // industry matches, so you can see the full matching list when setting up
+  // the agent and uncheck specific businesses you don't want the agent
+  // touching, without having to change their industry.
   excludedLeadIds?: string[];
-  excludedCompanyIds?: string[];
   // Which AI provider/model drafts this agent's messages. modelName is a
   // value from AI_PROVIDER_MODELS[modelProvider] (src/lib/aiProviders.ts).
   modelProvider: AIProvider;
@@ -547,7 +435,6 @@ export interface AgentAction {
   industry: string;
   actionType: AgentActionType;
   leadId?: string;
-  contactId?: string;
   recipientName: string;
   recipientEmail: string;
   subject: string;
@@ -616,7 +503,7 @@ export interface EmailCampaign {
   // when set, the audience picker can pre-select this product's matches
   // and its pitch seeds the AI-generated email copy.
   productId?: string;
-  audienceType: "Leads" | "Contacts";
+  audienceType: "Leads";
   audienceIds: string[];
   frequency: EmailFrequency;
   frequencyDays: number; // resolved cadence in days (7 for Weekly, etc.)
@@ -642,8 +529,6 @@ export interface EmailCampaign {
 export interface Deal {
   id: string;
   name: string;
-  companyId: string;
-  contactId?: string;
   salesperson: string;
   pipelineId: string;
   stageId: string;
@@ -693,8 +578,6 @@ export interface InvoiceItem {
 export interface Invoice {
   id: string;
   invoiceNumber: string;
-  companyId: string;
-  contactId?: string;
   dealId?: string;
   issueDate: string;
   dueDate: string;
@@ -743,7 +626,6 @@ export interface InvoiceTemplateConfig {
 export interface Payment {
   id: string;
   paymentNumber: string;
-  companyId: string;
   invoiceId: string;
   dealId?: string;
   date: string;
@@ -758,8 +640,6 @@ export interface Payment {
 export interface Activity {
   id: string;
   type: ActivityType;
-  companyId?: string;
-  contactId?: string;
   dealId?: string;
   leadId?: string;
   date: string;
@@ -773,8 +653,6 @@ export interface Activity {
 export interface Task {
   id: string;
   title: string;
-  companyId?: string;
-  contactId?: string;
   dealId?: string;
   assignedUser: string;
   priority: TaskPriority;
@@ -792,7 +670,7 @@ export interface CommentReply {
 
 export interface Comment {
   id: string;
-  entityType: "company" | "contact" | "deal";
+  entityType: "deal";
   entityId: string;
   userId: string;
   userName: string;

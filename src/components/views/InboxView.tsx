@@ -9,19 +9,15 @@ import { useCRM } from "../../context/CRMContext";
 // mailbox, and feeds that back into Email Marketing so replied-to people
 // stop receiving further scheduled follow-ups automatically.
 export const InboxView: React.FC = () => {
-  const { emailCampaigns, leads, contacts, activeTenant, checkCampaignReplies } = useCRM();
+  const { emailCampaigns, leads, activeTenant, checkCampaignReplies } = useCRM();
   const [checkingAll, setCheckingAll] = useState(false);
   const [checkingId, setCheckingId] = useState<string | null>(null);
 
   const trackedCampaigns = emailCampaigns.filter((c) => c.status === "Active" || c.status === "Completed" || c.status === "Paused");
 
-  const resolveRecipient = (campaign: (typeof emailCampaigns)[number], id: string) => {
-    if (campaign.audienceType === "Leads") {
-      const lead = leads.find((l) => l.id === id);
-      return lead ? { name: lead.name, email: lead.email } : null;
-    }
-    const contact = contacts.find((c) => c.id === id);
-    return contact ? { name: `${contact.firstName} ${contact.lastName}`.trim(), email: contact.email } : null;
+  const resolveRecipient = (_campaign: (typeof emailCampaigns)[number], id: string) => {
+    const lead = leads.find((l) => l.id === id);
+    return lead ? { name: lead.name, email: lead.email } : null;
   };
 
   const handleCheckOne = async (campaignId: string) => {

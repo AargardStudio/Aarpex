@@ -35,8 +35,6 @@ export const Header: React.FC = () => {
     setDateRange,
     setQuickCreateOpen,
     setQuickCreateType,
-    setSelectedCompanyId,
-    companies,
     deals,
     invoices,
     tasks,
@@ -65,26 +63,14 @@ export const Header: React.FC = () => {
   const highPriorityTasks = tasks.filter(
     (t) => t.priority === "High" && t.status !== "Completed"
   );
-  const atRiskCompanies = companies.filter((c) => c.status === "At Risk");
   const pendingAgentActions = (agentActions || []).filter((a) => a.status === "pending");
 
   const totalAlerts =
     overdueInvoices.length +
     highPriorityTasks.length +
-    atRiskCompanies.length +
     pendingAgentActions.length;
 
   // Search matches
-  const matchedCompanies = searchQuery
-    ? companies
-        .filter(
-          (c) =>
-            c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            c.industry.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-        .slice(0, 4)
-    : [];
-
   const matchedDeals = searchQuery
     ? deals
         .filter((d) =>
@@ -221,33 +207,6 @@ export const Header: React.FC = () => {
 
             {/* Direct matches */}
             <div className="max-h-64 overflow-y-auto p-2 space-y-2 custom-scrollbar">
-              {matchedCompanies.length > 0 && (
-                <div>
-                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1">
-                    Companies
-                  </div>
-                  {matchedCompanies.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => {
-                        setSelectedCompanyId(c.id);
-                        setIsSearchOpen(false);
-                      }}
-                      className="w-full flex items-center justify-between p-2 hover:bg-[#222630] rounded-lg text-left text-xs text-slate-200 group transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Building2 className="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-400" />
-                        <span className="font-medium text-white">{c.name}</span>
-                        <span className="text-slate-400 text-[11px]">({c.city})</span>
-                      </div>
-                      <span className="text-teal-300 text-[10px] font-mono">
-                        ${(c.totalRevenue || 0).toLocaleString()}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
               {matchedDeals.length > 0 && (
                 <div>
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1">
@@ -517,8 +476,6 @@ export const Header: React.FC = () => {
               {[
                 { label: "New Lead", type: "lead" as const, icon: Users },
                 { label: "New Deal", type: "deal" as const, icon: Briefcase },
-                { label: "New Company", type: "company" as const, icon: Building2 },
-                { label: "New Contact", type: "contact" as const, icon: Users },
                 { label: "New Invoice", type: "invoice" as const, icon: Receipt },
                 { label: "Record Payment", type: "payment" as const, icon: CreditCard },
                 { label: "Log Activity", type: "activity" as const, icon: CalendarCheck },
@@ -595,21 +552,6 @@ export const Header: React.FC = () => {
               </div>
             )}
             <div className="max-h-56 overflow-y-auto p-2 space-y-2 custom-scrollbar">
-              {matchedCompanies.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => {
-                    setSelectedCompanyId(c.id);
-                    setIsMobileSearchOpen(false);
-                  }}
-                  className="w-full flex items-center justify-between p-2 hover:bg-[#222630] rounded-lg text-left text-xs text-slate-200"
-                >
-                  <span className="flex items-center gap-2">
-                    <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                    <span className="font-medium text-white">{c.name}</span>
-                  </span>
-                </button>
-              ))}
               {matchedDeals.map((d) => (
                 <button
                   key={d.id}

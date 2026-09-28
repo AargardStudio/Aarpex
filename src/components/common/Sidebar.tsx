@@ -2,8 +2,6 @@ import React from "react";
 import { useCRM, NavView } from "../../context/CRMContext";
 import {
   LayoutDashboard,
-  Users,
-  Building2,
   UserCheck,
   Briefcase,
   GitBranch,
@@ -55,7 +53,6 @@ export const Sidebar: React.FC = () => {
     tasks,
     emailCampaigns,
     setQuickCreateOpen,
-    setSelectedCompanyId,
     currentUser,
     signOut,
     tenants,
@@ -88,8 +85,6 @@ export const Sidebar: React.FC = () => {
     { name: "Dashboard", icon: LayoutDashboard, category: "Core" },
     { name: "Instructions", icon: LifeBuoy, category: "Core" },
     { name: "Leads", icon: UserCheck, badge: leads.filter((l) => l.status === "New").length || undefined, category: "Core" },
-    { name: "Contacts", icon: Users, category: "Core" },
-    { name: "Companies", icon: Building2, category: "Core" },
 
     { name: "Deals", icon: Briefcase, badge: openDealsCount, category: "Sales" },
     { name: "Pipelines", icon: GitBranch, category: "Sales" },
@@ -330,7 +325,6 @@ export const Sidebar: React.FC = () => {
                     id={`nav-${item.name.toLowerCase().replace(/\s+/g, "-")}`}
                     onClick={() => {
                       setActiveNav(item.name);
-                      setSelectedCompanyId(null);
                       setMobileSidebarOpen(false);
                     }}
                     className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-colors group ${

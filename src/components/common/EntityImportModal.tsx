@@ -4,12 +4,12 @@ import { useCRM } from "../../context/CRMContext";
 
 // Generalizes the column-mapping Excel/Google Sheets importer that used to
 // exist only for Leads (see LeadImportModal.tsx, still Lead-only) to
-// Contacts, Companies, and Deals -- same wizard, same "map each spreadsheet
-// column to a CRM field" step, plus a mode toggle Lead import doesn't have:
-// "Create new records" (the original behavior) or "Update existing records"
-// (a data-alteration pass -- rows are matched against existing records by
-// one key field, and only the columns you mapped are applied as updates).
-export type ImportableEntity = "contact" | "company" | "deal";
+// Deals -- same wizard, same "map each spreadsheet column to a CRM field"
+// step, plus a mode toggle Lead import doesn't have: "Create new records"
+// (the original behavior) or "Update existing records" (a data-alteration
+// pass -- rows are matched against existing records by one key field, and
+// only the columns you mapped are applied as updates).
+export type ImportableEntity = "deal";
 
 interface FieldDef {
   key: string;
@@ -27,48 +27,12 @@ interface EntityConfig {
 }
 
 const CONFIGS: Record<ImportableEntity, EntityConfig> = {
-  contact: {
-    label: "Contacts",
-    matchField: "email",
-    matchLabel: "Email Address",
-    fields: [
-      { key: "firstName", label: "First Name", required: true },
-      { key: "lastName", label: "Last Name" },
-      { key: "company", label: "Company Name", required: true },
-      { key: "email", label: "Email Address" },
-      { key: "phone", label: "Phone Number" },
-      { key: "position", label: "Job Title" },
-      { key: "status", label: "Status" },
-      { key: "salesperson", label: "Assigned Rep" },
-    ],
-    templateHeaders: ["First Name", "Last Name", "Company", "Email", "Phone", "Job Title", "Status", "Assigned Rep"],
-    templateRow: ["Jane", "Doe", "Acme Corporation", "jane.doe@acme.com", "+1 (555) 019-2831", "VP Operations", "Active", "Alex Rivera"],
-  },
-  company: {
-    label: "Companies",
-    matchField: "name",
-    matchLabel: "Company Name",
-    fields: [
-      { key: "name", label: "Company Name", required: true },
-      { key: "industry", label: "Industry" },
-      { key: "website", label: "Website" },
-      { key: "email", label: "Email Address" },
-      { key: "phone", label: "Phone Number" },
-      { key: "country", label: "Country" },
-      { key: "city", label: "City" },
-      { key: "status", label: "Status" },
-      { key: "salesperson", label: "Assigned Rep" },
-    ],
-    templateHeaders: ["Company", "Industry", "Website", "Email", "Phone", "Country", "City", "Status", "Assigned Rep"],
-    templateRow: ["Nexus Analytics", "Technology / SaaS", "nexus.io", "hello@nexus.io", "+1 (555) 882-9944", "United States", "Austin", "Qualified Prospect", "Sarah Jenkins"],
-  },
   deal: {
     label: "Deals",
     matchField: "name",
     matchLabel: "Deal Name",
     fields: [
       { key: "name", label: "Deal Name", required: true },
-      { key: "company", label: "Company Name", required: true },
       { key: "value", label: "Deal Value ($)" },
       { key: "currency", label: "Currency" },
       { key: "priority", label: "Priority" },
@@ -76,8 +40,8 @@ const CONFIGS: Record<ImportableEntity, EntityConfig> = {
       { key: "productService", label: "Product/Service" },
       { key: "salesperson", label: "Assigned Rep" },
     ],
-    templateHeaders: ["Deal Name", "Company", "Value", "Currency", "Priority", "Expected Close Date", "Product/Service", "Assigned Rep"],
-    templateRow: ["Acme — Annual Renewal", "Acme Corporation", "45000", "USD", "High", "2026-12-01", "Growth Plan", "Alex Rivera"],
+    templateHeaders: ["Deal Name", "Value", "Currency", "Priority", "Expected Close Date", "Product/Service", "Assigned Rep"],
+    templateRow: ["Acme — Annual Renewal", "45000", "USD", "High", "2026-12-01", "Growth Plan", "Alex Rivera"],
   },
 };
 
@@ -90,16 +54,10 @@ interface EntityImportModalProps {
 export const EntityImportModal: React.FC<EntityImportModalProps> = ({ isOpen, onClose, entity }) => {
   const {
     currentUser,
-    companies,
-    contacts,
     deals,
     pipelines,
-    addCompany,
-    addContact,
-    updateContact,
     addDeal,
     updateDeal,
-    updateCompany,
     pendingBulkImport,
     setPendingBulkImport,
   } = useCRM();
@@ -259,28 +217,6 @@ export const EntityImportModal: React.FC<EntityImportModalProps> = ({ isOpen, on
     XLSX.writeFile(wb, `AarPex_${config.label}_Import_Template.xlsx`);
   };
 
-  const resolveCompanyByName = (name: string) => {
-    const trimmed = (name || "").trim();
-    if (!trimmed) return null;
-    const existing = companies.find((c) => c.name.trim().toLowerCase() === trimmed.toLowerCase());
-    if (existing) return existing;
-    return addCompany({
-      name: trimmed,
-      industry: "General",
-      website: "",
-      country: "",
-      city: "",
-      address: "",
-      phone: "",
-      email: "",
-      salesperson: currentUser.name,
-      status: "Prospect",
-      customerValue: 0,
-      notes: `Auto-created during ${config.label} import.`,
-      tags: ["Auto-Created", "From Import"],
-    } as any);
-  };
-
   const handleExecuteImport = () => {
     const requiredMissing = config.fields.filter((f) => f.required && !columnMap[f.key]);
     if (requiredMissing.length > 0) {
@@ -298,77 +234,6 @@ export const EntityImportModal: React.FC<EntityImportModalProps> = ({ isOpen, on
 
     for (const row of parsedRows) {
       const get = (key: string) => (columnMap[key] ? String(row[columnMap[key]] ?? "").trim() : "");
-
-      if (entity === "contact") {
-        const matchVal = get("email").toLowerCase();
-        if (mode === "update") {
-          const target = contacts.find((c) => c.email.trim().toLowerCase() === matchVal);
-          if (!target || !matchVal) { skipped++; continue; }
-          const updates: Record<string, any> = {};
-          if (columnMap.firstName) updates.firstName = get("firstName") || target.firstName;
-          if (columnMap.lastName) updates.lastName = get("lastName");
-          if (columnMap.phone) updates.phone = get("phone");
-          if (columnMap.position) updates.position = get("position");
-          if (columnMap.status) updates.status = get("status") || target.status;
-          updateContact(target.id, updates);
-          updated++;
-        } else {
-          const company = resolveCompanyByName(get("company"));
-          if (!company) { skipped++; continue; }
-          addContact({
-            firstName: get("firstName") || "New",
-            lastName: get("lastName") || "",
-            companyId: company.id,
-            position: get("position") || "",
-            email: get("email"),
-            phone: get("phone") || "",
-            salesperson: get("salesperson") || currentUser.name,
-            status: get("status") || "Active",
-            leadSource: "Spreadsheet Import",
-            notes: "Imported from spreadsheet.",
-            country: "",
-            city: "",
-            tags: [],
-          });
-          created++;
-        }
-      }
-
-      if (entity === "company") {
-        const matchVal = get("name").toLowerCase();
-        if (mode === "update") {
-          const target = companies.find((c) => c.name.trim().toLowerCase() === matchVal);
-          if (!target || !matchVal) { skipped++; continue; }
-          const updates: Record<string, any> = {};
-          if (columnMap.industry) updates.industry = get("industry") || target.industry;
-          if (columnMap.website) updates.website = get("website");
-          if (columnMap.email) updates.email = get("email");
-          if (columnMap.phone) updates.phone = get("phone");
-          if (columnMap.country) updates.country = get("country");
-          if (columnMap.city) updates.city = get("city");
-          if (columnMap.status) updates.status = get("status") || target.status;
-          updateCompany(target.id, updates);
-          updated++;
-        } else {
-          if (!get("name")) { skipped++; continue; }
-          addCompany({
-            name: get("name"),
-            industry: get("industry") || "General",
-            website: get("website") || "",
-            country: get("country") || "",
-            city: get("city") || "",
-            address: "",
-            phone: get("phone") || "",
-            email: get("email") || "",
-            salesperson: get("salesperson") || currentUser.name,
-            status: (get("status") as any) || "Qualified Prospect",
-            customerValue: 0,
-            notes: "Imported from spreadsheet.",
-            tags: [],
-          } as any);
-          created++;
-        }
-      }
 
       if (entity === "deal") {
         const matchVal = get("name").toLowerCase();
@@ -388,16 +253,14 @@ export const EntityImportModal: React.FC<EntityImportModalProps> = ({ isOpen, on
           updateDeal(target.id, updates);
           updated++;
         } else {
-          const company = resolveCompanyByName(get("company"));
-          if (!company) { skipped++; continue; }
+          if (!get("name")) { skipped++; continue; }
           const defaultPipeline = pipelines.find((p) => p.isDefault) || pipelines[0];
           const defaultStage = defaultPipeline?.stages?.[0];
           if (!defaultPipeline || !defaultStage) { skipped++; continue; }
           const rawVal = get("value");
           const dealValue = parseFloat(rawVal.replace(/[^0-9.-]+/g, "")) || 0;
           addDeal({
-            name: get("name") || `${company.name} Deal`,
-            companyId: company.id,
+            name: get("name"),
             salesperson: get("salesperson") || currentUser.name,
             pipelineId: defaultPipeline.id,
             stageId: defaultStage.id,

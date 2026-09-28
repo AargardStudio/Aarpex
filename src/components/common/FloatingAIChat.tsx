@@ -5,7 +5,7 @@ import { apiFetch } from "../../lib/apiClient";
 import { InvoiceItem } from "../../types";
 
 type ActionEntity =
-  | "lead" | "contact" | "company" | "deal" | "task" | "activity" | "invoice"
+  | "lead" | "deal" | "task" | "activity" | "invoice"
   | "industry_agent" | "agent_action" | "negotiation_offer" | "personalized_email";
 type ActionType = "create" | "update" | "delete";
 
@@ -28,8 +28,6 @@ interface ChatMessage {
 
 const ENTITY_LABEL: Record<ActionEntity, string> = {
   lead: "Lead",
-  contact: "Contact",
-  company: "Company",
   deal: "Deal",
   task: "Task",
   activity: "Activity",
@@ -46,8 +44,8 @@ const daysFromNow = (n: number) => new Date(Date.now() + n * 86400000).toISOStri
 // Floating chat bubble ("Sales Intelligence Copilot") available on every
 // screen. It can answer questions about the signed-in workspace's own CRM
 // data, jump the user to a screen, AND -- as of this version -- propose
-// creating/editing/deleting Leads, Contacts, Companies, Deals, Tasks,
-// Activities, and Invoices. Every proposed action is shown to the user as an
+// creating/editing/deleting Leads, Deals, Tasks, Activities, and Invoices.
+// Every proposed action is shown to the user as an
 // explicit confirmation card; nothing is ever applied to real data until
 // they click Confirm. Missing optional fields are filled with the same
 // sane defaults the Quick Create form uses.
@@ -57,8 +55,6 @@ export const FloatingAIChat: React.FC = () => {
     deals,
     invoices,
     tasks,
-    companies,
-    contacts,
     emailCampaigns,
     pipelines,
     currentUser,
@@ -66,12 +62,6 @@ export const FloatingAIChat: React.FC = () => {
     addLead,
     updateLead,
     deleteLead,
-    addContact,
-    updateContact,
-    deleteContact,
-    addCompany,
-    updateCompany,
-    deleteCompany,
     addDeal,
     updateDeal,
     deleteDeal,
@@ -124,8 +114,6 @@ export const FloatingAIChat: React.FC = () => {
     return {
       leadsCount: leads.length,
       hotLeadsCount: leads.filter((l) => l.status !== "Converted" && l.leadScore >= 75).length,
-      companiesCount: companies.length,
-      contactsCount: contacts.length,
       openDealsCount: openDeals.length,
       openDealsValue: openDeals.reduce((sum, d) => sum + (d.dealValue || 0), 0),
       overdueInvoicesCount: overdueInvoices.length,
@@ -140,8 +128,6 @@ export const FloatingAIChat: React.FC = () => {
   // without ever handing the model actual IDs to hallucinate over. Capped
   // to keep the request small on very large workspaces.
   const buildLookups = () => ({
-    companies: companies.slice(0, 300).map((c) => ({ id: c.id, name: c.name })),
-    contacts: contacts.slice(0, 300).map((c) => ({ id: c.id, name: `${c.firstName} ${c.lastName || ""}`.trim() })),
     leads: leads.slice(0, 300).map((l) => ({ id: l.id, name: l.name })),
     deals: deals.slice(0, 300).map((d) => ({ id: d.id, name: d.name })),
     tasks: tasks.slice(0, 200).map((t) => ({ id: t.id, name: t.title })),
@@ -162,17 +148,13 @@ export const FloatingAIChat: React.FC = () => {
   const KB_MAX_ENTRIES_PER_CATEGORY = 12;
   const KB_MAX_CONTENT_CHARS = 600;
   const buildKnowledgeBase = () => {
-    // "Company" entries can be attached to specific Leads/Contacts/Companies
-    // -- resolve those ids to plain names here (never send raw ids to the
-    // model) so the assistant can tell "this note is about Acme Corp"
-    // rather than only "this is general reference content".
-    const companyNameById = new Map(companies.map((c) => [c.id, c.name]));
-    const contactNameById = new Map(contacts.map((c) => [c.id, `${c.firstName} ${c.lastName || ""}`.trim()]));
+    // "Company" entries can be attached to specific Leads -- resolve those
+    // ids to plain names here (never send raw ids to the model) so the
+    // assistant can tell "this note is about Acme Corp" rather than only
+    // "this is general reference content".
     const leadNameById = new Map(leads.map((l) => [l.id, l.name]));
     const resolveLinkedNames = (e: (typeof knowledgeBase)[number]): string[] => [
       ...(e.linkedLeadIds || []).map((id) => leadNameById.get(id)).filter(Boolean),
-      ...(e.linkedContactIds || []).map((id) => contactNameById.get(id)).filter(Boolean),
-      ...(e.linkedCompanyIds || []).map((id) => companyNameById.get(id)).filter(Boolean),
     ] as string[];
 
     const byCategory = (category: "company" | "product" | "operator") =>
@@ -280,75 +262,12 @@ export const FloatingAIChat: React.FC = () => {
       }
     }
 
-    if (action.entity === "contact") {
-      if (action.type === "create") {
-        const contact = addContact({
-          firstName: p.firstName || "New",
-          lastName: p.lastName || "Contact",
-          companyId: p.companyId,
-          position: p.position || "",
-          email: p.email || "",
-          phone: p.phone || "",
-          salesperson: currentUser.name,
-          status: p.status || "Active",
-          leadSource: p.leadSource || "Direct Contact",
-          notes: p.notes || "",
-          country: p.country || "United States",
-          city: p.city || "",
-          tags: [],
-        });
-        return `Created contact "${contact.firstName} ${contact.lastName}".`;
-      }
-      if (action.type === "update") {
-        updateContact(p.id, p.updates || {});
-        return `Updated contact.`;
-      }
-      if (action.type === "delete") {
-        const target = contacts.find((c) => c.id === p.id);
-        deleteContact(p.id);
-        return `Deleted contact${target ? ` "${target.firstName} ${target.lastName}"` : ""}.`;
-      }
-    }
-
-    if (action.entity === "company") {
-      if (action.type === "create") {
-        const company = addCompany({
-          name: p.name || "New Company",
-          industry: p.industry || "Technology / SaaS",
-          clientCategory: p.clientCategory || undefined,
-          website: p.website || "",
-          city: p.city || "",
-          country: p.country || "United States",
-          phone: p.phone || "",
-          email: p.email || "",
-          salesperson: currentUser.name,
-          status: p.status || "Qualified Prospect",
-          customerValue: 0,
-          address: "",
-          notes: p.notes || "",
-          tags: [],
-        });
-        return `Created company "${company.name}".`;
-      }
-      if (action.type === "update") {
-        updateCompany(p.id, p.updates || {});
-        return `Updated company.`;
-      }
-      if (action.type === "delete") {
-        const target = companies.find((c) => c.id === p.id);
-        deleteCompany(p.id);
-        return `Deleted company${target ? ` "${target.name}"` : ""}.`;
-      }
-    }
-
     if (action.entity === "deal") {
       if (action.type === "create") {
         const defaultPipeline = pipelines.find((pl) => pl.id === p.pipelineId) || pipelines.find((pl) => pl.isDefault) || pipelines[0];
         const defaultStage = defaultPipeline.stages.find((s) => s.id === p.stageId) || defaultPipeline.stages[0];
         const deal = addDeal({
-          name: p.name || `${companies.find((c) => c.id === p.companyId)?.name || "New"} Deal`,
-          companyId: p.companyId,
-          contactId: p.contactId,
+          name: p.name || "New Deal",
           salesperson: currentUser.name,
           pipelineId: defaultPipeline.id,
           stageId: defaultStage.id,
@@ -381,8 +300,6 @@ export const FloatingAIChat: React.FC = () => {
       if (action.type === "create") {
         addTask({
           title: p.title || "New Task",
-          companyId: p.companyId,
-          contactId: p.contactId,
           dealId: p.dealId,
           assignedUser: currentUser.name,
           priority: p.priority || "Medium",
@@ -407,8 +324,6 @@ export const FloatingAIChat: React.FC = () => {
       if (action.type === "create") {
         addActivity({
           type: p.type || "Note",
-          companyId: p.companyId,
-          contactId: p.contactId,
           dealId: p.dealId,
           date: todayISO(),
           time: new Date().toTimeString().slice(0, 5),
@@ -439,8 +354,6 @@ export const FloatingAIChat: React.FC = () => {
             : [{ description: "Service", quantity: 1, unitPrice: 0, discountPercent: 0, taxPercent: 0 }];
         const invoice = addInvoice({
           invoiceNumber: `INV-${Date.now().toString(36).toUpperCase()}`,
-          companyId: p.companyId,
-          contactId: p.contactId,
           dealId: p.dealId,
           issueDate: todayISO(),
           dueDate: p.dueDate || daysFromNow(30),
@@ -489,11 +402,9 @@ export const FloatingAIChat: React.FC = () => {
     if (action.entity === "negotiation_offer") {
       if (action.type === "create") {
         const lead = p.leadId ? leads.find((l) => l.id === p.leadId) : null;
-        const contact = p.contactId ? contacts.find((c) => c.id === p.contactId) : null;
-        if (!lead && !contact) return "Couldn't find that lead or contact.";
-        const company = contact ? companies.find((c) => c.id === contact.companyId) : null;
-        const recipientName = lead ? lead.name : `${contact!.firstName} ${contact!.lastName}`.trim();
-        const recipientIndustry = lead ? lead.industry : company?.industry || "";
+        if (!lead) return "Couldn't find that lead.";
+        const recipientName = lead.name;
+        const recipientIndustry = lead.industry;
         const agent = getAgentForIndustry(recipientIndustry);
         const candidateProduct =
           products.find(
@@ -507,8 +418,8 @@ export const FloatingAIChat: React.FC = () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             recipientName,
-            recipientCompany: lead ? lead.company : company?.name,
-            recipientJobTitle: lead ? lead.jobTitle : contact!.position,
+            recipientCompany: lead.company,
+            recipientJobTitle: lead.jobTitle,
             recipientIndustry,
             productName: candidateProduct.name,
             productPrice: candidateProduct.price,
@@ -519,7 +430,7 @@ export const FloatingAIChat: React.FC = () => {
             modelProvider: agent.modelProvider,
             modelName: agent.modelName,
             knowledgeEntries: knowledgeBase
-              .filter((k) => (lead ? (k.linkedLeadIds || []).includes(lead.id) : (k.linkedContactIds || []).includes(contact!.id)))
+              .filter((k) => (k.linkedLeadIds || []).includes(lead.id))
               .map((k) => k.content),
             senderName: currentUser?.name,
             senderCompany: activeTenant?.companyName || activeTenant?.name,
@@ -529,10 +440,9 @@ export const FloatingAIChat: React.FC = () => {
         addAgentAction({
           industry: recipientIndustry,
           actionType: "negotiation_offer",
-          leadId: lead?.id,
-          contactId: contact?.id,
+          leadId: lead.id,
           recipientName,
-          recipientEmail: lead ? lead.email : contact!.email,
+          recipientEmail: lead.email,
           subject: data.subject,
           body: data.body,
           reasoning: `Proposed via chat by ${currentUser?.name || "you"}.`,
@@ -547,22 +457,20 @@ export const FloatingAIChat: React.FC = () => {
     if (action.entity === "personalized_email") {
       if (action.type === "create") {
         const lead = p.leadId ? leads.find((l) => l.id === p.leadId) : null;
-        const contact = p.contactId ? contacts.find((c) => c.id === p.contactId) : null;
-        if (!lead && !contact) return "Couldn't find that lead or contact.";
-        const company = contact ? companies.find((c) => c.id === contact.companyId) : null;
-        const recipientName = lead ? lead.name : `${contact!.firstName} ${contact!.lastName}`.trim();
-        const recipientIndustry = lead ? lead.industry : company?.industry || "";
+        if (!lead) return "Couldn't find that lead.";
+        const recipientName = lead.name;
+        const recipientIndustry = lead.industry;
         const agent = getAgentForIndustry(recipientIndustry);
         const res = await apiFetch("/api/ai/personalized-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             recipientName,
-            recipientCompany: lead ? lead.company : company?.name,
-            recipientJobTitle: lead ? lead.jobTitle : contact!.position,
+            recipientCompany: lead.company,
+            recipientJobTitle: lead.jobTitle,
             recipientIndustry,
             knowledgeEntries: knowledgeBase
-              .filter((k) => (lead ? (k.linkedLeadIds || []).includes(lead.id) : (k.linkedContactIds || []).includes(contact!.id)))
+              .filter((k) => (k.linkedLeadIds || []).includes(lead.id))
               .map((k) => k.content),
             agent,
             senderName: currentUser?.name,
@@ -571,11 +479,10 @@ export const FloatingAIChat: React.FC = () => {
         });
         const data = await res.json();
         openEmailComposer({
-          to: lead ? lead.email : contact!.email,
+          to: lead.email,
           subject: data.subject,
           body: data.body,
-          leadId: lead?.id,
-          contactId: contact?.id,
+          leadId: lead.id,
         });
         return `Drafted a personalized email for ${recipientName} -- opened it in the composer for your review.`;
       }

@@ -31,7 +31,7 @@ export const InvoiceTemplateView: React.FC<InvoiceTemplateViewProps> = ({
   initialInvoiceId,
   onBackToLedger,
 }) => {
-  const { invoices, companies, contacts, updateInvoice, markInvoicePaid, addPayment, currentUser, activeTenant } = useCRM();
+  const { invoices, deals, updateInvoice, markInvoicePaid, addPayment, currentUser, activeTenant } = useCRM();
 
   // Selected Invoice
   const [selectedId, setSelectedId] = useState<string>(
@@ -39,8 +39,7 @@ export const InvoiceTemplateView: React.FC<InvoiceTemplateViewProps> = ({
   );
 
   const invoice = invoices.find((i) => i.id === selectedId) || invoices[0] || null;
-  const company = invoice ? companies.find((c) => c.id === invoice.companyId) : null;
-  const contact = invoice?.contactId ? contacts.find((c) => c.id === invoice.contactId) : null;
+  const linkedDeal = invoice?.dealId ? deals.find((d) => d.id === invoice.dealId) : null;
 
   // Template Theme
   const [theme, setTheme] = useState<InvoiceTemplateTheme>("executive");
@@ -96,7 +95,7 @@ export const InvoiceTemplateView: React.FC<InvoiceTemplateViewProps> = ({
 
   // Generate official Stripe invoice
   const handleCreateStripeInvoice = async () => {
-    if (!invoice || !company) return;
+    if (!invoice) return;
     setIsGeneratingStripe(true);
     setStripeSuccessMsg(null);
     setStripeErrorMsg(null);
@@ -108,8 +107,8 @@ export const InvoiceTemplateView: React.FC<InvoiceTemplateViewProps> = ({
         body: JSON.stringify({
           invoiceId: invoice.id,
           invoiceNumber: invoice.invoiceNumber,
-          companyName: company.name,
-          clientEmail: contact?.email || `${company.name.toLowerCase().replace(/[^a-z0-9]/g, "")}@example.com`,
+          companyName: linkedDeal?.name || "Corporate Account",
+          clientEmail: `invoice-${invoice.invoiceNumber.toLowerCase()}@example.com`,
           currency: invoice.currency || "USD",
           items: invoice.items,
           total: invoice.total,
@@ -145,7 +144,7 @@ export const InvoiceTemplateView: React.FC<InvoiceTemplateViewProps> = ({
 
   // Generate instant Stripe Checkout payment link
   const handleCreatePaymentLink = async () => {
-    if (!invoice || !company) return;
+    if (!invoice) return;
     setIsGeneratingStripe(true);
     setStripeSuccessMsg(null);
     setStripeErrorMsg(null);
@@ -157,8 +156,8 @@ export const InvoiceTemplateView: React.FC<InvoiceTemplateViewProps> = ({
         body: JSON.stringify({
           invoiceId: invoice.id,
           invoiceNumber: invoice.invoiceNumber,
-          companyName: company.name,
-          clientEmail: contact?.email,
+          companyName: linkedDeal?.name || "Corporate Account",
+          clientEmail: undefined,
           currency: invoice.currency || "USD",
           amount: invoice.remainingBalance || invoice.total,
           description: `AarPex CRM Settlement for Invoice #${invoice.invoiceNumber}`,
@@ -225,7 +224,6 @@ export const InvoiceTemplateView: React.FC<InvoiceTemplateViewProps> = ({
     markInvoicePaid(invoice.id);
     addPayment({
       paymentNumber: `PAY-STRIPE-${Math.floor(1000 + Math.random() * 9000)}`,
-      companyId: invoice.companyId,
       invoiceId: invoice.id,
       dealId: invoice.dealId,
       date: new Date().toISOString().split("T")[0],
@@ -285,10 +283,10 @@ export const InvoiceTemplateView: React.FC<InvoiceTemplateViewProps> = ({
               className="px-2.5 py-1.5 bg-[#121418] border border-[#2d323f] text-white rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-teal-400"
             >
               {invoices.map((inv) => {
-                const c = companies.find((co) => co.id === inv.companyId);
+                const d = inv.dealId ? deals.find((dl) => dl.id === inv.dealId) : null;
                 return (
                   <option key={inv.id} value={inv.id}>
-                    {inv.invoiceNumber} - {c?.name || "Client"} (${inv.total.toLocaleString()} - {inv.status})
+                    {inv.invoiceNumber} - {d?.name || "Client"} (${inv.total.toLocaleString()} - {inv.status})
                   </option>
                 );
               })}
@@ -679,23 +677,8 @@ export const InvoiceTemplateView: React.FC<InvoiceTemplateViewProps> = ({
                   theme === "modern" ? "text-slate-900" : "text-white"
                 }`}
               >
-                {company?.name || "Corporate Account"}
+                {linkedDeal?.name || "Corporate Account"}
               </div>
-              {contact && (
-                <p className={theme === "modern" ? "text-slate-700" : "text-slate-300"}>
-                  Attn: {contact.firstName} {contact.lastName} ({contact.position})
-                </p>
-              )}
-              {contact?.email && (
-                <p className={theme === "modern" ? "text-slate-600" : "text-slate-400"}>
-                  Email: {contact.email}
-                </p>
-              )}
-              {company && (
-                <p className={theme === "modern" ? "text-slate-600" : "text-slate-400"}>
-                  {company.city}, {company.country}
-                </p>
-              )}
             </div>
 
             <div>

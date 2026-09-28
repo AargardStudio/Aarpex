@@ -1474,8 +1474,6 @@ app.post("/api/ai/smart-search", async (req, res) => {
       fallbackEntity = "invoices";
     } else if (q.includes("deal") || q.includes("pipeline") || q.includes("closing") || q.includes("won") || q.includes("lost")) {
       fallbackEntity = "deals";
-    } else if (q.includes("company") || q.includes("companies") || q.includes("customer") || q.includes("account") || q.includes("client")) {
-      fallbackEntity = "companies";
     } else if (q.includes("lead")) {
       fallbackEntity = "leads";
     } else if (q.includes("task") || q.includes("follow-up") || q.includes("todo")) {
@@ -1589,15 +1587,17 @@ const VALID_NAV_VIEWS = [
 // single-recipient drafts the Lead/Contact drawers do -- both only ever
 // DRAFT (queued into Agent Approvals, or handed to the email composer), the
 // client still needs a separate send/approve step.
+// "contact"/"company" were removed along with the Contacts/Companies
+// entities themselves -- Deals/Invoices/Tasks/Activities no longer link to
+// either, so there's nothing left for those two action entities to operate
+// on.
 const ACTION_ENTITIES = [
-  "lead", "contact", "company", "deal", "task", "activity", "invoice",
+  "lead", "deal", "task", "activity", "invoice",
   "industry_agent", "agent_action", "negotiation_offer", "personalized_email",
 ] as const;
 type ActionEntity = (typeof ACTION_ENTITIES)[number];
 const ENTITY_ALLOWED_TYPES: Record<ActionEntity, Array<"create" | "update" | "delete">> = {
   lead: ["create", "update", "delete"],
-  contact: ["create", "update", "delete"],
-  company: ["create", "update", "delete"],
   deal: ["create", "update", "delete"],
   task: ["create", "update", "delete"],
   activity: ["create", "delete"],
@@ -1637,7 +1637,7 @@ app.post("/api/ai/chat-assistant", async (req, res) => {
 
     const lowerMsg = message.toLowerCase();
     const navKeywordMap: Record<string, string> = {
-      lead: "Leads", contact: "Contacts", compan: "Companies", product: "Products", service: "Products", deal: "Deals",
+      lead: "Leads", product: "Products", service: "Products", deal: "Deals",
       pipeline: "Pipelines", activit: "Activities", invoice: "Invoices",
       payment: "Payments", revenue: "Revenue", stripe: "Stripe", task: "Tasks",
       insight: "AI Insights", campaign: "Email Marketing", "email market": "Email Marketing",
@@ -1657,8 +1657,6 @@ app.post("/api/ai/chat-assistant", async (req, res) => {
 
     const ctx = context || {};
     const lk = lookups || {};
-    const companies: Array<{ id: string; name: string }> = lk.companies || [];
-    const contacts: Array<{ id: string; name: string }> = lk.contacts || [];
     const leads: Array<{ id: string; name: string }> = lk.leads || [];
     const deals: Array<{ id: string; name: string }> = lk.deals || [];
     const tasks: Array<{ id: string; name: string }> = lk.tasks || [];
@@ -1712,8 +1710,6 @@ ${JSON.stringify(ctx, null, 2)}
 ${kbBlock ? `\nThe user's own Knowledge Base -- ground answers about the business, its offerings, or how the team should operate in this content when relevant. Prefer it over generic assumptions, and never invent facts about the business that aren't here:\n${kbBlock}\n` : ""}
 
 Existing records you can reference BY NAME (never invent an ID -- you don't have access to real IDs, only names):
-Companies: ${JSON.stringify(companies.map((c) => c.name)).slice(0, 4000)}
-Contacts: ${JSON.stringify(contacts.map((c) => c.name)).slice(0, 4000)}
 Leads: ${JSON.stringify(leads.map((l) => l.name)).slice(0, 4000)}
 Deals: ${JSON.stringify(deals.map((d) => d.name)).slice(0, 4000)}
 Tasks: ${JSON.stringify(tasks.map((t) => t.name)).slice(0, 2000)}
@@ -1732,12 +1728,10 @@ Reply conversationally and concisely (2-4 sentences, no bullet points). If the u
 If the user is asking you to CREATE, UPDATE, or DELETE something, populate "actions" (an array, empty if none). Each action:
 {
   "type": "create" | "update" | "delete",
-  "entity": "lead" | "contact" | "company" | "deal" | "task" | "activity" | "invoice" | "industry_agent" | "agent_action" | "negotiation_offer" | "personalized_email",
+  "entity": "lead" | "deal" | "task" | "activity" | "invoice" | "industry_agent" | "agent_action" | "negotiation_offer" | "personalized_email",
   "summary": "short human-readable one-line description of exactly what this will do, written for a confirmation prompt",
   "target": string | null,       // REQUIRED for update/delete: the name of the existing record being changed, exactly as it appears in the lists above (an Industry Agent's name is its industry; an Agent Approval's name is listed above too). null for create.
-  "companyRef": string | null,   // for contact/deal/invoice/task/activity: the company name involved (existing, from the list above)
-  "contactRef": string | null,   // for deal/invoice/task/activity/negotiation_offer/personalized_email: the contact name involved, if any
-  "leadRef": string | null,      // for negotiation_offer/personalized_email: the lead name involved, if any (use leadRef OR contactRef, never both)
+  "leadRef": string | null,      // for negotiation_offer/personalized_email/deal/invoice/task/activity: the lead name involved, if any
   "dealRef": string | null,      // for invoice/task/activity: the deal name involved, if any
   "pipelineRef": string | null,  // for deal create/update: pipeline name, if specified
   "stageRef": string | null,     // for deal create/update: stage name within that pipeline, if specified
@@ -1748,17 +1742,15 @@ AarPex's standard industry picklist (prefer these exact labels for "industry" wh
 AarPex's standard client-category picklist (for "clientCategory" -- the type/size of the buyer, independent of industry): ${JSON.stringify(STANDARD_CLIENT_CATEGORIES)}
 
 Field guidance per entity (only include what the user actually said or clearly implied):
-- lead: name, company (plain text, not a companyRef), jobTitle, email, phone, industry, clientCategory, country, city, source, estimatedValue (number), priority ("Low"|"Medium"|"High"|"Urgent"), status ("New"|"Contacted"|"Engaged"|"Qualified"|"Proposal"|"Negotiation"|"Converted"|"Lost"|"Nurture"), notes
-- contact: firstName, lastName, position, email, phone, country, city, notes (company via companyRef)
-- company: name, industry, clientCategory, website, country, city, phone, email, status ("Prospect"|"Qualified Prospect"|"Active Customer"|"High Value Customer"|"At Risk"|"Dormant"|"Former Customer"), notes
-- deal: name, dealValue (number), currency, priority ("Low"|"Medium"|"High"), expectedCloseDate (YYYY-MM-DD), productService, notes (company via companyRef, contact via contactRef, pipeline/stage via pipelineRef/stageRef)
-- task: title, dueDate (YYYY-MM-DD), priority ("Low"|"Medium"|"High"|"Urgent"), status ("To Do"|"In Progress"|"Completed"|"Cancelled"), notes (related company/contact/deal via companyRef/contactRef/dealRef)
-- activity: type ("Call"|"Meeting"|"Email"|"WhatsApp"|"Follow-up"|"Demo"|"Proposal"|"Note"), description, outcome, nextAction (related company/contact/deal via companyRef/contactRef/dealRef)
-- invoice: dueDate (YYYY-MM-DD), items (array of {description, quantity, unitPrice}), notes (company via companyRef required, contact/deal optional via contactRef/dealRef)
+- lead: name, company (plain text), jobTitle, email, phone, industry, clientCategory, country, city, source, estimatedValue (number), priority ("Low"|"Medium"|"High"|"Urgent"), status ("New"|"Contacted"|"Engaged"|"Qualified"|"Proposal"|"Negotiation"|"Converted"|"Lost"|"Nurture"), notes
+- deal: name, dealValue (number), currency, priority ("Low"|"Medium"|"High"), expectedCloseDate (YYYY-MM-DD), productService, notes (related lead via leadRef, pipeline/stage via pipelineRef/stageRef)
+- task: title, dueDate (YYYY-MM-DD), priority ("Low"|"Medium"|"High"|"Urgent"), status ("To Do"|"In Progress"|"Completed"|"Cancelled"), notes (related lead/deal via leadRef/dealRef)
+- activity: type ("Call"|"Meeting"|"Email"|"WhatsApp"|"Follow-up"|"Demo"|"Proposal"|"Note"), description, outcome, nextAction (related lead/deal via leadRef/dealRef)
+- invoice: dueDate (YYYY-MM-DD), items (array of {description, quantity, unitPrice}), notes (related lead/deal optional via leadRef/dealRef)
 - industry_agent (update only, target = the industry agent's industry name from the list above): autoRunEnabled (boolean -- "turn on/off the agent" for that industry means this), maxDiscountPercent (number 0-100 -- "let it negotiate up to X%"), negotiationConditions (string). Only include the field(s) the user actually asked to change.
 - agent_action (update only, target = the pending item's name from the list above): decision ("approve" | "reject") -- this is how the user approves/rejects/sends/dismisses a queued drafted follow-up, reply, or offer from the chat. "approve" sends it exactly as drafted; the user can't edit the text through chat, only approve or reject -- if they want it changed first, tell them to edit it from the Agent Approvals page instead of proposing an action.
-- negotiation_offer (create only): identify the recipient via leadRef OR contactRef (never both). Drafts a price/terms offer capped by that recipient's industry agent and queues it into Agent Approvals -- it does not send anything.
-- personalized_email (create only): identify the recipient via leadRef OR contactRef (never both). Drafts a one-off personalized email for that recipient and hands it to the email composer for review -- it does not send anything.
+- negotiation_offer (create only): identify the recipient via leadRef. Drafts a price/terms offer capped by that recipient's industry agent and queues it into Agent Approvals -- it does not send anything.
+- personalized_email (create only): identify the recipient via leadRef. Drafts a one-off personalized email for that recipient and hands it to the email composer for review -- it does not send anything.
 
 For update actions, put ONLY the fields being changed inside "fields". Never propose an action against a record that isn't in the lists above -- if the user references something that doesn't exist, say so in your reply instead and don't fabricate an action for it.
 
@@ -1786,8 +1778,6 @@ Return pure JSON only, no markdown fences: {"reply": string, "navigateTo": strin
             let targetId: string | null = null;
             if (a.type === "update" || a.type === "delete") {
               const list = entity === "lead" ? byName(leads)
-                : entity === "contact" ? byName(contacts)
-                : entity === "company" ? byName(companies)
                 : entity === "deal" ? byName(deals)
                 : entity === "task" ? byName(tasks)
                 : entity === "invoice" ? byName(invoices)
@@ -1800,17 +1790,6 @@ Return pure JSON only, no markdown fences: {"reply": string, "navigateTo": strin
             }
 
             // Resolve foreign-key references used by create/update.
-            if (!error && a.companyRef) {
-              const r = resolveByName(companies, a.companyRef);
-              if (r.id) params.companyId = r.id;
-              else if (["contact", "deal", "invoice"].includes(entity)) error = r.error || `Couldn't find company "${a.companyRef}".`;
-              else if (r.error) error = r.error;
-            }
-            if (!error && a.contactRef) {
-              const r = resolveByName(contacts, a.contactRef);
-              if (r.id) params.contactId = r.id;
-              else if (r.error) error = r.error;
-            }
             if (!error && a.leadRef) {
               const r = resolveByName(leads, a.leadRef);
               if (r.id) params.leadId = r.id;
@@ -1831,20 +1810,8 @@ Return pure JSON only, no markdown fences: {"reply": string, "navigateTo": strin
                 }
               }
             }
-            if (!error && entity === "company" && a.type === "create" && !fields.name) {
-              error = "No company name given.";
-            }
-            if (!error && entity === "contact" && a.type === "create" && !params.companyId) {
-              error = `A contact needs a company -- couldn't resolve "${a.companyRef || "unspecified"}".`;
-            }
-            if (!error && entity === "deal" && a.type === "create" && !params.companyId) {
-              error = `A deal needs a company -- couldn't resolve "${a.companyRef || "unspecified"}".`;
-            }
-            if (!error && entity === "invoice" && a.type === "create" && !params.companyId) {
-              error = `An invoice needs a company -- couldn't resolve "${a.companyRef || "unspecified"}".`;
-            }
-            if (!error && (entity === "negotiation_offer" || entity === "personalized_email") && !params.leadId && !params.contactId) {
-              error = `Couldn't identify who this is for -- needs a lead or contact.`;
+            if (!error && (entity === "negotiation_offer" || entity === "personalized_email") && !params.leadId) {
+              error = `Couldn't identify who this is for -- needs a lead.`;
             }
             if (!error && entity === "agent_action" && a.type === "update" && !["approve", "reject"].includes(fields.decision)) {
               error = `Need a clear approve or reject decision.`;

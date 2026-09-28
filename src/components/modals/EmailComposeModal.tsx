@@ -30,8 +30,6 @@ interface EmailComposeModalProps {
   initialSubject?: string;
   initialBody?: string;
   initialAttachments?: EmailAttachment[];
-  companyId?: string;
-  contactId?: string;
   dealId?: string;
   leadId?: string;
 }
@@ -43,12 +41,10 @@ export const EmailComposeModal: React.FC<EmailComposeModalProps> = ({
   initialSubject = "",
   initialBody = "",
   initialAttachments = [],
-  companyId,
-  contactId,
   dealId,
   leadId,
 }) => {
-  const { activeTenant, currentUser, addActivity, companies } = useCRM();
+  const { activeTenant, currentUser, addActivity } = useCRM();
 
   const [to, setTo] = useState(initialTo);
   const [showCc, setShowCc] = useState(false);
@@ -270,11 +266,8 @@ export const EmailComposeModal: React.FC<EmailComposeModalProps> = ({
         });
 
         // Automatically log activity to CRM Timeline
-        const matchedComp = companyId || companies.find((c) => c.email === to || to.includes(c.name.toLowerCase()))?.id;
         addActivity({
           type: "Email",
-          companyId: matchedComp,
-          contactId,
           dealId,
           leadId,
           date: new Date().toISOString().split("T")[0],

@@ -1,7 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from "react";
 import {
-  Company,
-  Contact,
   Lead,
   Deal,
   Pipeline,
@@ -27,8 +25,6 @@ import {
   EmailAttachment,
   AuditLogEntry,
   EmailCampaign,
-  CallLogEntry,
-  CompanyAIAnalysis,
   Product,
   ProductAIInsight,
   KnowledgeBaseEntry,
@@ -57,8 +53,6 @@ import {
   onSyncFailure,
 } from "../lib/tenantDataSync";
 import {
-  initialCompanies,
-  initialContacts,
   initialLeads,
   initialDeals,
   initialPipelines,
@@ -91,8 +85,6 @@ interface PendingWorkspace {
 export type NavView =
   | "Dashboard"
   | "Leads"
-  | "Contacts"
-  | "Companies"
   | "Products"
   | "Deals"
   | "Pipelines"
@@ -122,18 +114,13 @@ interface CRMContextType {
   // specific Settings tab — read once by SettingsView and cleared.
   settingsDeepLinkTab: string | null;
   setSettingsDeepLinkTab: (tab: string | null) => void;
-  selectedCompanyId: string | null;
-  setSelectedCompanyId: (id: string | null) => void;
   selectedDealId: string | null;
   setSelectedDealId: (id: string | null) => void;
-  // Contact / Lead 360 profile drawers -- mirror selectedCompanyId, opened
-  // by clicking a contact/lead name anywhere in the app.
-  selectedContactId: string | null;
-  setSelectedContactId: (id: string | null) => void;
+  // Lead 360 profile drawer.
   selectedLeadId: string | null;
   setSelectedLeadId: (id: string | null) => void;
   // Lifted out of LeadsView so the Lead Profile Drawer can trigger the
-  // same Convert-to-Company flow as the Leads list.
+  // same convert-to-Deal flow as the Leads list.
   convertingLeadId: string | null;
   setConvertingLeadId: (id: string | null) => void;
   dateRange: DateFilterRange;
@@ -198,8 +185,6 @@ interface CRMContextType {
     subject?: string;
     body?: string;
     attachments?: EmailAttachment[];
-    companyId?: string;
-    contactId?: string;
     dealId?: string;
     leadId?: string;
   };
@@ -208,33 +193,25 @@ interface CRMContextType {
     subject?: string;
     body?: string;
     attachments?: EmailAttachment[];
-    companyId?: string;
-    contactId?: string;
     dealId?: string;
     leadId?: string;
   }) => void;
 
-  // WhatsApp Composer (send-to-lead/contact/company, mirrors Email Composer)
+  // WhatsApp Composer (send-to-lead, mirrors Email Composer)
   isWhatsAppComposeOpen: boolean;
   setWhatsAppComposeOpen: (open: boolean) => void;
   whatsappComposeProps: {
     to?: string;
     body?: string;
-    companyId?: string;
-    contactId?: string;
     leadId?: string;
   };
   openWhatsAppComposer: (props?: {
     to?: string;
     body?: string;
-    companyId?: string;
-    contactId?: string;
     leadId?: string;
   }) => void;
 
   // Entities
-  companies: Company[];
-  contacts: Contact[];
   leads: Lead[];
   deals: Deal[];
   pipelines: Pipeline[];
@@ -247,19 +224,11 @@ interface CRMContextType {
   products: Product[];
 
   // Data Actions
-  addCompany: (company: Omit<Company, "id" | "createdAt">) => Company;
-  updateCompany: (id: string, updates: Partial<Company>) => void;
-  deleteCompany: (id: string) => void;
-
-  addContact: (contact: Omit<Contact, "id" | "createdAt">) => Contact;
-  updateContact: (id: string, updates: Partial<Contact>) => void;
-  deleteContact: (id: string) => void;
-
   addLead: (lead: Omit<Lead, "id" | "createdDate">) => Lead;
   updateLead: (id: string, updates: Partial<Lead>) => void;
   deleteLead: (id: string) => void;
   moveLeadStatus: (leadId: string, newStatus: Lead["status"]) => void;
-  convertLead: (leadId: string, createDeal: boolean) => { company: Company; contact: Contact; deal?: Deal };
+  convertLead: (leadId: string, createDeal: boolean) => { deal?: Deal };
 
   addDeal: (deal: Omit<Deal, "id" | "createdDate" | "weightedValue">) => Deal;
   updateDeal: (id: string, updates: Partial<Deal>) => void;
@@ -321,7 +290,7 @@ interface CRMContextType {
   // Industry Agents -- configurable, user-defined AI management profiles
   // per industry (see IndustryAgent in types.ts). Drives email tone,
   // qualification guidance, and follow-up cadence/channel wherever AI
-  // touches a lead/contact/company in that industry.
+  // touches a lead in that industry.
   industryAgents: IndustryAgent[];
   addIndustryAgent: (
     agent: Omit<IndustryAgent, "id" | "createdAt" | "updatedAt" | "createdBy">
@@ -358,8 +327,6 @@ interface CRMContextType {
     opts: {
       source: StoredFileSource;
       linkedLeadId?: string;
-      linkedContactId?: string;
-      linkedCompanyId?: string;
       linkedDealId?: string;
     }
   ) => Promise<StoredFile>;
@@ -370,31 +337,23 @@ interface CRMContextType {
   // list view -- that view's EntityImportModal picks it up on mount (if its
   // own entity matches) and clears it, pre-loading the parsed rows instead
   // of asking the user to upload the same file again.
-  pendingBulkImport: { entity: "contact" | "company" | "deal"; rows: any[]; headers: string[]; filename: string } | null;
+  pendingBulkImport: { entity: "deal"; rows: any[]; headers: string[]; filename: string } | null;
   setPendingBulkImport: (
-    value: { entity: "contact" | "company" | "deal"; rows: any[]; headers: string[]; filename: string } | null
+    value: { entity: "deal"; rows: any[]; headers: string[]; filename: string } | null
   ) => void;
-
-  // Business Profile: AI analysis + manual call log riding on a Company record.
-  runCompanyAIAnalysis: (companyId: string) => Promise<void>;
-  addCallLogEntry: (companyId: string, entry: Omit<CallLogEntry, "id" | "createdAt" | "loggedBy">) => void;
-  deleteCallLogEntry: (companyId: string, entryId: string) => void;
-  syncAllLeadsToCompaniesAndContacts: () => { companiesCreated: number; contactsCreated: number; companiesLinked: number };
 
   clearAllData: () => void;
 
   // Quick modals
   isQuickCreateOpen: boolean;
   setQuickCreateOpen: (open: boolean) => void;
-  quickCreateType: "lead" | "contact" | "company" | "deal" | "invoice" | "payment" | "activity" | "task";
-  setQuickCreateType: (type: "lead" | "contact" | "company" | "deal" | "invoice" | "payment" | "activity" | "task") => void;
+  quickCreateType: "lead" | "deal" | "invoice" | "payment" | "activity" | "task";
+  setQuickCreateType: (type: "lead" | "deal" | "invoice" | "payment" | "activity" | "task") => void;
 }
 
 const CRMContext = createContext<CRMContextType | undefined>(undefined);
 
 const STORAGE_KEYS = {
-  COMPANIES: "crm_companies_v1",
-  CONTACTS: "crm_contacts_v1",
   LEADS: "crm_leads_v1",
   DEALS: "crm_deals_v1",
   PIPELINES: "crm_pipelines_v1",
@@ -408,14 +367,12 @@ const STORAGE_KEYS = {
 export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeNav, setActiveNav] = useState<NavView>("Dashboard");
   const [settingsDeepLinkTab, setSettingsDeepLinkTab] = useState<string | null>(null);
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
-  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [convertingLeadId, setConvertingLeadId] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateFilterRange>("This Year");
   const [isQuickCreateOpen, setQuickCreateOpen] = useState(false);
-  const [quickCreateType, setQuickCreateType] = useState<"lead" | "contact" | "company" | "deal" | "invoice" | "payment" | "activity" | "task">("deal");
+  const [quickCreateType, setQuickCreateType] = useState<"lead" | "deal" | "invoice" | "payment" | "activity" | "task">("deal");
 
   // No pre-seeded team roster — real members are added when they sign up or
   // are invited into a workspace.
@@ -466,8 +423,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     subject?: string;
     body?: string;
     attachments?: EmailAttachment[];
-    companyId?: string;
-    contactId?: string;
     dealId?: string;
     leadId?: string;
   }>({});
@@ -477,8 +432,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     subject?: string;
     body?: string;
     attachments?: EmailAttachment[];
-    companyId?: string;
-    contactId?: string;
     dealId?: string;
     leadId?: string;
   }) => {
@@ -490,16 +443,12 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [whatsappComposeProps, setWhatsAppComposeProps] = useState<{
     to?: string;
     body?: string;
-    companyId?: string;
-    contactId?: string;
     leadId?: string;
   }>({});
 
   const openWhatsAppComposer = (props?: {
     to?: string;
     body?: string;
-    companyId?: string;
-    contactId?: string;
     leadId?: string;
   }) => {
     setWhatsAppComposeProps(props || {});
@@ -564,14 +513,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Initial local storage hydration scoped by tenant
-  const [rawCompanies, setRawCompanies] = useState<Company[]>(() =>
-    loadTenantEntity("companies", initialCompanies)
-  );
-
-  const [contacts, setContacts] = useState<Contact[]>(() =>
-    loadTenantEntity("contacts", initialContacts)
-  );
-
   const [leads, setLeads] = useState<Lead[]>(() =>
     loadTenantEntity("leads", initialLeads)
   );
@@ -676,16 +617,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Persist to tenant-scoped storage
   useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_companies`, JSON.stringify(rawCompanies));
-    if (shouldSyncToSupabase) syncTenantTable("companies", activeTenantId, rawCompanies);
-  }, [rawCompanies, activeTenantId]);
-
-  useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_contacts`, JSON.stringify(contacts));
-    if (shouldSyncToSupabase) syncTenantTable("contacts", activeTenantId, contacts);
-  }, [contacts, activeTenantId]);
-
-  useEffect(() => {
     localStorage.setItem(`crm_tenant_${activeTenantId}_leads`, JSON.stringify(leads));
     if (shouldSyncToSupabase) syncTenantTable("leads", activeTenantId, leads);
   }, [leads, activeTenantId]);
@@ -757,21 +688,19 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // ------------------------------------------------------------------------
   // Autonomous agent scan -- for any Industry Agent with autoRunEnabled,
-  // periodically (while AarPex is open in a browser tab) looks for leads and
-  // contacts that are due a follow-up, and checks the tenant's default
-  // mailbox for new replies, drafting a proposed action into the Agent
-  // Approvals queue for each. This is intentionally best-effort and
-  // client-driven (there's no server-side scheduler in this app) -- it only
-  // runs while someone has the tenant open, same as the existing manual
-  // "check replies" flow it reuses.
+  // periodically (while AarPex is open in a browser tab) looks for leads
+  // that are due a follow-up, and checks the tenant's default mailbox for
+  // new replies, drafting a proposed action into the Agent Approvals queue
+  // for each. This is intentionally best-effort and client-driven (there's
+  // no server-side scheduler in this app) -- it only runs while someone has
+  // the tenant open, same as the existing manual "check replies" flow it
+  // reuses.
   //
   // A ref bag avoids re-registering the interval (and losing its cadence)
   // every time any of this state changes -- the interval callback always
   // reads the latest values off the ref.
   const agentScanStateRef = React.useRef({
     leads,
-    contacts,
-    rawCompanies,
     activities,
     industryAgents,
     agentActions,
@@ -783,8 +712,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     agentScanStateRef.current = {
       leads,
-      contacts,
-      rawCompanies,
       activities,
       industryAgents,
       agentActions,
@@ -803,8 +730,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setLastAgentScanAt(new Date().toISOString());
       const {
         leads: curLeads,
-        contacts: curContacts,
-        rawCompanies: curCompanies,
         activities: curActivities,
         industryAgents: curAgents,
         agentActions: curAgentActions,
@@ -821,12 +746,12 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // Auto-extracted knowledge base -- for industries running on autopilot,
-      // the agent builds each lead/contact's individual "AI-Extracted Summary"
-      // itself (same call the manual "Generate" button in the drawer's
-      // Knowledge tab makes) instead of waiting for someone to click it. Only
-      // fills in records that don't have one yet; a stale summary is still
-      // refreshed on demand via the manual button, and the user can always
-      // hand-edit the generated text afterward.
+      // the agent builds each lead's individual "AI-Extracted Summary" itself
+      // (same call the manual "Generate" button in the drawer's Knowledge tab
+      // makes) instead of waiting for someone to click it. Only fills in
+      // records that don't have one yet; a stale summary is still refreshed
+      // on demand via the manual button, and the user can always hand-edit
+      // the generated text afterward.
       const kbUpserts: Omit<KnowledgeBaseEntry, "id" | "createdAt" | "updatedAt" | "createdBy">[] = [];
 
       const now = Date.now();
@@ -860,22 +785,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return !hasPendingOrRecent(l.email, "follow_up", cadenceMs);
         });
 
-        // Follow-up due: contacts (via their company's industry, using their
-        // most recent logged activity as the reference point)
-        const dueContacts = curContacts.filter((c) => {
-          const comp = curCompanies.find((co) => co.id === c.companyId);
-          if (normalizeIndustry(comp?.industry) !== industryLc) return false;
-          if (comp && (agent.excludedCompanyIds || []).includes(comp.id)) return false;
-          if (!c.email) return false;
-          const lastActivity = curActivities
-            .filter((a) => a.contactId === c.id)
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-          const reference = lastActivity ? new Date(lastActivity.date).getTime() : new Date(c.createdAt || 0).getTime();
-          if (!reference || now - reference < cadenceMs) return false;
-          return !hasPendingOrRecent(c.email, "follow_up", cadenceMs);
-        });
-
-        // Leads/contacts in this industry that don't have an AI-Generated
+        // Leads in this industry that don't have an AI-Generated
         // knowledge-base summary yet (checked against the live snapshot
         // plus anything this same scan has already queued, so a lead never
         // gets two summaries in one pass).
@@ -884,13 +794,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if ((agent.excludedLeadIds || []).includes(l.id)) return false;
           if (curKnowledge.some((k) => k.tags.includes("AI-Generated") && (k.linkedLeadIds || []).includes(l.id))) return false;
           return !kbUpserts.some((k) => (k.linkedLeadIds || []).includes(l.id));
-        });
-        const contactsNeedingSummary = curContacts.filter((c) => {
-          const comp = curCompanies.find((co) => co.id === c.companyId);
-          if (normalizeIndustry(comp?.industry) !== industryLc) return false;
-          if (comp && (agent.excludedCompanyIds || []).includes(comp.id)) return false;
-          if (curKnowledge.some((k) => k.tags.includes("AI-Generated") && (k.linkedContactIds || []).includes(c.id))) return false;
-          return !kbUpserts.some((k) => (k.linkedContactIds || []).includes(c.id));
         });
 
         for (const lead of leadsNeedingSummary.slice(0, 3)) {
@@ -921,38 +824,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           } catch (err) {
             console.error("[agent scan] knowledge summary failed for lead", lead.id, err);
-          }
-        }
-
-        for (const contact of contactsNeedingSummary.slice(0, 3)) {
-          try {
-            const comp = curCompanies.find((co) => co.id === contact.companyId);
-            const contactActs = curActivities.filter((a) => a.contactId === contact.id);
-            const res = await apiFetch("/api/ai/lead-knowledge-summary", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                name: `${contact.firstName} ${contact.lastName}`.trim(),
-                company: comp?.name,
-                jobTitle: contact.position,
-                industry: comp?.industry,
-                notes: contact.notes,
-                tags: [],
-                activities: contactActs,
-              }),
-            });
-            const data = await res.json();
-            if (data.summary) {
-              kbUpserts.push({
-                category: "company",
-                title: `${contact.firstName} ${contact.lastName} — AI Summary`,
-                content: data.summary,
-                tags: ["AI-Generated"],
-                linkedContactIds: [contact.id],
-              });
-            }
-          } catch (err) {
-            console.error("[agent scan] knowledge summary failed for contact", contact.id, err);
           }
         }
 
@@ -993,44 +864,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
 
-        for (const contact of dueContacts.slice(0, 5)) {
-          try {
-            const comp = curCompanies.find((co) => co.id === contact.companyId);
-            const contactActs = curActivities.filter((a) => a.contactId === contact.id);
-            const res = await apiFetch("/api/ai/personalized-email", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                recipientName: `${contact.firstName} ${contact.lastName}`.trim(),
-                recipientCompany: comp?.name,
-                recipientJobTitle: contact.position,
-                recipientIndustry: comp?.industry,
-                activities: contactActs,
-                agent,
-                productName: agentProduct?.name,
-                productPitch: agentProduct?.pitch,
-                senderName: curUser?.name,
-                senderCompany: curTenant?.companyName || curTenant?.name,
-                goal: `Send a follow-up -- it's been ${agent.followUpFrequencyDays}+ days since last contact with no response.`,
-              }),
-            });
-            const data = await res.json();
-            newActions.push({
-              industry: agent.industry,
-              actionType: "follow_up",
-              contactId: contact.id,
-              recipientName: `${contact.firstName} ${contact.lastName}`.trim(),
-              recipientEmail: contact.email,
-              subject: data.subject,
-              body: data.body,
-              reasoning: `No response in ${agent.followUpFrequencyDays}+ days (agent cadence for ${agent.industry}).`,
-              triggerSource: "auto_followup",
-            });
-          } catch (err) {
-            console.error("[agent scan] follow-up draft failed for contact", contact.id, err);
-          }
-        }
-
         // Reply detection -- reuses the same IMAP check the manual Inbox
         // "check replies" button uses, against this industry's candidate
         // addresses, then drafts a proposed reply for any that wrote back.
@@ -1044,17 +877,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               l.status !== "Converted" &&
               l.status !== "Lost"
           );
-          const candidateContacts = curContacts.filter((c) => {
-            const comp = curCompanies.find((co) => co.id === c.companyId);
-            return (
-              normalizeIndustry(comp?.industry) === industryLc &&
-              !(comp && (agent.excludedCompanyIds || []).includes(comp.id)) &&
-              c.email
-            );
-          });
-          const addressToRecord = new Map<string, { type: "lead" | "contact"; record: any }>();
+          const addressToRecord = new Map<string, { type: "lead"; record: any }>();
           candidateLeads.forEach((l) => addressToRecord.set(l.email.toLowerCase(), { type: "lead", record: l }));
-          candidateContacts.forEach((c) => addressToRecord.set(c.email.toLowerCase(), { type: "contact", record: c }));
 
           if (addressToRecord.size > 0) {
             try {
@@ -1076,20 +900,18 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (hasPendingOrRecent(address, "email_reply", dayMs)) continue;
                 const match = addressToRecord.get(address.toLowerCase());
                 if (!match) continue;
-                const isLead = match.type === "lead";
                 const record = match.record;
-                const recipientName = isLead ? record.name : `${record.firstName} ${record.lastName}`.trim();
-                const comp = isLead ? undefined : curCompanies.find((co) => co.id === record.companyId);
+                const recipientName = record.name;
                 try {
                   const draftRes = await apiFetch("/api/ai/personalized-email", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                       recipientName,
-                      recipientCompany: isLead ? record.company : comp?.name,
-                      recipientJobTitle: isLead ? record.jobTitle : record.position,
+                      recipientCompany: record.company,
+                      recipientJobTitle: record.jobTitle,
                       recipientIndustry: agent.industry,
-                      activities: curActivities.filter((a) => (isLead ? a.leadId === record.id : a.contactId === record.id)),
+                      activities: curActivities.filter((a) => a.leadId === record.id),
                       agent,
                       productName: agentProduct?.name,
                       productPitch: agentProduct?.pitch,
@@ -1102,8 +924,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   newActions.push({
                     industry: agent.industry,
                     actionType: "email_reply",
-                    leadId: isLead ? record.id : undefined,
-                    contactId: isLead ? undefined : record.id,
+                    leadId: record.id,
                     recipientName,
                     recipientEmail: address,
                     subject: draftData.subject,
@@ -1231,8 +1052,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let cancelled = false;
     (async () => {
       const [
-        companiesRes,
-        contactsRes,
         leadsRes,
         dealsRes,
         pipelinesRes,
@@ -1248,8 +1067,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         agentActionsRes,
         storedFilesRes,
       ] = await Promise.all([
-        fetchTenantTable<Company>("companies", activeTenantId),
-        fetchTenantTable<Contact>("contacts", activeTenantId),
         fetchTenantTable<Lead>("leads", activeTenantId),
         fetchTenantTable<Deal>("deals", activeTenantId),
         fetchTenantTable<Pipeline>("pipelines", activeTenantId),
@@ -1266,8 +1083,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetchTenantTable<StoredFile>("stored_files", activeTenantId),
       ]);
       if (cancelled) return;
-      if (companiesRes) setRawCompanies(companiesRes);
-      if (contactsRes) setContacts(contactsRes);
       if (leadsRes) setLeads(leadsRes);
       if (dealsRes) setDeals(dealsRes);
       if (pipelinesRes && pipelinesRes.length > 0) setPipelines(pipelinesRes);
@@ -1295,8 +1110,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (targetId === activeTenantId) return;
 
     // Flush current tenant state before switching
-    localStorage.setItem(`crm_tenant_${activeTenantId}_companies`, JSON.stringify(rawCompanies));
-    localStorage.setItem(`crm_tenant_${activeTenantId}_contacts`, JSON.stringify(contacts));
     localStorage.setItem(`crm_tenant_${activeTenantId}_leads`, JSON.stringify(leads));
     localStorage.setItem(`crm_tenant_${activeTenantId}_deals`, JSON.stringify(deals));
     localStorage.setItem(`crm_tenant_${activeTenantId}_pipelines`, JSON.stringify(pipelines));
@@ -1326,8 +1139,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setActiveTenantId(targetId);
-    setRawCompanies(loadTarget("companies", initialCompanies));
-    setContacts(loadTarget("contacts", initialContacts));
     setLeads(loadTarget("leads", initialLeads));
     setDeals(loadTarget("deals", initialDeals));
     setPipelines(loadTarget("pipelines", initialPipelines));
@@ -1342,15 +1153,12 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIndustryAgents(loadTarget("industryAgents", [] as IndustryAgent[]));
     setAgentActions(loadTarget("agentActions", [] as AgentAction[]));
     setStoredFiles(loadTarget("storedFiles", [] as StoredFile[]));
-    setSelectedCompanyId(null);
     setSelectedDealId(null);
   };
 
   // Opt-in action for a real (empty) workspace that wants to explore the
   // product with the built-in sample dataset instead of starting blank.
   const loadSampleData = () => {
-    setRawCompanies(initialCompanies);
-    setContacts(initialContacts);
     setLeads(initialLeads);
     setDeals(initialDeals);
     setPipelines(initialPipelines);
@@ -1359,7 +1167,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActivities(initialActivities);
     setTasks(initialTasks);
     setComments(initialComments);
-    addAuditLogEntry("Loaded sample data", "Populated this workspace with demo companies, deals, and invoices for exploration.", "general");
+    addAuditLogEntry("Loaded sample data", "Populated this workspace with demo leads, deals, and invoices for exploration.", "general");
   };
 
   const createTenant = (tenantData: Partial<Tenant>): Tenant => {
@@ -1930,189 +1738,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return unsubscribe;
   }, [addAuditLogEntry, activeTenantId]);
 
-  // Derived Company calculations based on live financial and deal records
-  const companies: Company[] = useMemo(() => {
-    const now = new Date();
-    return rawCompanies.map((c) => {
-      const companyDeals = deals.filter((d) => d.companyId === c.id);
-      const companyInvoices = invoices.filter((i) => i.companyId === c.id);
-      const companyPayments = payments.filter((p) => p.companyId === c.id);
-      const companyActivities = activities.filter((a) => a.companyId === c.id);
-
-      const wonDeals = companyDeals.filter((d) => d.status === "Won");
-      const openDeals = companyDeals.filter((d) => d.status === "Open");
-      const lostDeals = companyDeals.filter((d) => d.status === "Lost");
-
-      const totalInvoiced = companyInvoices.reduce((acc, inv) => acc + (inv.total || 0), 0);
-      const totalPaid = companyPayments.reduce((acc, p) => acc + (p.amount || 0), 0);
-      const outstandingBalance = companyInvoices.reduce((acc, inv) => acc + (inv.remainingBalance || 0), 0);
-
-      const overdueBalance = companyInvoices
-        .filter((inv) => inv.remainingBalance > 0 && new Date(inv.dueDate) < now)
-        .reduce((acc, inv) => acc + inv.remainingBalance, 0);
-
-      // Won deals value + total paid invoices
-      const wonDealsTotal = wonDeals.reduce((acc, d) => acc + (d.dealValue || 0), 0);
-      const totalRevenue = Math.max(wonDealsTotal, totalPaid);
-
-      // Average payment days calculation
-      let totalPaymentDays = 0;
-      let settledCount = 0;
-      companyInvoices.forEach((inv) => {
-        if (inv.status === "Paid" && inv.issueDate) {
-          const matchingPayment = companyPayments.find((p) => p.invoiceId === inv.id);
-          if (matchingPayment) {
-            const days = Math.max(1, Math.round((new Date(matchingPayment.date).getTime() - new Date(inv.issueDate).getTime()) / 86400000));
-            totalPaymentDays += days;
-            settledCount++;
-          }
-        }
-      });
-      const averagePaymentDays = settledCount > 0 ? Math.round(totalPaymentDays / settledCount) : 18;
-
-      // Last and next activity
-      const sortedActivities = [...companyActivities].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      const lastActivityDate = sortedActivities[0]?.date || undefined;
-
-      const companyTasks = tasks.filter((t) => t.companyId === c.id && t.status !== "Completed");
-      const sortedTasks = [...companyTasks].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-      const nextActivityDate = sortedTasks[0]?.dueDate || undefined;
-
-      // Smart status update if severely overdue or highly valued
-      let status = c.status;
-      if (overdueBalance > 15000 && status !== "At Risk" && status !== "Former Customer") {
-        // Can be flagged At Risk
-      }
-
-      return {
-        ...c,
-        totalRevenue,
-        totalInvoiced,
-        totalPaid,
-        outstandingBalance,
-        overdueBalance,
-        averagePaymentDays,
-        dealsCount: companyDeals.length,
-        openDealsCount: openDeals.length,
-        wonDealsCount: wonDeals.length,
-        lostDealsCount: lostDeals.length,
-        lastActivityDate,
-        nextActivityDate,
-      };
-    });
-  }, [rawCompanies, deals, invoices, payments, activities, tasks]);
-
-  // Company Actions
-  const addCompany = (companyData: Omit<Company, "id" | "createdAt">): Company => {
-    const newId = `comp_${Date.now()}`;
-    const newCompany: Company = {
-      ...companyData,
-      id: newId,
-      createdAt: new Date().toISOString().split("T")[0],
-      customerValue: companyData.customerValue || 0,
-      tags: companyData.tags || [],
-    };
-    setRawCompanies((prev) => [newCompany, ...prev]);
-    return newCompany;
-  };
-
-  const updateCompany = (id: string, updates: Partial<Company>) => {
-    setRawCompanies((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
-  };
-
-  const deleteCompany = (id: string) => {
-    setRawCompanies((prev) => prev.filter((c) => c.id !== id));
-    if (selectedCompanyId === id) setSelectedCompanyId(null);
-  };
-
-  // Business Profile: runs the same Gemini-powered account analysis used
-  // elsewhere in the app (customer health, churn risk, opportunities) and
-  // persists the result onto the company record itself, so it shows up on
-  // the Company 360 drawer's Business Profile tab without having to be
-  // regenerated every time the drawer opens. Safe to call on a brand-new
-  // company with no deals/invoices/activities yet -- the endpoint has a
-  // heuristic fallback either way.
-  const runCompanyAIAnalysis = async (companyId: string): Promise<void> => {
-    const company = rawCompanies.find((c) => c.id === companyId);
-    if (!company) return;
-    try {
-      const companyDeals = deals.filter((d) => d.companyId === companyId);
-      const companyContacts = contacts.filter((c) => c.companyId === companyId);
-      const companyInvoices = invoices.filter((i) => i.companyId === companyId);
-      const companyActivities = activities.filter((a) => a.companyId === companyId);
-      const res = await apiFetch("/api/ai/customer-analysis", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          company,
-          contacts: companyContacts,
-          deals: companyDeals,
-          invoices: companyInvoices,
-          activities: companyActivities,
-        }),
-      });
-      const data = await res.json();
-      const analysis: CompanyAIAnalysis = {
-        healthScore: data.healthScore ?? 50,
-        healthStatus: data.healthStatus || "Stable",
-        churnRisk: data.churnRisk || "Medium",
-        churnReason: data.churnReason || "",
-        summary: data.summary || data.relationshipSummary || "",
-        actionableRecommendations: data.actionableRecommendations || [],
-        opportunities: data.opportunities || [],
-        recommendedAction: data.recommendedAction,
-        generatedAt: new Date().toISOString(),
-        source: data.source === "gemini" ? "gemini" : "heuristic",
-      };
-      updateCompany(companyId, { aiAnalysis: analysis });
-    } catch (err) {
-      console.error("[CRMContext] runCompanyAIAnalysis failed:", err);
-      // Leave the company without an aiAnalysis rather than blocking the
-      // rest of the lead-creation flow on an AI/network hiccup.
-    }
-  };
-
-  const addCallLogEntry = (companyId: string, entry: Omit<CallLogEntry, "id" | "createdAt" | "loggedBy">) => {
-    const newEntry: CallLogEntry = {
-      ...entry,
-      id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      loggedBy: currentUser.name,
-      createdAt: new Date().toISOString(),
-    };
-    setRawCompanies((prev) =>
-      prev.map((c) => (c.id === companyId ? { ...c, callLog: [newEntry, ...(c.callLog || [])] } : c))
-    );
-  };
-
-  const deleteCallLogEntry = (companyId: string, entryId: string) => {
-    setRawCompanies((prev) =>
-      prev.map((c) =>
-        c.id === companyId ? { ...c, callLog: (c.callLog || []).filter((e) => e.id !== entryId) } : c
-      )
-    );
-  };
-
-  // Contact Actions
-  const addContact = (contactData: Omit<Contact, "id" | "createdAt">): Contact => {
-    const newId = `cnt_${Date.now()}`;
-    const newContact: Contact = {
-      ...contactData,
-      id: newId,
-      createdAt: new Date().toISOString().split("T")[0],
-      tags: contactData.tags || [],
-    };
-    setContacts((prev) => [newContact, ...prev]);
-    return newContact;
-  };
-
-  const updateContact = (id: string, updates: Partial<Contact>) => {
-    setContacts((prev) => prev.map((c) => (c.id === id ? { ...c, ...updates } : c)));
-  };
-
-  const deleteContact = (id: string) => {
-    setContacts((prev) => prev.filter((c) => c.id !== id));
-  };
-
   // Lead Actions
   const addLead = (leadData: Omit<Lead, "id" | "createdDate">): Lead => {
     const newId = `LD-${Math.floor(100 + Math.random() * 900)}`;
@@ -2123,187 +1748,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       tags: leadData.tags || [],
     };
     setLeads((prev) => [newLead, ...prev]);
-
-    // Business Profile: every new lead gets its own Company (the business)
-    // and Contact (the person) automatically -- reusing an existing company
-    // by name / contact by email when one already matches, rather than
-    // creating duplicates every time the same business submits another lead.
-    if (newLead.company && newLead.company.trim()) {
-      let company = rawCompanies.find(
-        (c) => c.name.trim().toLowerCase() === newLead.company.trim().toLowerCase()
-      );
-      if (!company) {
-        company = addCompany({
-          name: newLead.company,
-          industry: newLead.industry || "General Industry",
-          website: newLead.website || "",
-          country: newLead.country || "",
-          city: newLead.city || "",
-          address: "",
-          phone: newLead.phone || "",
-          email: newLead.email || "",
-          salesperson: newLead.salesperson || currentUser.name,
-          status: "Lead",
-          customerValue: 0,
-          notes: `Auto-created from Lead ${newLead.id}.`,
-          tags: ["Auto-Created", "From Lead"],
-          sourceLeadId: newLead.id,
-        } as Omit<Company, "id" | "createdAt">);
-      }
-
-      if (newLead.email && newLead.email.trim()) {
-        const existingContact = contacts.find(
-          (c) => c.email.trim().toLowerCase() === newLead.email.trim().toLowerCase()
-        );
-        if (!existingContact) {
-          const nameParts = newLead.name.trim().split(" ");
-          addContact({
-            firstName: nameParts[0] || newLead.name || "Lead",
-            lastName: nameParts.slice(1).join(" ") || "",
-            position: newLead.jobTitle || "",
-            companyId: company.id,
-            email: newLead.email,
-            phone: newLead.phone || "",
-            whatsapp: newLead.whatsapp,
-            country: newLead.country || "",
-            city: newLead.city || "",
-            status: "Active",
-            leadSource: newLead.source || "Lead Form",
-            salesperson: newLead.salesperson || currentUser.name,
-            notes: `Auto-created from Lead ${newLead.id}. ${newLead.notes || ""}`.trim(),
-            tags: ["Auto-Created", "From Lead"],
-          });
-        }
-      }
-
-      // Kick off the AI business-profile analysis in the background -- it's
-      // fine if this takes a moment or even fails; the profile still works
-      // without it and can always be regenerated from the Company 360 drawer.
-      void runCompanyAIAnalysis(company.id);
-    }
-
     return newLead;
-  };
-
-  // Bulk version of the auto-create-on-add logic above, for leads that
-  // already existed before Business Profiles shipped (or were imported)
-  // and never got a linked Company/Contact. Builds the updated
-  // companies/contacts arrays locally first -- rather than calling
-  // addCompany/addContact per lead -- so that two leads sharing the same
-  // new company in this same batch correctly reuse one record instead of
-  // each creating their own (state updates from addCompany/addContact
-  // wouldn't be visible to the next iteration until a re-render).
-  const syncAllLeadsToCompaniesAndContacts = (): {
-    companiesCreated: number;
-    contactsCreated: number;
-    companiesLinked: number;
-  } => {
-    const localCompanies = [...rawCompanies];
-    const localContacts = [...contacts];
-    const newlyCreatedCompanyIds: string[] = [];
-    let companiesCreated = 0;
-    let contactsCreated = 0;
-    let companiesLinked = 0;
-    const today = new Date().toISOString().split("T")[0];
-    // Tracks, per lead, which Company/Contact it ended up matched or linked
-    // to this pass -- written back onto the leads themselves at the end so
-    // the sync actually persists (setRawCompanies/setContacts alone only
-    // save the Company/Contact records, not the fact that each Lead is now
-    // linked to one).
-    const leadLinkage = new Map<string, { companyId: string; contactId?: string }>();
-
-    leads.forEach((lead) => {
-      if (!lead.company || !lead.company.trim()) return;
-
-      let company = localCompanies.find(
-        (c) => c.name.trim().toLowerCase() === lead.company.trim().toLowerCase()
-      );
-      if (!company) {
-        company = {
-          id: `comp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-          name: lead.company,
-          industry: lead.industry || "General Industry",
-          website: lead.website || "",
-          country: lead.country || "",
-          city: lead.city || "",
-          address: "",
-          phone: lead.phone || "",
-          email: lead.email || "",
-          salesperson: lead.salesperson || currentUser.name,
-          status: "Lead",
-          customerValue: 0,
-          notes: `Auto-created from Lead ${lead.id} via bulk sync.`,
-          tags: ["Auto-Created", "From Lead"],
-          sourceLeadId: lead.id,
-          createdAt: today,
-        };
-        localCompanies.push(company);
-        newlyCreatedCompanyIds.push(company.id);
-        companiesCreated++;
-      } else {
-        companiesLinked++;
-      }
-
-      let contactId: string | undefined;
-      if (lead.email && lead.email.trim()) {
-        const existingContact = localContacts.find(
-          (c) => c.email.trim().toLowerCase() === lead.email.trim().toLowerCase()
-        );
-        if (existingContact) {
-          contactId = existingContact.id;
-        } else {
-          const nameParts = lead.name.trim().split(" ");
-          const newContactId = `cnt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-          localContacts.push({
-            id: newContactId,
-            firstName: nameParts[0] || lead.name || "Lead",
-            lastName: nameParts.slice(1).join(" ") || "",
-            position: lead.jobTitle || "",
-            companyId: company.id,
-            email: lead.email,
-            phone: lead.phone || "",
-            whatsapp: lead.whatsapp,
-            country: lead.country || "",
-            city: lead.city || "",
-            status: "Active",
-            leadSource: lead.source || "Lead Form",
-            salesperson: lead.salesperson || currentUser.name,
-            notes: `Auto-created from Lead ${lead.id} via bulk sync. ${lead.notes || ""}`.trim(),
-            tags: ["Auto-Created", "From Lead"],
-            createdAt: today,
-          });
-          contactId = newContactId;
-          contactsCreated++;
-        }
-      }
-
-      leadLinkage.set(lead.id, { companyId: company.id, contactId });
-    });
-
-    setRawCompanies(localCompanies);
-    setContacts(localContacts);
-
-    // Write the match/link back onto the leads themselves -- without this,
-    // nothing about the sync survives a reload: Company/Contact records
-    // persist fine, but the Lead objects (and anything reading them, like
-    // the "Linked" badge in the Leads view) never change, so it looks like
-    // the sync silently didn't save.
-    if (leadLinkage.size > 0) {
-      setLeads((prev) =>
-        prev.map((l) => {
-          const link = leadLinkage.get(l.id);
-          if (!link) return l;
-          return { ...l, linkedCompanyId: link.companyId, linkedContactId: link.contactId };
-        })
-      );
-    }
-
-    // Kick off AI analysis in the background, only for companies this sync
-    // actually created -- companies that already existed likely already
-    // have (or intentionally lack) an analysis.
-    newlyCreatedCompanyIds.forEach((id) => void runCompanyAIAnalysis(id));
-
-    return { companiesCreated, contactsCreated, companiesLinked };
   };
 
   const updateLead = (id: string, updates: Partial<Lead>) => {
@@ -2333,55 +1778,12 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const lead = leads.find((l) => l.id === leadId);
     if (!lead) throw new Error("Lead not found");
 
-    // Check if company exists or create
-    let existingCompany = rawCompanies.find((c) => c.name.toLowerCase() === lead.company.toLowerCase());
-    if (!existingCompany) {
-      existingCompany = addCompany({
-        name: lead.company,
-        industry: lead.industry || "General Industry",
-        website: lead.website || "",
-        country: lead.country || "United States",
-        city: lead.city || "",
-        address: "",
-        phone: lead.phone || "",
-        email: lead.email || "",
-        salesperson: lead.salesperson || currentUser.name,
-        status: "Qualified Prospect",
-        customerValue: lead.estimatedValue || 0,
-        notes: `Converted from Lead ${lead.id}. ${lead.notes}`,
-        tags: [...(lead.tags || []), "Converted Lead"],
-      });
-    }
-
-    // Create Contact
-    const nameParts = lead.name.trim().split(" ");
-    const firstName = nameParts[0] || "Contact";
-    const lastName = nameParts.slice(1).join(" ") || "";
-    const newContact = addContact({
-      firstName,
-      lastName,
-      position: lead.jobTitle || "Lead",
-      companyId: existingCompany.id,
-      email: lead.email,
-      phone: lead.phone,
-      whatsapp: lead.whatsapp,
-      country: lead.country,
-      city: lead.city,
-      status: "Active",
-      leadSource: lead.source,
-      salesperson: lead.salesperson || currentUser.name,
-      notes: `Converted from Lead ${lead.id}`,
-      tags: ["Converted"],
-    });
-
     let newDeal: Deal | undefined = undefined;
     if (createDeal) {
       const defaultPipeline = pipelines.find((p) => p.isDefault) || pipelines[0];
       const defaultStage = defaultPipeline.stages[2] || defaultPipeline.stages[0]; // Qualified stage
       newDeal = addDeal({
         name: `${lead.company} - Expansion Core`,
-        companyId: existingCompany.id,
-        contactId: newContact.id,
         salesperson: lead.salesperson || currentUser.name,
         pipelineId: defaultPipeline.id,
         stageId: defaultStage.id,
@@ -2406,7 +1808,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ? {
               ...l,
               status: "Converted",
-              convertedCompanyId: existingCompany!.id,
               convertedDealId: newDeal?.id,
             }
           : l
@@ -2416,18 +1817,17 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Log Activity
     addActivity({
       type: "Note",
-      companyId: existingCompany.id,
-      contactId: newContact.id,
       dealId: newDeal?.id,
+      leadId: lead.id,
       date: new Date().toISOString().split("T")[0],
       time: "10:00",
       user: currentUser.name,
-      description: `Lead ${lead.name} (${lead.company}) was converted to qualified contact and deal.`,
+      description: `Lead ${lead.name} (${lead.company}) was converted${newDeal ? " to a deal" : ""}.`,
       outcome: "Converted successfully",
       nextAction: "Schedule initial strategic alignment call",
     });
 
-    return { company: existingCompany, contact: newContact, deal: newDeal };
+    return { deal: newDeal };
   };
 
   // Deal Actions
@@ -2449,8 +1849,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Log activity
     addActivity({
       type: "Note",
-      companyId: dealData.companyId,
-      contactId: dealData.contactId,
       dealId: newId,
       date: new Date().toISOString().split("T")[0],
       time: "09:00",
@@ -2507,13 +1905,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             lastActivity: new Date().toISOString().split("T")[0],
           };
 
-          // If moved to Won, record activity & update company customer status
+          // If moved to Won, record activity
           if (status === "Won" && d.status !== "Won") {
             setTimeout(() => {
               addActivity({
                 type: "Proposal",
-                companyId: d.companyId,
-                contactId: d.contactId,
                 dealId: d.id,
                 date: new Date().toISOString().split("T")[0],
                 time: "11:00",
@@ -2522,7 +1918,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 outcome: "Contract finalized and signed",
                 nextAction: "Generate onboarding invoice and schedule kickoff",
               });
-              updateCompany(d.companyId, { status: "Active Customer" });
             }, 50);
           }
 
@@ -2593,8 +1988,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Log Activity
     addActivity({
       type: "Invoice",
-      companyId: invoiceData.companyId,
-      contactId: invoiceData.contactId,
       dealId: invoiceData.dealId,
       date: invoiceData.issueDate || new Date().toISOString().split("T")[0],
       time: "09:30",
@@ -2649,8 +2042,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return addInvoice({
       invoiceNumber: `INV-2026-${Math.floor(100 + Math.random() * 900)}`,
-      companyId: existing.companyId,
-      contactId: existing.contactId,
       dealId: existing.dealId,
       issueDate: new Date().toISOString().split("T")[0],
       dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
@@ -2669,7 +2060,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (remaining > 0) {
       addPayment({
         paymentNumber: `PAY-${Math.floor(500 + Math.random() * 500)}`,
-        companyId: invoice.companyId,
         invoiceId: invoice.id,
         dealId: invoice.dealId,
         date: new Date().toISOString().split("T")[0],
@@ -2722,7 +2112,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Log Activity
     addActivity({
       type: "Payment",
-      companyId: paymentData.companyId,
       dealId: paymentData.dealId,
       date: paymentData.date || new Date().toISOString().split("T")[0],
       time: "14:15",
@@ -2884,10 +2273,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const emailsByAudienceId = new Map<string, string>();
     campaign.audienceIds.forEach((id) => {
-      const email =
-        campaign.audienceType === "Leads"
-          ? leads.find((l) => l.id === id)?.email
-          : contacts.find((c) => c.id === id)?.email;
+      const email = leads.find((l) => l.id === id)?.email;
       if (email && email.trim()) emailsByAudienceId.set(id, email.trim().toLowerCase());
     });
 
@@ -3118,7 +2504,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addActivity({
         type: "Email",
         leadId: action.leadId,
-        contactId: action.contactId,
         date: new Date().toISOString().split("T")[0],
         time: new Date().toTimeString().slice(0, 5),
         user: currentUser?.name || "Agent (approved)",
@@ -3163,8 +2548,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     opts: {
       source: StoredFileSource;
       linkedLeadId?: string;
-      linkedContactId?: string;
-      linkedCompanyId?: string;
       linkedDealId?: string;
     }
   ): Promise<StoredFile> => {
@@ -3198,8 +2581,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       storagePath: data.storagePath,
       source: opts.source,
       linkedLeadId: opts.linkedLeadId,
-      linkedContactId: opts.linkedContactId,
-      linkedCompanyId: opts.linkedCompanyId,
       linkedDealId: opts.linkedDealId,
       uploadedBy: currentUser?.name || "Unknown",
     });
@@ -3246,7 +2627,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // so "set up by AI" never just breaks.
   const generateProductDraft = async (rawDescription: string): Promise<Partial<Product>> => {
     const existingIndustries = Array.from(
-      new Set([...rawCompanies.map((c) => c.industry), ...leads.map((l) => l.industry)].filter(Boolean))
+      new Set(leads.map((l) => l.industry).filter(Boolean))
     );
     try {
       const res = await apiFetch("/api/ai/product-assist", {
@@ -3351,8 +2732,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const clearAllData = () => {
-    setRawCompanies([]);
-    setContacts([]);
     setLeads([]);
     setDeals([]);
     setInvoices([]);
@@ -3463,12 +2842,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveNav,
         settingsDeepLinkTab,
         setSettingsDeepLinkTab,
-        selectedCompanyId,
-        setSelectedCompanyId,
         selectedDealId,
         setSelectedDealId,
-        selectedContactId,
-        setSelectedContactId,
         selectedLeadId,
         setSelectedLeadId,
         convertingLeadId,
@@ -3525,8 +2900,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         whatsappComposeProps,
         openWhatsAppComposer,
 
-        companies,
-        contacts,
         leads,
         deals,
         pipelines,
@@ -3537,14 +2910,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         comments,
         emailCampaigns,
         products,
-
-        addCompany,
-        updateCompany,
-        deleteCompany,
-
-        addContact,
-        updateContact,
-        deleteContact,
 
         addLead,
         updateLead,
@@ -3621,11 +2986,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         getStoredFileUrl,
         pendingBulkImport,
         setPendingBulkImport,
-
-        runCompanyAIAnalysis,
-        addCallLogEntry,
-        deleteCallLogEntry,
-        syncAllLeadsToCompaniesAndContacts,
 
         clearAllData,
 

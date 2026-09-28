@@ -25,8 +25,6 @@ import { getSupabaseAuthClient, isSupabaseAuthConfigured } from "../config/supab
 import type { Tenant, TenantMember, TenantStripeConfig, TenantWebmailConfig, TenantWhatsAppConfig } from "../types";
 
 export type TenantTable =
-  | "companies"
-  | "contacts"
   | "leads"
   | "deals"
   | "pipelines"
@@ -64,20 +62,6 @@ const FIELD_OVERRIDES: Partial<Record<TenantTable, Record<string, string>>> = {
 // should never be written to or read from the database.
 const OMIT_FIELDS: Partial<Record<TenantTable, string[]>> = {
   deals: ["weightedValue"],
-  companies: [
-    "totalRevenue",
-    "totalInvoiced",
-    "totalPaid",
-    "outstandingBalance",
-    "overdueBalance",
-    "averagePaymentDays",
-    "dealsCount",
-    "openDealsCount",
-    "wonDealsCount",
-    "lostDealsCount",
-    "lastActivityDate",
-    "nextActivityDate",
-  ],
 };
 
 function toRow(table: TenantTable, tenantId: string, obj: Record<string, any>): Record<string, any> {
@@ -161,24 +145,11 @@ export async function flushAllPendingSyncs(): Promise<void> {
 }
 
 // Which other tables' pending syncs must be flushed first, keyed by table.
-// companies/contacts are synced on their own independent 800ms debounce
-// timers, same as every other table -- so under normal network jitter a
-// dependent table's write can reach Postgres before its FK target finishes
-// syncing. That's a real, reproducible foreign-key violation (e.g. a
-// contact's company_id, or a lead's linked_company_id/linked_contact_id,
-// pointing at a row that doesn't exist in Supabase yet), rejected silently
-// and never retried -- data that looked fully synced in the browser simply
-// never reaches the database. Deals/invoices/payments/activities/tasks all
-// carry company_id and/or contact_id too.
-const SYNC_DEPENDENCIES: Partial<Record<TenantTable, TenantTable[]>> = {
-  contacts: ["companies"],
-  leads: ["companies", "contacts"],
-  deals: ["companies", "contacts"],
-  invoices: ["companies", "contacts"],
-  payments: ["companies"],
-  activities: ["companies", "contacts"],
-  tasks: ["companies", "contacts"],
-};
+// Each table is synced on its own independent 800ms debounce timer, so under
+// normal network jitter a dependent table's write can reach Postgres before
+// its FK target finishes syncing -- kept here as an extension point should a
+// future FK dependency between tables need it.
+const SYNC_DEPENDENCIES: Partial<Record<TenantTable, TenantTable[]>> = {};
 
 export interface SyncFailure {
   table: TenantTable;

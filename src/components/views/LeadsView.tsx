@@ -56,7 +56,6 @@ export const LeadsView: React.FC = () => {
     deleteLead,
     setQuickCreateOpen,
     setQuickCreateType,
-    syncAllLeadsToCompaniesAndContacts,
     openWhatsAppComposer,
     openEmailComposer,
     setSelectedLeadId,
@@ -70,28 +69,6 @@ export const LeadsView: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [ratingFilter, setRatingFilter] = useState<string>("All");
   const convertingLead = leads.find((l) => l.id === convertingLeadId) || null;
-  const [isSyncingAll, setIsSyncingAll] = useState(false);
-  const [syncResultMsg, setSyncResultMsg] = useState<string | null>(null);
-
-  const handleSyncAllLeads = () => {
-    setIsSyncingAll(true);
-    try {
-      const { companiesCreated, contactsCreated, companiesLinked } = syncAllLeadsToCompaniesAndContacts();
-      const total = companiesCreated + companiesLinked;
-      setSyncResultMsg(
-        total === 0
-          ? "No leads with a company name found to sync."
-          : `Synced ${total} lead${total === 1 ? "" : "s"}: ${companiesCreated} new compan${
-              companiesCreated === 1 ? "y" : "ies"
-            } created (${companiesLinked} matched existing), ${contactsCreated} new contact${
-              contactsCreated === 1 ? "" : "s"
-            } created.`
-      );
-    } finally {
-      setIsSyncingAll(false);
-      setTimeout(() => setSyncResultMsg(null), 8000);
-    }
-  };
 
   const statuses: Array<Lead["status"]> = [
     "New",
@@ -120,12 +97,6 @@ export const LeadsView: React.FC = () => {
 
   return (
     <div id="leads-view" className="space-y-5 animate-in fade-in duration-200">
-      {syncResultMsg && (
-        <div className="p-3 bg-teal-50 border border-teal-200 text-teal-800 rounded-xl text-xs font-medium animate-in fade-in duration-200">
-          {syncResultMsg}
-        </div>
-      )}
-
       {/* Action Header & Filter Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
         <div className="flex flex-wrap items-center gap-3">
@@ -194,18 +165,6 @@ export const LeadsView: React.FC = () => {
               <TableIcon className="w-3.5 h-3.5" />
             </button>
           </div>
-
-          {/* Bulk-link every existing lead to a matching (or new) Company + Contact */}
-          <button
-            id="btn-sync-all-leads"
-            onClick={handleSyncAllLeads}
-            disabled={isSyncingAll || leads.length === 0}
-            className="px-3.5 py-1.5 bg-[#252a36] hover:bg-[#2f3544] disabled:opacity-50 border border-[#3d4455] text-slate-200 hover:text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
-            title="Create or link a Company and Contact for every lead that doesn't have one yet"
-          >
-            <Users2 className="w-3.5 h-3.5 text-teal-400" />
-            <span>{isSyncingAll ? "Syncing..." : "Sync All to Companies/Contacts"}</span>
-          </button>
 
           {/* Import Leads (Excel / Google Sheets) */}
           <button
@@ -278,10 +237,10 @@ export const LeadsView: React.FC = () => {
                             <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
                               <Building2 className="w-3 h-3 text-slate-400" />
                               <span className="font-medium">{lead.company}</span>
-                              {(lead.linkedCompanyId || lead.convertedCompanyId) && (
+                              {lead.convertedDealId && (
                                 <span
                                   className="inline-flex items-center gap-0.5 text-[9px] font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded px-1 py-px"
-                                  title="Linked to a Company/Contact record"
+                                  title="Converted to a Deal"
                                 >
                                   <Link2 className="w-2 h-2" />
                                   Linked
@@ -452,10 +411,10 @@ export const LeadsView: React.FC = () => {
                     </button>
                     <div className="text-slate-500 text-[11px] flex items-center gap-1.5">
                       <span>{lead.company} • {lead.jobTitle}</span>
-                      {(lead.linkedCompanyId || lead.convertedCompanyId) && (
+                      {lead.convertedDealId && (
                         <span
                           className="inline-flex items-center gap-0.5 text-[9px] font-bold text-teal-700 bg-teal-50 border border-teal-200 rounded px-1 py-px"
-                          title="Linked to a Company/Contact record"
+                          title="Converted to a Deal"
                         >
                           <Link2 className="w-2 h-2" />
                           Linked

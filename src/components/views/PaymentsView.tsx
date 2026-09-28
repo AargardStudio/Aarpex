@@ -5,10 +5,9 @@ import { CreditCard, Plus, Search, Building2, Trash2 } from "lucide-react";
 export const PaymentsView: React.FC = () => {
   const {
     payments,
-    companies,
+    deals,
     invoices,
     deletePayment,
-    setSelectedCompanyId,
     setQuickCreateOpen,
     setQuickCreateType,
   } = useCRM();
@@ -16,11 +15,11 @@ export const PaymentsView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
 
   const filteredPayments = payments.filter((p) => {
-    const comp = companies.find((c) => c.id === p.companyId);
+    const linkedDeal = p.dealId ? deals.find((d) => d.id === p.dealId) : null;
     const matchesSearch =
       p.paymentNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.reference.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (comp && comp.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      (linkedDeal && linkedDeal.name.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesSearch;
   });
 
@@ -85,7 +84,7 @@ export const PaymentsView: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100 whitespace-nowrap">
               {filteredPayments.map((pay) => {
-                const comp = companies.find((c) => c.id === pay.companyId);
+                const linkedDeal = pay.dealId ? deals.find((d) => d.id === pay.dealId) : null;
                 const inv = invoices.find((i) => i.id === pay.invoiceId);
 
                 return (
@@ -95,14 +94,11 @@ export const PaymentsView: React.FC = () => {
                     </td>
 
                     <td className="p-3.5">
-                      {comp ? (
-                        <button
-                          onClick={() => setSelectedCompanyId(comp.id)}
-                          className="font-bold text-slate-800 hover:text-indigo-600 flex items-center gap-1.5"
-                        >
+                      {linkedDeal ? (
+                        <span className="font-bold text-slate-800 flex items-center gap-1.5">
                           <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{comp.name}</span>
-                        </button>
+                          <span>{linkedDeal.name}</span>
+                        </span>
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}

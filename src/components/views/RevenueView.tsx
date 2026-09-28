@@ -24,7 +24,7 @@ import {
 } from "recharts";
 
 export const RevenueView: React.FC = () => {
-  const { companies, invoices, payments, deals, setSelectedCompanyId } = useCRM();
+  const { invoices, payments, deals } = useCRM();
 
   const totalInvoiced = invoices.reduce((sum, i) => sum + (i.total || 0), 0);
   const totalCollected = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -61,16 +61,18 @@ export const RevenueView: React.FC = () => {
     { name: "60+ Days Critical", amount: aging60Plus, color: "#ef4444" },
   ];
 
-  // Top Revenue Contributing Companies
-  const topCompanies = [...companies]
-    .sort((a, b) => (b.totalPaid || 0) - (a.totalPaid || 0))
+  // Top Revenue Contributing Deals (Companies no longer exist as an entity,
+  // so revenue is rolled up by Deal via each Invoice's dealId instead).
+  const topCompaniesData = deals
+    .map((d) => {
+      const dealInvoices = invoices.filter((i) => i.dealId === d.id);
+      const collected = dealInvoices.reduce((sum, i) => sum + (i.amountPaid || 0), 0);
+      const outstanding = dealInvoices.reduce((sum, i) => sum + (i.remainingBalance || 0), 0);
+      return { name: d.name.length > 15 ? `${d.name.substring(0, 15)}...` : d.name, collected, outstanding };
+    })
+    .filter((d) => d.collected > 0 || d.outstanding > 0)
+    .sort((a, b) => b.collected - a.collected)
     .slice(0, 5);
-
-  const topCompaniesData = topCompanies.map((c) => ({
-    name: c.name.length > 15 ? `${c.name.substring(0, 15)}...` : c.name,
-    collected: c.totalPaid || 0,
-    outstanding: c.outstandingBalance || 0,
-  }));
 
   return (
     <div id="revenue-view" className="space-y-6 animate-in fade-in duration-200">

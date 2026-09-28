@@ -15,7 +15,7 @@ import {
 import { apiFetch } from "../../lib/apiClient";
 
 export const AiInsightsView: React.FC = () => {
-  const { companies, deals, invoices, payments, setSelectedCompanyId } = useCRM();
+  const { deals, invoices, payments } = useCRM();
 
   const [activeTab, setActiveTab] = useState<"briefing" | "account" | "pitch" | "query">("briefing");
 
@@ -23,13 +23,12 @@ export const AiInsightsView: React.FC = () => {
   const [briefingData, setBriefingData] = useState<any>(null);
   const [isBriefingLoading, setIsBriefingLoading] = useState(false);
 
-  // Account Deep Dive State
-  const [selectedCompId, setSelectedCompId] = useState<string>(companies[0]?.id || "");
+  // Account Deep Dive State (per-deal, since Companies/Contacts no longer exist)
+  const [selectedDealForAnalysisId, setSelectedDealForAnalysisId] = useState<string>(deals[0]?.id || "");
   const [isAccountAnalyzing, setIsAccountAnalyzing] = useState(false);
   const [accountAnalysis, setAccountAnalysis] = useState<any>(null);
 
   // Pitch Generator State
-  const [pitchCompanyId, setPitchCompanyId] = useState<string>(companies[0]?.id || "");
   const [pitchDealId, setPitchDealId] = useState<string>(deals[0]?.id || "");
   const [isPitchLoading, setIsPitchLoading] = useState(false);
   const [generatedPitch, setGeneratedPitch] = useState<string | null>(null);
@@ -83,18 +82,17 @@ export const AiInsightsView: React.FC = () => {
   };
 
   const handleRunAccountAnalysis = async () => {
-    const comp = companies.find((c) => c.id === selectedCompId);
-    if (!comp) return;
+    const deal = deals.find((d) => d.id === selectedDealForAnalysisId);
+    if (!deal) return;
 
     setIsAccountAnalyzing(true);
     setAccountAnalysis(null);
     try {
-      const compDeals = deals.filter((d) => d.companyId === comp.id);
-      const compInvoices = invoices.filter((i) => i.companyId === comp.id);
+      const dealInvoices = invoices.filter((i) => i.dealId === deal.id);
       const res = await apiFetch("/api/ai/customer-analysis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ company: comp, deals: compDeals, invoices: compInvoices }),
+        body: JSON.stringify({ deal, deals: [deal], invoices: dealInvoices }),
       });
       const data = await res.json();
       setAccountAnalysis(data);
@@ -106,9 +104,8 @@ export const AiInsightsView: React.FC = () => {
   };
 
   const handleGeneratePitch = async () => {
-    const comp = companies.find((c) => c.id === pitchCompanyId);
     const deal = deals.find((d) => d.id === pitchDealId);
-    if (!comp) return;
+    if (!deal) return;
 
     setIsPitchLoading(true);
     setGeneratedPitch(null);
@@ -116,7 +113,7 @@ export const AiInsightsView: React.FC = () => {
       const res = await apiFetch("/api/ai/pitch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ company: comp, deal }),
+        body: JSON.stringify({ deal }),
       });
       const data = await res.json();
       setGeneratedPitch(data.pitch || data.rawText || "Pitch generated.");
@@ -275,15 +272,15 @@ export const AiInsightsView: React.FC = () => {
         <div className="space-y-5">
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-slate-700">Select Customer Account:</span>
+              <span className="text-xs font-bold text-slate-700">Select Deal / Account:</span>
               <select
-                value={selectedCompId}
-                onChange={(e) => setSelectedCompId(e.target.value)}
+                value={selectedDealForAnalysisId}
+                onChange={(e) => setSelectedDealForAnalysisId(e.target.value)}
                 className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 bg-slate-50 focus:outline-none"
               >
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.status})
+                {deals.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} ({d.status})
                   </option>
                 ))}
               </select>
@@ -362,42 +359,21 @@ export const AiInsightsView: React.FC = () => {
       {activeTab === "pitch" && (
         <div className="space-y-5">
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Target Company:
-                </label>
-                <select
-                  value={pitchCompanyId}
-                  onChange={(e) => setPitchCompanyId(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-slate-50"
-                >
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.industry})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Associated Deal / Opportunity:
-                </label>
-                <select
-                  value={pitchDealId}
-                  onChange={(e) => setPitchDealId(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-slate-50"
-                >
-                  {deals
-                    .filter((d) => !pitchCompanyId || d.companyId === pitchCompanyId)
-                    .map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name} (${d.dealValue.toLocaleString()})
-                      </option>
-                    ))}
-                </select>
-              </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Associated Deal / Opportunity:
+              </label>
+              <select
+                value={pitchDealId}
+                onChange={(e) => setPitchDealId(e.target.value)}
+                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs bg-slate-50"
+              >
+                {deals.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} (${d.dealValue.toLocaleString()})
+                  </option>
+                ))}
+              </select>
             </div>
 
             <button

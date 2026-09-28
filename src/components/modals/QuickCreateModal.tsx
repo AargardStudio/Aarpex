@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { useCRM } from "../../context/CRMContext";
 import {
   X,
-  Building2,
   Users,
   Briefcase,
   Receipt,
@@ -22,15 +21,11 @@ export const QuickCreateModal: React.FC = () => {
     setQuickCreateOpen,
     quickCreateType,
     setQuickCreateType,
-    companies,
-    contacts,
     pipelines,
     invoices,
     currentUser,
     addLead,
     addDeal,
-    addCompany,
-    addContact,
     addInvoice,
     addPayment,
     addActivity,
@@ -55,7 +50,6 @@ export const QuickCreateModal: React.FC = () => {
 
   // Deal State
   const [dealName, setDealName] = useState("");
-  const [dealCompanyId, setDealCompanyId] = useState(companies[0]?.id || "");
   const [dealValue, setDealValue] = useState(75000);
   const [dealPipelineId, setDealPipelineId] = useState(pipelines[0]?.id || "");
   const [dealStageId, setDealStageId] = useState(pipelines[0]?.stages[0]?.id || "");
@@ -65,28 +59,7 @@ export const QuickCreateModal: React.FC = () => {
   const [dealPriority, setDealPriority] = useState<"Low" | "Medium" | "High">("High");
   const [dealProductService, setDealProductService] = useState("Enterprise Cloud Platform");
 
-  // Company State
-  const [compName, setCompName] = useState("");
-  const [compIndustry, setCompIndustry] = useState("Technology / SaaS");
-  const [compIndustryCustom, setCompIndustryCustom] = useState("");
-  const [compClientCategory, setCompClientCategory] = useState("");
-  const [compWebsite, setCompWebsite] = useState("");
-  const [compCity, setCompCity] = useState("San Francisco");
-  const [compCountry, setCompCountry] = useState("United States");
-  const [compPhone, setCompPhone] = useState("");
-  const [compEmail, setCompEmail] = useState("");
-  const [compStatus, setCompStatus] = useState<any>("Qualified Prospect");
-
-  // Contact State
-  const [cntFirstName, setCntFirstName] = useState("");
-  const [cntLastName, setCntLastName] = useState("");
-  const [cntCompanyId, setCntCompanyId] = useState(companies[0]?.id || "");
-  const [cntPosition, setCntPosition] = useState("Director of Technology");
-  const [cntEmail, setCntEmail] = useState("");
-  const [cntPhone, setCntPhone] = useState("");
-
   // Invoice State
-  const [invCompanyId, setInvCompanyId] = useState(companies[0]?.id || "");
   const [invDueDate, setInvDueDate] = useState(
     new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0]
   );
@@ -101,17 +74,13 @@ export const QuickCreateModal: React.FC = () => {
   ]);
 
   // Payment State
-  const [payCompanyId, setPayCompanyId] = useState(companies[0]?.id || "");
-  const [payInvoiceId, setPayInvoiceId] = useState(
-    invoices.find((i) => i.companyId === (companies[0]?.id || ""))?.id || invoices[0]?.id || ""
-  );
+  const [payInvoiceId, setPayInvoiceId] = useState(invoices[0]?.id || "");
   const [payAmount, setPayAmount] = useState(10000);
   const [payMethod, setPayMethod] = useState<any>("Bank Transfer");
   const [payReference, setPayReference] = useState("WIRE-TX-9981");
 
   // Activity State
   const [actType, setActType] = useState<any>("Call");
-  const [actCompanyId, setActCompanyId] = useState(companies[0]?.id || "");
   const [actDescription, setActDescription] = useState("");
   const [actOutcome, setActOutcome] = useState("Connected and discussed requirements");
   const [actNextAction, setActNextAction] = useState("Follow up next Tuesday with proposal");
@@ -122,7 +91,6 @@ export const QuickCreateModal: React.FC = () => {
     new Date(Date.now() + 2 * 86400000).toISOString().split("T")[0]
   );
   const [taskPriority, setTaskPriority] = useState<any>("High");
-  const [taskCompanyId, setTaskCompanyId] = useState(companies[0]?.id || "");
   const [taskDescription, setTaskDescription] = useState("");
 
   if (!isQuickCreateOpen) return null;
@@ -166,12 +134,11 @@ export const QuickCreateModal: React.FC = () => {
         nextFollowUp: new Date(Date.now() + 3 * 86400000).toISOString().split("T")[0],
       });
     } else if (quickCreateType === "deal") {
-      if (!dealName || !dealCompanyId) return;
+      if (!dealName) return;
       const targetPipeline = pipelines.find((p) => p.id === dealPipelineId) || pipelines[0];
       const targetStage = targetPipeline.stages.find((s) => s.id === dealStageId) || targetPipeline.stages[0];
       addDeal({
         name: dealName,
-        companyId: dealCompanyId,
         salesperson: currentUser.name,
         pipelineId: targetPipeline.id,
         stageId: targetStage.id,
@@ -187,46 +154,10 @@ export const QuickCreateModal: React.FC = () => {
         lastActivity: new Date().toISOString().split("T")[0],
         nextActivity: "Follow up",
       });
-    } else if (quickCreateType === "company") {
-      if (!compName) return;
-      addCompany({
-        name: compName,
-        industry: compIndustry === "Other" ? sanitizeIndustryText(compIndustryCustom) || "Other" : compIndustry,
-        clientCategory: compClientCategory || undefined,
-        website: compWebsite,
-        city: compCity,
-        country: compCountry,
-        phone: compPhone,
-        email: compEmail,
-        salesperson: currentUser.name,
-        status: compStatus,
-        customerValue: 0,
-        address: "",
-        notes: "",
-        tags: [],
-      });
-    } else if (quickCreateType === "contact") {
-      if (!cntFirstName || !cntLastName) return;
-      addContact({
-        firstName: cntFirstName,
-        lastName: cntLastName,
-        companyId: cntCompanyId,
-        position: cntPosition,
-        email: cntEmail,
-        phone: cntPhone,
-        salesperson: currentUser.name,
-        status: "Active",
-        leadSource: "Direct Contact",
-        notes: "",
-        country: "United States",
-        city: "",
-        tags: [],
-      });
     } else if (quickCreateType === "invoice") {
-      if (!invCompanyId || invItems.length === 0) return;
+      if (invItems.length === 0) return;
       addInvoice({
         invoiceNumber: `INV-${Date.now().toString(36).toUpperCase()}`,
-        companyId: invCompanyId,
         issueDate: new Date().toISOString().split("T")[0],
         dueDate: invDueDate,
         currency: "USD",
@@ -234,10 +165,9 @@ export const QuickCreateModal: React.FC = () => {
         notes: "Payment due within 30 days of invoice date.",
       });
     } else if (quickCreateType === "payment") {
-      if (!payCompanyId || !payInvoiceId) return;
+      if (!payInvoiceId) return;
       addPayment({
         paymentNumber: `PAY-${Date.now().toString(36).toUpperCase()}`,
-        companyId: payCompanyId,
         invoiceId: payInvoiceId,
         date: new Date().toISOString().split("T")[0],
         amount: Number(payAmount) || 0,
@@ -248,10 +178,9 @@ export const QuickCreateModal: React.FC = () => {
         recordedBy: currentUser.name,
       });
     } else if (quickCreateType === "activity") {
-      if (!actCompanyId || !actDescription) return;
+      if (!actDescription) return;
       addActivity({
         type: actType,
-        companyId: actCompanyId,
         date: new Date().toISOString().split("T")[0],
         time: "14:00",
         user: currentUser.name,
@@ -263,7 +192,6 @@ export const QuickCreateModal: React.FC = () => {
       if (!taskTitle) return;
       addTask({
         title: taskTitle,
-        companyId: taskCompanyId,
         dueDate: taskDueDate,
         priority: taskPriority,
         status: "To Do",
@@ -278,8 +206,6 @@ export const QuickCreateModal: React.FC = () => {
   const tabs: Array<{ id: typeof quickCreateType; label: string; icon: React.ElementType }> = [
     { id: "lead", label: "Lead", icon: Users },
     { id: "deal", label: "Deal", icon: Briefcase },
-    { id: "company", label: "Company", icon: Building2 },
-    { id: "contact", label: "Contact", icon: Users },
     { id: "invoice", label: "Invoice", icon: Receipt },
     { id: "payment", label: "Payment", icon: CreditCard },
     { id: "activity", label: "Activity", icon: CalendarCheck },
@@ -584,20 +510,6 @@ export const QuickCreateModal: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-medium text-slate-700 mb-1">Company *</label>
-                  <select
-                    value={dealCompanyId}
-                    onChange={(e) => setDealCompanyId(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
-                  >
-                    {companies.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
                   <label className="block font-medium text-slate-700 mb-1">Deal Value ($ USD) *</label>
                   <input
                     type="number"
@@ -607,9 +519,6 @@ export const QuickCreateModal: React.FC = () => {
                     className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block font-medium text-slate-700 mb-1">Pipeline</label>
                   <select
@@ -672,237 +581,17 @@ export const QuickCreateModal: React.FC = () => {
             </>
           )}
 
-          {/* COMPANY FORM */}
-          {quickCreateType === "company" && (
-            <>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Company Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={compName}
-                    onChange={(e) => setCompName(e.target.value)}
-                    placeholder="e.g. Helix Robotics Inc"
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Industry</label>
-                  <select
-                    value={compIndustry}
-                    onChange={(e) => setCompIndustry(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
-                  >
-                    {INDUSTRIES.map((ind) => (
-                      <option key={ind}>{ind}</option>
-                    ))}
-                  </select>
-                  {compIndustry === "Other" && (
-                    <input
-                      type="text"
-                      value={compIndustryCustom}
-                      onChange={(e) => setCompIndustryCustom(e.target.value)}
-                      placeholder="Type the industry"
-                      className="w-full mt-1.5 px-3 py-1.5 border border-slate-300 rounded-lg"
-                    />
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">City</label>
-                  <input
-                    type="text"
-                    value={compCity}
-                    onChange={(e) => setCompCity(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Country</label>
-                  <input
-                    type="text"
-                    value={compCountry}
-                    onChange={(e) => setCompCountry(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Lifecycle Status</label>
-                  <select
-                    value={compStatus}
-                    onChange={(e) => setCompStatus(e.target.value as any)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
-                  >
-                    <option>Qualified Prospect</option>
-                    <option>Active Customer</option>
-                    <option>Prospect</option>
-                    <option>At Risk</option>
-                    <option>Former Customer</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">
-                    Client Category <span className="text-slate-400 font-normal">(optional)</span>
-                  </label>
-                  <select
-                    value={compClientCategory}
-                    onChange={(e) => setCompClientCategory(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
-                  >
-                    <option value="">Not set</option>
-                    {CLIENT_CATEGORIES.map((cat) => (
-                      <option key={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Website</label>
-                  <input
-                    type="text"
-                    value={compWebsite}
-                    onChange={(e) => setCompWebsite(e.target.value)}
-                    placeholder="https://company.com"
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={compEmail}
-                    onChange={(e) => setCompEmail(e.target.value)}
-                    placeholder="contact@company.com"
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Phone</label>
-                  <input
-                    type="tel"
-                    value={compPhone}
-                    onChange={(e) => setCompPhone(e.target.value)}
-                    placeholder="+1 555 000 0000"
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"
-                  />
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* CONTACT FORM */}
-          {quickCreateType === "contact" && (
-            <>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">First Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={cntFirstName}
-                    onChange={(e) => setCntFirstName(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Last Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={cntLastName}
-                    onChange={(e) => setCntLastName(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Company *</label>
-                  <select
-                    value={cntCompanyId}
-                    onChange={(e) => setCntCompanyId(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
-                  >
-                    {companies.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Job Title</label>
-                  <input
-                    type="text"
-                    value={cntPosition}
-                    onChange={(e) => setCntPosition(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={cntEmail}
-                    onChange={(e) => setCntEmail(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Phone</label>
-                  <input
-                    type="text"
-                    value={cntPhone}
-                    onChange={(e) => setCntPhone(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"
-                  />
-                </div>
-              </div>
-            </>
-          )}
-
           {/* INVOICE FORM */}
           {quickCreateType === "invoice" && (
             <>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Company *</label>
-                  <select
-                    value={invCompanyId}
-                    onChange={(e) => setInvCompanyId(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
-                  >
-                    {companies.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Payment Due Date</label>
-                  <input
-                    type="date"
-                    value={invDueDate}
-                    onChange={(e) => setInvDueDate(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"
-                  />
-                </div>
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">Payment Due Date</label>
+                <input
+                  type="date"
+                  value={invDueDate}
+                  onChange={(e) => setInvDueDate(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg"
+                />
               </div>
 
               <div className="space-y-2 pt-2">
@@ -984,48 +673,23 @@ export const QuickCreateModal: React.FC = () => {
           {/* PAYMENT FORM */}
           {quickCreateType === "payment" && (
             <>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Company *</label>
-                  <select
-                    value={payCompanyId}
-                    onChange={(e) => {
-                      setPayCompanyId(e.target.value);
-                      const matchingInv = invoices.find((i) => i.companyId === e.target.value);
-                      if (matchingInv) {
-                        setPayInvoiceId(matchingInv.id);
-                        setPayAmount(matchingInv.remainingBalance || matchingInv.total);
-                      }
-                    }}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
-                  >
-                    {companies.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Target Invoice *</label>
-                  <select
-                    value={payInvoiceId}
-                    onChange={(e) => {
-                      setPayInvoiceId(e.target.value);
-                      const inv = invoices.find((i) => i.id === e.target.value);
-                      if (inv) setPayAmount(inv.remainingBalance || inv.total);
-                    }}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
-                  >
-                    {invoices
-                      .filter((i) => !payCompanyId || i.companyId === payCompanyId)
-                      .map((inv) => (
-                        <option key={inv.id} value={inv.id}>
-                          {inv.invoiceNumber} - Bal: ${inv.remainingBalance.toLocaleString()} ({inv.status})
-                        </option>
-                      ))}
-                  </select>
-                </div>
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">Target Invoice *</label>
+                <select
+                  value={payInvoiceId}
+                  onChange={(e) => {
+                    setPayInvoiceId(e.target.value);
+                    const inv = invoices.find((i) => i.id === e.target.value);
+                    if (inv) setPayAmount(inv.remainingBalance || inv.total);
+                  }}
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
+                >
+                  {invoices.map((inv) => (
+                    <option key={inv.id} value={inv.id}>
+                      {inv.invoiceNumber} - Bal: ${inv.remainingBalance.toLocaleString()} ({inv.status})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
@@ -1069,35 +733,19 @@ export const QuickCreateModal: React.FC = () => {
           {/* ACTIVITY FORM */}
           {quickCreateType === "activity" && (
             <>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Activity Type</label>
-                  <select
-                    value={actType}
-                    onChange={(e) => setActType(e.target.value as any)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
-                  >
-                    <option>Call</option>
-                    <option>Meeting</option>
-                    <option>Email</option>
-                    <option>Proposal</option>
-                    <option>Note</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Company *</label>
-                  <select
-                    value={actCompanyId}
-                    onChange={(e) => setActCompanyId(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
-                  >
-                    {companies.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">Activity Type</label>
+                <select
+                  value={actType}
+                  onChange={(e) => setActType(e.target.value as any)}
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
+                >
+                  <option>Call</option>
+                  <option>Meeting</option>
+                  <option>Email</option>
+                  <option>Proposal</option>
+                  <option>Note</option>
+                </select>
               </div>
 
               <div>
@@ -1150,21 +798,7 @@ export const QuickCreateModal: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Related Company</label>
-                  <select
-                    value={taskCompanyId}
-                    onChange={(e) => setTaskCompanyId(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
-                  >
-                    {companies.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block font-medium text-slate-700 mb-1">Due Date</label>
                   <input
