@@ -13,6 +13,16 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.32.3] - 2026-09-28
+
+### Fixed
+- **The remaining reason records silently stopped saving -- a single client-library default, not a schema problem.** `postgrest-js` builds an insert's column list as the *union* of the keys across every row in a batch, and unless told otherwise it writes an explicit `NULL` into any column a given row happens to be missing. `tenantDataSync`'s `toRow()` omits keys whose value is `undefined`, so batches are routinely heterogeneous -- one Industry Agent has `excludedLeadIds` and the next doesn't; one Knowledge Base entry links leads while the next links contacts. Every row missing a key another row supplied therefore got `NULL` instead of the column's `DEFAULT`, which hard-fails against any `not null` column (`null value in column "linked_contact_ids" of relation "knowledge_base" violates not-null constraint`). Because `upsertRowsResilient` retries a rejected chunk row-by-row, one heterogeneous batch took down every row in it -- so the table simply stopped saving, with no user-visible sign.
+- Both upsert calls now pass `defaultToNull: false`, which sends `Prefer: missing=default` and tells PostgREST to apply each column's `DEFAULT` for keys a row didn't supply. That is what the sync has always meant: an absent field means "leave it at the default", never "write NULL over it".
+- New `supabase/migrations/0017_relax_not_null_array_columns.sql` drops `not null` from the array columns a sync row may legitimately omit (`knowledge_base.tags`/`linked_lead_ids`/`linked_contact_ids`/`linked_company_ids`, `industry_agents.talking_points`/`pain_points`/`excluded_lead_ids`/`excluded_company_ids`, and `tags` on companies/leads/contacts), keeping their defaults. This is belt-and-braces for any browser still running a cached build that predates the fix above; every consumer of these fields already treats null and `[]` identically.
+
+### Notes
+- This and the v1.32.2 schema repair are two independent faults with the same symptom, which is why fixing the columns alone didn't fully resolve it: v1.32.2 was columns that never existed, this is existing columns being sent `NULL` they should never have received.
+
 ## [1.32.2] - 2026-09-27
 
 ### Fixed

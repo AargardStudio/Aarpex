@@ -226,6 +226,23 @@ const UPSERT_CHUNK_SIZE = 200;
  * retried one row at a time to isolate exactly which row(s) are bad --
  * everything else in that chunk still gets saved. Returns the rows that
  * genuinely could not be saved, with Postgres's own error message for each.
+ *
+ * `defaultToNull: false` is load-bearing, not a nicety. postgrest-js builds
+ * the insert's column list as the UNION of the keys across every row in the
+ * batch, and by default writes an explicit NULL into any column a given row
+ * happens to be missing. Our rows come from toRow(), which omits keys whose
+ * value is `undefined`, so a batch is routinely heterogeneous: one Industry
+ * Agent has excludedLeadIds and the next doesn't; one Knowledge Base entry
+ * links leads while the next links contacts. With the default behaviour the
+ * rows missing that key get NULL rather than the column's DEFAULT, which
+ * hard-fails against every `not null` column ("null value in column
+ * linked_contact_ids ... violates not-null constraint") and takes the whole
+ * chunk -- and then each retried row -- down with it.
+ *
+ * `defaultToNull: false` sends `Prefer: missing=default`, telling PostgREST
+ * to apply each column's DEFAULT for keys a row didn't supply. That is what
+ * we actually mean everywhere: an absent field means "leave it at the
+ * default", never "write NULL over it".
  */
 async function upsertRowsResilient(
   supabase: ReturnType<typeof getSupabaseAuthClient>,
@@ -235,13 +252,13 @@ async function upsertRowsResilient(
   const failures: Array<{ id: any; error: string }> = [];
   for (let i = 0; i < dbRows.length; i += UPSERT_CHUNK_SIZE) {
     const chunk = dbRows.slice(i, i + UPSERT_CHUNK_SIZE);
-    const { error } = await supabase.from(table).upsert(chunk, { onConflict: "id" });
+    const { error } = await supabase.from(table).upsert(chunk, { onConflict: "id", defaultToNull: false });
     if (!error) continue;
 
     // The whole chunk was rejected -- narrow down which row(s) actually
     // caused it rather than dropping every row in the chunk.
     for (const row of chunk) {
-      const { error: rowError } = await supabase.from(table).upsert([row], { onConflict: "id" });
+      const { error: rowError } = await supabase.from(table).upsert([row], { onConflict: "id", defaultToNull: false });
       if (rowError) {
         failures.push({ id: row.id, error: rowError.message });
       }

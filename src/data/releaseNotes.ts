@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.32.3",
+    date: "2026-09-28",
+    headline: "Saving Is Fully Fixed",
+    tagline: "The last piece: records were being saved in batches, and any record missing a field another record in the same batch had was being rejected -- taking the whole batch down with it.",
+    highlights: [
+      {
+        title: "Batches no longer cancel each other out",
+        description: "Saving several records at once could fail entirely if they didn't all have exactly the same fields filled in. Each record is now saved on its own terms.",
+      },
+      {
+        title: "Agents and Knowledge Base stick",
+        description: "Industry Agents, their exclusions, and AI-written Knowledge Base entries all persist correctly now, including when created together by a running agent.",
+      },
+    ],
+  },
+  {
     version: "1.32.2",
     date: "2026-09-27",
     headline: "Industry Agents & Agent Approvals Now Actually Save",
