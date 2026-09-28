@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-09-28
+
+### Fixed
+- **Leads and Deals kanban cards overflowed horizontally, producing a mismatched native scrollbar and a "Convert" button that visually collided with the status dropdown at the card's edge.** Each card's footer packed up to five controls (Analyze, Email, WhatsApp, Convert, the status select) into one non-wrapping flex row -- wider than the card at the kanban board's narrower breakpoints. `overflow-y-auto` on the scrolling cards container with no `overflow-x` specified computes to `overflow-x: auto` per the CSS spec, so the browser's own (light, theme-mismatched) scrollbar appeared rather than the app's dark `custom-scrollbar` styling. Footer now wraps (`flex-wrap`) instead of overflowing, the status select has a max width, and both cards containers set `overflow-x-hidden custom-scrollbar` explicitly so only the intended dark vertical scrollbar ever shows.
+
 ## [2.0.0] - 2026-09-28
 
 ### Removed

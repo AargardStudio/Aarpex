@@ -175,7 +175,7 @@ export const DealsView: React.FC = () => {
               </div>
 
               {/* Deal Cards */}
-              <div className="space-y-2.5 flex-1 overflow-y-auto">
+              <div className="space-y-2.5 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
                 {stageDeals.map((deal) => {
                   const isStalled =
                     deal.lastActivity &&

@@ -217,7 +217,7 @@ export const LeadsView: React.FC = () => {
                 </div>
 
                 {/* Cards Container */}
-                <div className="flex-1 space-y-2.5 overflow-y-auto">
+                <div className="flex-1 space-y-2.5 overflow-y-auto overflow-x-hidden custom-scrollbar">
                   {columnLeads.map((lead) => {
                     const ratingInfo = ratingBadges[getLeadRating(lead)];
                     return (
@@ -292,9 +292,17 @@ export const LeadsView: React.FC = () => {
                           </span>
                         </div>
 
-                        {/* Card Footer: Quick Actions */}
-                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                          <div className="flex items-center gap-1">
+                        {/* Card Footer: Quick Actions -- wraps instead of
+                            overflowing horizontally. A tight row of up to
+                            five controls (Analyze, Email, WhatsApp, Convert,
+                            the status select) was wider than the card at
+                            narrower kanban breakpoints, which forced the
+                            card into horizontal scroll -- surfacing as a
+                            native light scrollbar that didn't match the
+                            dark theme, and as Convert visually colliding
+                            with the status select at the card's edge. */}
+                        <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-1.5">
+                          <div className="flex flex-wrap items-center gap-1 min-w-0">
                             <button
                               onClick={() => setSelectedLeadId(lead.id)}
                               className="px-2 py-0.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded text-[10px] font-bold border border-indigo-200 flex items-center gap-1"
@@ -349,7 +357,7 @@ export const LeadsView: React.FC = () => {
                             <select
                               value={lead.status}
                               onChange={(e) => moveLeadStatus(lead.id, e.target.value as any)}
-                              className="text-[10px] border border-slate-200 rounded px-1 py-0.5 bg-slate-50 text-slate-600"
+                              className="max-w-[76px] text-[10px] border border-slate-200 rounded px-1 py-0.5 bg-slate-50 text-slate-600"
                             >
                               {statuses.map((s) => (
                                 <option key={s} value={s}>
@@ -361,7 +369,7 @@ export const LeadsView: React.FC = () => {
 
                           <button
                             onClick={() => deleteLead(lead.id)}
-                            className="text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                            className="ml-auto shrink-0 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
                             title="Delete Lead"
                           >
                             <Trash2 className="w-3 h-3" />

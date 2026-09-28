@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.0.1",
+    date: "2026-09-28",
+    headline: "Cleaner Lead & Deal Cards",
+    tagline: "Fixed overlapping buttons and a stray light scrollbar on the Leads and Deals boards.",
+    highlights: [
+      {
+        title: "No more button overlap",
+        description: "The Convert button and status dropdown on lead/deal cards now wrap cleanly instead of colliding at the card's edge.",
+      },
+      {
+        title: "Scrollbar matches the rest of the app",
+        description: "A stray light native scrollbar under lead/deal cards is gone -- both boards now use the same dark scrollbar as everywhere else.",
+      },
+    ],
+  },
+  {
     version: "2.0.0",
     date: "2026-09-28",
     headline: "Companies & Contacts Are Being Rebuilt",
