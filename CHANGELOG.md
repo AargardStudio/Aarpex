@@ -13,6 +13,17 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.32.5] - 2026-09-28
+
+### Fixed
+- **Records with non-uuid ids can now sync -- closing the silent partial-sync gap flagged in v1.32.2.** AarPex generates ids with `crypto.randomUUID()` in newer code paths but falls back to prefixed strings elsewhere (`prod_<ts>_<rand>`, `file_<ts>_<rand>`, `agt_<ts>_<rand>`, `usr_<ts>`, `lead_imp_<ts>_<i>`, `comp_<ts>_<rand>`). A `uuid` column rejects every one of those outright, and because `upsertRowsResilient` retries a failed chunk row-by-row, the valid rows saved while the rest were quietly dropped. New `supabase/migrations/0018_widen_remaining_uuid_ids_to_text.sql` widens the last four tables still keyed by uuid -- `products`, `stored_files`, `industry_agents`, `agent_actions` -- to text.
+- Two of the columns fixed here were not merely inconvenient but impossible to populate, because they reference tables whose ids are already text: `stored_files.linked_company_id`/`linked_contact_id`/`linked_deal_id`/`linked_lead_id`, and `comments.user_id` (which holds the `usr_<ts>` ids that User Access Control assigns). No valid value could ever have been stored in them.
+- Every id keeps its existing value -- `id::text` on a uuid yields the same canonical string -- so nothing was re-keyed and every existing reference remains valid. Row counts were verified unchanged before and after.
+
+### Notes
+- Most of the schema had already been moved to text ids before this release; these four tables were what remained. Worth recording that the migration files in `supabase/migrations/` had drifted substantially from the live database by this point, so the live schema -- not the files -- was the source of truth for what still needed changing. The same drift is what produced the missing columns repaired in v1.32.2.
+- Partial-sync failures were never entirely undetected: `onSyncFailure` already records them to the workspace audit log. They simply aren't surfaced anywhere a user would notice, which made them feel invisible. Surfacing them in the UI remains open.
+
 ## [1.32.4] - 2026-09-28
 
 ### Fixed

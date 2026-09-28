@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.32.5",
+    date: "2026-09-28",
+    headline: "Every Record Saves Now",
+    tagline: "Some records carried an ID format the database wouldn't accept, so they were dropped while the rest of the batch saved -- which looked like everything had worked.",
+    highlights: [
+      {
+        title: "No more silently dropped records",
+        description: "Products, files, agents and queued agent actions created through certain paths could never reach the server. They save correctly now.",
+      },
+      {
+        title: "Nothing was re-keyed",
+        description: "Existing records kept their exact IDs and every link between them stayed intact -- this widened what the database accepts rather than changing your data.",
+      },
+    ],
+  },
+  {
     version: "1.32.4",
     date: "2026-09-28",
     headline: "Approve & Send Now Tells You The Truth",
