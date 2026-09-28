@@ -23,6 +23,30 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.1.0",
+    date: "2026-09-28",
+    headline: "Bulk Actions Everywhere",
+    tagline: "Select multiple items on Leads, Industry Agents, Agent Approvals, and Knowledge Base to act on them all at once.",
+    highlights: [
+      {
+        title: "Bulk delete and status changes on Leads",
+        description: "Select any number of leads in either the kanban or table view to delete them or move them to a new status in one go.",
+      },
+      {
+        title: "Bulk activate, pause, and delete on Industry Agents",
+        description: "Manage several agents at once instead of clicking through them one by one.",
+      },
+      {
+        title: "Bulk approve and reject in Agent Approvals",
+        description: "Clear out your pending queue faster -- approving a batch sends each one exactly as it would if you approved it individually.",
+      },
+      {
+        title: "Bulk delete and re-category in Knowledge Base",
+        description: "Clean up or reorganize entries in one pass instead of one at a time.",
+      },
+    ],
+  },
+  {
     version: "2.0.1",
     date: "2026-09-28",
     headline: "Cleaner Lead & Deal Cards",

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useCRM } from "../../context/CRMContext";
 import { Lead } from "../../types";
 import {
@@ -24,6 +24,7 @@ import {
   Linkedin,
   Twitter,
   Globe2,
+  X,
 } from "lucide-react";
 import { LeadConvertModal } from "../modals/LeadConvertModal";
 import { LeadImportModal } from "../leads/LeadImportModal";
@@ -54,6 +55,8 @@ export const LeadsView: React.FC = () => {
     leads,
     moveLeadStatus,
     deleteLead,
+    bulkDeleteLeads,
+    bulkUpdateLeadStatus,
     setQuickCreateOpen,
     setQuickCreateType,
     openWhatsAppComposer,
@@ -68,6 +71,8 @@ export const LeadsView: React.FC = () => {
   const [isImportOpen, setImportOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [ratingFilter, setRatingFilter] = useState<string>("All");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkStatus, setBulkStatus] = useState<string>("");
   const convertingLead = leads.find((l) => l.id === convertingLeadId) || null;
 
   const statuses: Array<Lead["status"]> = [
@@ -88,6 +93,57 @@ export const LeadsView: React.FC = () => {
     const matchesRating = ratingFilter === "All" || getLeadRating(lead) === ratingFilter;
     return matchesSearch && matchesStatus && matchesRating;
   });
+
+  const filteredLeadIds = React.useMemo(() => new Set(filteredLeads.map((l) => l.id)), [filteredLeads]);
+
+  // Never leave a selection pointing at a lead that's no longer in the
+  // filtered list (deleted, or filtered/searched out) -- a stale id would
+  // silently no-op on the next bulk action.
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (filteredLeadIds.has(id)) next.add(id);
+        else changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [filteredLeadIds]);
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const allFilteredSelected = filteredLeads.length > 0 && filteredLeads.every((l) => selectedIds.has(l.id));
+
+  const toggleSelectAllFiltered = () => {
+    setSelectedIds((prev) => {
+      if (allFilteredSelected) return new Set();
+      return new Set(filteredLeads.map((l) => l.id));
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} selected lead${selectedIds.size === 1 ? "" : "s"}? This can't be undone.`)) return;
+    bulkDeleteLeads(Array.from(selectedIds));
+    clearSelection();
+  };
+
+  const handleBulkStatusChange = (status: string) => {
+    setBulkStatus(status);
+    if (!status || selectedIds.size === 0) return;
+    bulkUpdateLeadStatus(Array.from(selectedIds), status as Lead["status"]);
+    setBulkStatus("");
+  };
 
   const ratingBadges: Record<string, { bg: string; text: string; icon: boolean }> = {
     Hot: { bg: "bg-rose-100 text-rose-800 border-rose-200", text: "Hot", icon: true },
@@ -191,6 +247,55 @@ export const LeadsView: React.FC = () => {
         </div>
       </div>
 
+      {/* Select-all control -- visible whenever there are filtered leads,
+          so it also works as the entry point into selecting (not just once
+          something is already selected). Selects/deselects the currently
+          filtered list, not the whole dataset. */}
+      {filteredLeads.length > 0 && (
+        <label className="flex items-center gap-1.5 text-[11px] text-slate-500 px-1 -mb-1 cursor-pointer w-fit">
+          <input
+            type="checkbox"
+            checked={allFilteredSelected}
+            onChange={toggleSelectAllFiltered}
+            className="w-3.5 h-3.5 rounded border-slate-300 accent-indigo-600"
+          />
+          Select all {filteredLeads.length} shown
+        </label>
+      )}
+
+      {/* Bulk Selection Toolbar */}
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 bg-[#181b21] border border-[#2d323f] rounded-xl px-4 py-2.5">
+          <span className="text-xs font-bold text-white">{selectedIds.size} selected</span>
+          <select
+            value={bulkStatus}
+            onChange={(e) => handleBulkStatusChange(e.target.value)}
+            className="px-2.5 py-1.5 bg-[#252a36] border border-[#3d4455] rounded-lg text-xs text-slate-200 focus:outline-none"
+          >
+            <option value="">Change status to...</option>
+            {statuses.map((st) => (
+              <option key={st} value={st}>
+                {st}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={handleBulkDelete}
+            className="px-3 py-1.5 bg-[#252a36] hover:bg-rose-950/40 text-slate-300 hover:text-rose-300 border border-[#3d4455] hover:border-rose-500/40 rounded-lg text-xs font-semibold flex items-center gap-1.5"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete
+          </button>
+          <button
+            onClick={clearSelection}
+            className="ml-auto px-3 py-1.5 bg-[#252a36] hover:bg-[#2f3544] text-slate-300 hover:text-white border border-[#3d4455] rounded-lg text-xs font-semibold flex items-center gap-1.5"
+          >
+            <X className="w-3.5 h-3.5" />
+            Clear
+          </button>
+        </div>
+      )}
+
       {/* KANBAN BOARD VIEW */}
       {viewMode === "kanban" && (
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-start">
@@ -223,9 +328,16 @@ export const LeadsView: React.FC = () => {
                     return (
                       <div
                         key={lead.id}
-                        className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs hover:border-indigo-300 hover:shadow-xs transition-all space-y-2 group"
+                        className="relative bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs hover:border-indigo-300 hover:shadow-xs transition-all space-y-2 group"
                       >
-                        <div className="flex items-start justify-between">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(lead.id)}
+                          onChange={() => toggleSelected(lead.id)}
+                          className="absolute top-2.5 left-2.5 z-10 w-3.5 h-3.5 rounded border-slate-300 accent-indigo-600"
+                          title="Select lead"
+                        />
+                        <div className="flex items-start justify-between pl-5">
                           <div>
                             <button
                               type="button"
@@ -397,6 +509,15 @@ export const LeadsView: React.FC = () => {
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
               <tr>
+                <th className="p-3 w-8">
+                  <input
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    onChange={toggleSelectAllFiltered}
+                    className="w-3.5 h-3.5 rounded border-slate-300 accent-indigo-600"
+                    title="Select all shown"
+                  />
+                </th>
                 <th className="p-3">Lead / Company</th>
                 <th className="p-3">Contact Details</th>
                 <th className="p-3">Status</th>
@@ -409,6 +530,15 @@ export const LeadsView: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {filteredLeads.map((lead) => (
                 <tr key={lead.id} className="hover:bg-slate-50/60 transition-colors">
+                  <td className="p-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(lead.id)}
+                      onChange={() => toggleSelected(lead.id)}
+                      className="w-3.5 h-3.5 rounded border-slate-300 accent-indigo-600"
+                      title="Select lead"
+                    />
+                  </td>
                   <td className="p-3">
                     <button
                       type="button"

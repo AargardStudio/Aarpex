@@ -13,6 +13,17 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-09-28
+
+### Added
+- **Bulk actions on Leads, Industry Agents, Agent Approvals, and Knowledge Base.** Each view now has a checkbox per row/card, a "select all" control scoped to whatever's currently filtered/visible (not the whole dataset), and a selection toolbar that appears once something's selected.
+  - **Leads**: bulk Delete and bulk Status change, in both the kanban and table view modes. Convert stays single-item only (it opens a per-lead modal).
+  - **Industry Agents**: bulk Activate, Pause, and Delete.
+  - **Agent Approvals**: bulk Approve and Reject, pending items only. Bulk Reject is a pure status flip. Bulk Approve is deliberately NOT a shortcut -- it runs the exact same send/log/status path as clicking Approve on one item, sequentially for each selected item, because approving genuinely sends an email. Bulk-approving N drafts sends N real emails, same as approving them one at a time.
+  - **Knowledge Base**: bulk Delete and bulk category change.
+  - New batched mutations in `CRMContext.tsx` (`bulkDeleteLeads`, `bulkUpdateLeadStatus`, `bulkSetIndustryAgentActive`, `bulkDeleteIndustryAgents`, `bulkResolveAgentActions`, `bulkDeleteKnowledgeBaseEntries`, `bulkUpdateKnowledgeBaseCategory`) each do a single state update rather than looping the existing single-item function N times, so a bulk action on hundreds of rows is one re-render and one sync write instead of hundreds.
+  - Every existing single-item action (delete/approve/reject/activate/pause/convert) is unchanged.
+
 ## [2.0.1] - 2026-09-28
 
 ### Fixed

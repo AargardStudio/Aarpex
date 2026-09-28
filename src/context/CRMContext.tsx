@@ -229,6 +229,8 @@ interface CRMContextType {
   deleteLead: (id: string) => void;
   moveLeadStatus: (leadId: string, newStatus: Lead["status"]) => void;
   convertLead: (leadId: string, createDeal: boolean) => { deal?: Deal };
+  bulkDeleteLeads: (ids: string[]) => void;
+  bulkUpdateLeadStatus: (ids: string[], status: Lead["status"]) => void;
 
   addDeal: (deal: Omit<Deal, "id" | "createdDate" | "weightedValue">) => Deal;
   updateDeal: (id: string, updates: Partial<Deal>) => void;
@@ -282,6 +284,8 @@ interface CRMContextType {
   ) => KnowledgeBaseEntry;
   updateKnowledgeBaseEntry: (id: string, updates: Partial<KnowledgeBaseEntry>) => void;
   deleteKnowledgeBaseEntry: (id: string) => void;
+  bulkDeleteKnowledgeBaseEntries: (ids: string[]) => void;
+  bulkUpdateKnowledgeBaseCategory: (ids: string[], category: KnowledgeBaseCategory) => void;
   generateKnowledgeBaseDraftFromUrl: (
     url: string,
     category: KnowledgeBaseCategory
@@ -297,6 +301,8 @@ interface CRMContextType {
   ) => IndustryAgent;
   updateIndustryAgent: (id: string, updates: Partial<IndustryAgent>) => void;
   deleteIndustryAgent: (id: string) => void;
+  bulkSetIndustryAgentActive: (ids: string[], isActive: boolean) => void;
+  bulkDeleteIndustryAgents: (ids: string[]) => void;
   getAgentForIndustry: (industry: string | undefined) => IndustryAgent | undefined;
   // Honest status for the autonomous scan (see runAgentScan below): when it
   // last actually ran in this browser tab, and whether one is running right
@@ -313,6 +319,10 @@ interface CRMContextType {
   resolveAgentAction: (id: string, status: AgentActionStatus, updates?: Partial<AgentAction>) => void;
   deleteAgentAction: (id: string) => void;
   approveAndSendAgentAction: (id: string, overrides?: { subject?: string; body?: string }) => Promise<boolean>;
+  // Bulk status flip only -- no side effects (no send). Used for bulk reject;
+  // bulk approve must go through approveAndSendAgentAction per item instead,
+  // since approving actually sends a real email (see AgentApprovalsView).
+  bulkResolveAgentActions: (ids: string[], status: AgentActionStatus) => void;
 
   // File Manager -- workspace file storage, backed by a Supabase Storage
   // bucket (see server.ts's /api/storage/* endpoints). storageUsedBytes/
@@ -1774,6 +1784,22 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
+  const bulkDeleteLeads = (ids: string[]) => {
+    const idSet = new Set(ids);
+    setLeads((prev) => prev.filter((l) => !idSet.has(l.id)));
+  };
+
+  const bulkUpdateLeadStatus = (ids: string[], status: Lead["status"]) => {
+    const idSet = new Set(ids);
+    setLeads((prev) =>
+      prev.map((l) =>
+        idSet.has(l.id)
+          ? { ...l, status, lastContact: new Date().toISOString().split("T")[0] }
+          : l
+      )
+    );
+  };
+
   const convertLead = (leadId: string, createDeal: boolean) => {
     const lead = leads.find((l) => l.id === leadId);
     if (!lead) throw new Error("Lead not found");
@@ -2370,6 +2396,19 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setKnowledgeBase((prev) => prev.filter((entry) => entry.id !== id));
   };
 
+  const bulkDeleteKnowledgeBaseEntries = (ids: string[]) => {
+    const idSet = new Set(ids);
+    setKnowledgeBase((prev) => prev.filter((entry) => !idSet.has(entry.id)));
+  };
+
+  const bulkUpdateKnowledgeBaseCategory = (ids: string[], category: KnowledgeBaseCategory) => {
+    const idSet = new Set(ids);
+    const now = new Date().toISOString();
+    setKnowledgeBase((prev) =>
+      prev.map((entry) => (idSet.has(entry.id) ? { ...entry, category, updatedAt: now } : entry))
+    );
+  };
+
   // Industry Agents ---------------------------------------------------
   const addIndustryAgent = (
     agentData: Omit<IndustryAgent, "id" | "createdAt" | "updatedAt" | "createdBy">
@@ -2402,6 +2441,19 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteIndustryAgent = (id: string) => {
     setIndustryAgents((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  const bulkSetIndustryAgentActive = (ids: string[], isActive: boolean) => {
+    const idSet = new Set(ids);
+    const now = new Date().toISOString();
+    setIndustryAgents((prev) =>
+      prev.map((p) => (idSet.has(p.id) ? { ...p, isActive, updatedAt: now } : p))
+    );
+  };
+
+  const bulkDeleteIndustryAgents = (ids: string[]) => {
+    const idSet = new Set(ids);
+    setIndustryAgents((prev) => prev.filter((p) => !idSet.has(p.id)));
   };
 
   // Case-insensitive exact match on the industry name -- inactive agents
@@ -2452,6 +2504,21 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteAgentAction = (id: string) => {
     setAgentActions((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  // Pure status flip, no side effects -- safe for bulk use (e.g. bulk
+  // reject). Never use this for "approved": approving has to actually send
+  // via approveAndSendAgentAction, one call per item (see AgentApprovalsView).
+  const bulkResolveAgentActions = (ids: string[], status: AgentActionStatus) => {
+    const idSet = new Set(ids);
+    const now = new Date().toISOString();
+    setAgentActions((prev) =>
+      prev.map((a) =>
+        idSet.has(a.id)
+          ? { ...a, status, resolvedAt: now, resolvedBy: currentUser?.name }
+          : a
+      )
+    );
   };
 
   // The one path that actually sends anything to a prospect from the Agent
@@ -2916,6 +2983,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteLead,
         moveLeadStatus,
         convertLead,
+        bulkDeleteLeads,
+        bulkUpdateLeadStatus,
 
         addDeal,
         updateDeal,
@@ -2962,12 +3031,16 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addKnowledgeBaseEntry,
         updateKnowledgeBaseEntry,
         deleteKnowledgeBaseEntry,
+        bulkDeleteKnowledgeBaseEntries,
+        bulkUpdateKnowledgeBaseCategory,
         generateKnowledgeBaseDraftFromUrl,
 
         industryAgents,
         addIndustryAgent,
         updateIndustryAgent,
         deleteIndustryAgent,
+        bulkSetIndustryAgentActive,
+        bulkDeleteIndustryAgents,
         getAgentForIndustry,
         lastAgentScanAt,
         isAgentScanRunning,
@@ -2977,6 +3050,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resolveAgentAction,
         deleteAgentAction,
         approveAndSendAgentAction,
+        bulkResolveAgentActions,
 
         storedFiles,
         storageUsedBytes,

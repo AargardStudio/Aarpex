@@ -351,14 +351,16 @@ const EntryEditorModal: React.FC<{
 };
 
 export const KnowledgeBaseView: React.FC = () => {
-  const { knowledgeBase, deleteKnowledgeBaseEntry } = useCRM();
+  const { knowledgeBase, deleteKnowledgeBaseEntry, bulkDeleteKnowledgeBaseEntries, bulkUpdateKnowledgeBaseCategory } = useCRM() as any;
   const [activeCategory, setActiveCategory] = useState<KnowledgeBaseCategory>("company");
   const [searchTerm, setSearchTerm] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<KnowledgeBaseEntry | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkCategory, setBulkCategory] = useState<string>("");
 
-  const categoryEntries = knowledgeBase.filter((e) => e.category === activeCategory);
-  const filteredEntries = categoryEntries.filter((e) => {
+  const categoryEntries = knowledgeBase.filter((e: KnowledgeBaseEntry) => e.category === activeCategory);
+  const filteredEntries = categoryEntries.filter((e: KnowledgeBaseEntry) => {
     const term = searchTerm.toLowerCase();
     return (
       e.title.toLowerCase().includes(term) ||
@@ -366,6 +368,52 @@ export const KnowledgeBaseView: React.FC = () => {
       e.tags.some((t) => t.toLowerCase().includes(term))
     );
   });
+
+  const filteredIds = React.useMemo(() => new Set(filteredEntries.map((e: KnowledgeBaseEntry) => e.id)), [filteredEntries]);
+
+  // Selection clears itself whenever the visible (filtered/categorized)
+  // list changes under it -- category switch, search, or bulk/single
+  // delete -- so it never holds a stale id that would silently no-op.
+  React.useEffect(() => {
+    setSelectedIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (filteredIds.has(id)) next.add(id);
+        else changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [filteredIds]);
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const allFilteredSelected = filteredEntries.length > 0 && filteredEntries.every((e: KnowledgeBaseEntry) => selectedIds.has(e.id));
+  const toggleSelectAllFiltered = () =>
+    setSelectedIds(allFilteredSelected ? new Set() : new Set(filteredEntries.map((e: KnowledgeBaseEntry) => e.id)));
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.size} selected entr${selectedIds.size === 1 ? "y" : "ies"}? This can't be undone.`)) return;
+    bulkDeleteKnowledgeBaseEntries(Array.from(selectedIds));
+    clearSelection();
+  };
+
+  const handleBulkCategoryChange = (category: string) => {
+    setBulkCategory(category);
+    if (!category || selectedIds.size === 0) return;
+    bulkUpdateKnowledgeBaseCategory(Array.from(selectedIds), category as KnowledgeBaseCategory);
+    setBulkCategory("");
+    clearSelection();
+  };
 
   const openNewEntry = () => {
     setEditingEntry(null);
@@ -450,6 +498,53 @@ export const KnowledgeBaseView: React.FC = () => {
         </button>
       </div>
 
+      {/* Select-all -- tracks the currently filtered/categorized list, not
+          the whole knowledge base. */}
+      {filteredEntries.length > 0 && (
+        <label className="flex items-center gap-1.5 text-[11px] text-slate-500 px-1 cursor-pointer w-fit">
+          <input
+            type="checkbox"
+            checked={allFilteredSelected}
+            onChange={toggleSelectAllFiltered}
+            className="w-3.5 h-3.5 rounded border-slate-300 accent-indigo-600"
+          />
+          Select all {filteredEntries.length} shown
+        </label>
+      )}
+
+      {/* Bulk Selection Toolbar */}
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 bg-white border border-slate-200 shadow-2xs rounded-xl px-4 py-2.5">
+          <span className="text-xs font-bold text-slate-900">{selectedIds.size} selected</span>
+          <select
+            value={bulkCategory}
+            onChange={(e) => handleBulkCategoryChange(e.target.value)}
+            className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 focus:outline-none"
+          >
+            <option value="">Move to category...</option>
+            {(Object.keys(CATEGORY_META) as KnowledgeBaseCategory[]).map((cat) => (
+              <option key={cat} value={cat}>
+                {CATEGORY_META[cat].label}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={handleBulkDelete}
+            className="px-3 py-1.5 bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200 hover:border-rose-200 rounded-lg text-xs font-semibold flex items-center gap-1.5"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete
+          </button>
+          <button
+            onClick={clearSelection}
+            className="ml-auto px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5"
+          >
+            <X className="w-3.5 h-3.5" />
+            Clear
+          </button>
+        </div>
+      )}
+
       {/* Entries */}
       {filteredEntries.length === 0 ? (
         <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-10 text-center">
@@ -476,13 +571,22 @@ export const KnowledgeBaseView: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredEntries.map((entry) => (
+          {filteredEntries.map((entry: KnowledgeBaseEntry) => (
             <div
               key={entry.id}
               className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 flex flex-col hover:border-slate-300 transition-colors"
             >
               <div className="flex items-start justify-between gap-2">
-                <h3 className="text-xs font-bold text-slate-900 leading-snug">{entry.title}</h3>
+                <div className="flex items-start gap-2 min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(entry.id)}
+                    onChange={() => toggleSelected(entry.id)}
+                    className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 accent-indigo-600 shrink-0"
+                    title="Select entry"
+                  />
+                  <h3 className="text-xs font-bold text-slate-900 leading-snug">{entry.title}</h3>
+                </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
                     onClick={() => openEditEntry(entry)}

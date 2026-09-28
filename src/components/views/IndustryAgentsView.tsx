@@ -1071,7 +1071,12 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
   );
 };
 
-const AgentCard: React.FC<{ agent: IndustryAgent; onEdit: () => void }> = ({ agent, onEdit }) => {
+const AgentCard: React.FC<{
+  agent: IndustryAgent;
+  onEdit: () => void;
+  selected: boolean;
+  onToggleSelected: () => void;
+}> = ({ agent, onEdit, selected, onToggleSelected }) => {
   const { deleteIndustryAgent, updateIndustryAgent, leads, rawCompanies, products, agentActions, lastAgentScanAt, isAgentScanRunning, setActiveNav } = useCRM() as any;
   const linkedProduct = agent.productId ? products.find((p: any) => p.id === agent.productId) : null;
   const ChannelIcon = channelIcon(agent.preferredChannel);
@@ -1104,7 +1109,15 @@ const AgentCard: React.FC<{ agent: IndustryAgent; onEdit: () => void }> = ({ age
   return (
     <div className="bg-[#181b21] rounded-2xl border border-[#2d323f] shadow-lg p-4 sm:p-5 space-y-3">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 flex items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelected}
+            className="mt-1 w-3.5 h-3.5 rounded border-[#3d4455] accent-teal-500 shrink-0"
+            title="Select agent"
+          />
+          <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-sm font-bold text-white truncate">{agent.industry}</h3>
             <span
@@ -1130,6 +1143,7 @@ const AgentCard: React.FC<{ agent: IndustryAgent; onEdit: () => void }> = ({ age
           <div className="text-[11px] text-slate-400 mt-0.5">
             {matchCount} matching lead/compan{matchCount === 1 ? "y" : "ies"} in your CRM
             {excludedCount > 0 && ` (${excludedCount} excluded)`}
+          </div>
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -1208,9 +1222,61 @@ const AgentCard: React.FC<{ agent: IndustryAgent; onEdit: () => void }> = ({ age
 };
 
 export const IndustryAgentsView: React.FC = () => {
-  const { industryAgents } = useCRM();
+  const { industryAgents, bulkSetIndustryAgentActive, bulkDeleteIndustryAgents } = useCRM() as any;
   const [isFormOpen, setFormOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<IndustryAgent | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // No search/filter in this view -- industryAgents itself is "the list
+  // currently visible", so that's what select-all/staleness track.
+  const visibleIds = React.useMemo(() => new Set(industryAgents.map((a: IndustryAgent) => a.id)), [industryAgents]);
+
+  React.useEffect(() => {
+    setSelectedIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (visibleIds.has(id)) next.add(id);
+        else changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [visibleIds]);
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const allSelected = industryAgents.length > 0 && industryAgents.every((a: IndustryAgent) => selectedIds.has(a.id));
+  const toggleSelectAll = () => setSelectedIds(allSelected ? new Set() : new Set(industryAgents.map((a: IndustryAgent) => a.id)));
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkActivate = (isActive: boolean) => {
+    if (selectedIds.size === 0) return;
+    if (!isActive) {
+      // Same confirm wording as the single-item pause action, pluralized.
+      if (
+        !confirm(
+          `Pause ${selectedIds.size} selected Agent${selectedIds.size === 1 ? "" : "s"}?\n\nPausing stops them from generating new automated actions. Anything already waiting in your approval queue stays there for you to review.`
+        )
+      ) {
+        return;
+      }
+    }
+    bulkSetIndustryAgentActive(Array.from(selectedIds), isActive);
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} selected agent${selectedIds.size === 1 ? "" : "s"}? This can't be undone.`)) return;
+    bulkDeleteIndustryAgents(Array.from(selectedIds));
+    clearSelection();
+  };
 
   return (
     <div id="industry-agents-view" className="space-y-5 animate-in fade-in duration-200 text-slate-100">
@@ -1240,6 +1306,52 @@ export const IndustryAgentsView: React.FC = () => {
 
       <AgentsIntroBanner />
 
+      {industryAgents.length > 0 && (
+        <label className="flex items-center gap-1.5 text-[11px] text-slate-400 px-1 cursor-pointer w-fit">
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={toggleSelectAll}
+            className="w-3.5 h-3.5 rounded border-[#3d4455] accent-teal-500"
+          />
+          Select all {industryAgents.length}
+        </label>
+      )}
+
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 bg-[#181b21] border border-[#2d323f] rounded-xl px-4 py-2.5">
+          <span className="text-xs font-bold text-white">{selectedIds.size} selected</span>
+          <button
+            onClick={() => handleBulkActivate(true)}
+            className="px-3 py-1.5 bg-[#252a36] hover:bg-[#2f3544] text-slate-300 hover:text-emerald-300 border border-[#3d4455] rounded-lg text-xs font-semibold flex items-center gap-1.5"
+          >
+            <Power className="w-3.5 h-3.5" />
+            Activate
+          </button>
+          <button
+            onClick={() => handleBulkActivate(false)}
+            className="px-3 py-1.5 bg-[#252a36] hover:bg-[#2f3544] text-slate-300 hover:text-white border border-[#3d4455] rounded-lg text-xs font-semibold flex items-center gap-1.5"
+          >
+            <PauseCircle className="w-3.5 h-3.5" />
+            Pause
+          </button>
+          <button
+            onClick={handleBulkDelete}
+            className="px-3 py-1.5 bg-[#252a36] hover:bg-rose-950/40 text-slate-300 hover:text-rose-300 border border-[#3d4455] hover:border-rose-500/40 rounded-lg text-xs font-semibold flex items-center gap-1.5"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Delete
+          </button>
+          <button
+            onClick={clearSelection}
+            className="ml-auto px-3 py-1.5 bg-[#252a36] hover:bg-[#2f3544] text-slate-300 hover:text-white border border-[#3d4455] rounded-lg text-xs font-semibold flex items-center gap-1.5"
+          >
+            <X className="w-3.5 h-3.5" />
+            Clear
+          </button>
+        </div>
+      )}
+
       {industryAgents.length === 0 ? (
         <div className="p-10 text-center bg-[#181b21] rounded-2xl border border-[#2d323f] text-slate-400 text-xs space-y-2">
           <BookMarked className="w-8 h-8 text-slate-600 mx-auto" />
@@ -1254,6 +1366,8 @@ export const IndustryAgentsView: React.FC = () => {
             <AgentCard
               key={p.id}
               agent={p}
+              selected={selectedIds.has(p.id)}
+              onToggleSelected={() => toggleSelected(p.id)}
               onEdit={() => {
                 setEditingAgent(p);
                 setFormOpen(true);
