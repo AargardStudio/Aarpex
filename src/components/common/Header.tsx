@@ -17,7 +17,6 @@ import {
   AlertCircle,
   X,
   ShieldCheck,
-  Shield,
   UserCheck,
   Mail,
   LogIn,
@@ -44,13 +43,9 @@ export const Header: React.FC = () => {
     agentActions,
     currentUser,
     signOut,
-    setAccessControlOpen,
-    setAuthPageOpen,
-    setAuthPageMode,
     openEmailComposer,
     openWhatsAppComposer,
     activeTenant,
-    setSettingsDeepLinkTab,
     setMobileSidebarOpen,
   } = useCRM();
 
@@ -295,42 +290,11 @@ export const Header: React.FC = () => {
           <Search className="w-4 h-4" />
         </button>
 
-        {/* Controlled Access / Roles Button -- secondary action, tucked away below `lg` */}
-        <button
-          id="btn-access-roles"
-          onClick={() => setAccessControlOpen(true)}
-          className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 bg-[#181b21] hover:bg-[#222630] border border-[#2d323f] text-slate-200 hover:text-white rounded-lg text-xs font-semibold transition-colors"
-          title="Manage Controlled User Access & Roles"
-        >
-          <Shield className="w-3.5 h-3.5 text-teal-400" />
-          <span className="hidden xl:inline">Access & Roles</span>
-        </button>
-
-        {/* Billing Shortcut — always available, including mid-trial, so an
-            owner can add/change a card or open the Stripe portal without
-            waiting for the trial to end. Reachable on mobile via Settings
-            when this shortcut is hidden below `sm`. */}
-        <button
-          id="btn-header-billing"
-          onClick={() => {
-            setSettingsDeepLinkTab("subscription");
-            setActiveNav("Settings");
-          }}
-          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-[#181b21] hover:bg-[#222630] border border-[#2d323f] text-slate-200 hover:text-white rounded-lg text-xs font-semibold transition-colors"
-          title={
-            activeTenant?.subscriptionStatus === "trialing"
-              ? "Manage billing & payment method (you're still on your free trial)"
-              : "Manage billing & payment method"
-          }
-        >
-          <CreditCard className="w-3.5 h-3.5 text-teal-400" />
-          <span className="hidden md:inline">Billing</span>
-          {activeTenant?.subscriptionStatus === "trialing" && (
-            <span className="hidden lg:inline text-[9px] font-bold uppercase tracking-wider text-amber-300 bg-amber-400/10 border border-amber-400/30 rounded px-1 py-0.5">
-              Trial
-            </span>
-          )}
-        </button>
+        {/* Access & Roles and Billing used to sit here as header shortcuts.
+            Both were removed to cut header clutter -- neither is a frequent
+            action, and both remain reachable: Access & Roles from Settings,
+            Billing from Settings -> Subscription (and the "Settings &
+            Billing" link in the footer). */}
 
         {/* User Badge / Sign Out */}
         <button
@@ -580,18 +544,10 @@ export const Header: React.FC = () => {
           )}
         </div>
 
-        {/* Dedicated Sign In / Sign Up Access Trigger */}
-        <button
-          onClick={() => {
-            setAuthPageMode("signin");
-            setAuthPageOpen(true);
-          }}
-          className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 bg-[#181b21] hover:bg-[#222630] border border-[#2d323f] text-slate-300 hover:text-white rounded-lg text-xs font-semibold transition-all"
-          title="Open Dedicated Sign In / Sign Up Portal"
-        >
-          <LogIn className="w-3.5 h-3.5 text-teal-400" />
-          <span>Sign In / Up</span>
-        </button>
+        {/* The "Sign In / Up" trigger was removed: it rendered even for an
+            already-signed-in user, sitting next to their own name and Sign
+            Out button, which read as a bug rather than an action. Signing in
+            is reached from the auth page itself when signed out. */}
       </div>
     </header>
 

@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [1.33.0] - 2026-09-28
+
+### Changed
+- **Removed three header buttons to cut clutter: "Access & Roles", "Billing", and "Sign In / Up".** Neither Access & Roles nor Billing is a frequent action, and both remain reachable -- Access & Roles from Settings, Billing from Settings -> Subscription and the "Settings & Billing" link in the footer. The "Sign In / Up" trigger was removed outright: it rendered even for an already-signed-in user, sitting directly beside their own name and Sign Out button, which read as a bug rather than an action.
+
 ## [1.32.6] - 2026-09-28
 
 ### Fixed

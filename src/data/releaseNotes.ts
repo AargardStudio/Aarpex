@@ -23,6 +23,22 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "1.33.0",
+    date: "2026-09-28",
+    headline: "A Cleaner Header",
+    tagline: "Three buttons removed from the top bar to keep it focused on what you actually use day to day.",
+    highlights: [
+      {
+        title: "Access & Roles and Billing moved out of the way",
+        description: "Both were occasional actions taking up permanent space. They live in Settings now -- Billing also stays on the Settings & Billing link in the footer.",
+      },
+      {
+        title: "No more stray Sign In button",
+        description: "A Sign In / Up button was showing even while you were already signed in, right next to your own name and Sign Out. It's gone.",
+      },
+    ],
+  },
+  {
     version: "1.32.5",
     date: "2026-09-28",
     headline: "Every Record Saves Now",
