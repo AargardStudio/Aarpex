@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.5.2] - 2026-09-29
+
+### Fixed
+- **EMERGENCY: production outage (`ERR_MODULE_NOT_FOUND: /var/task/dist/server.cjs`) on every `/app` and `/api/*` request.** Adding v2.5.0's `crons` entry to `vercel.json` caused Vercel's Function builder to treat the deployment as pre-compiled and look for `dist/server.cjs` -- a file only ever produced by a local `npm run build`/`npm start`, never by this project's actual Vercel `buildCommand` (`vite build` only). The result was every request to the Express backend crashing at cold start. Reverted the `crons` entry for now to restore the site; the server-side scheduler will come back once we've found a way to declare it that doesn't change how Vercel builds the function.
+
 ## [2.5.1] - 2026-09-29
 
 ### Fixed
