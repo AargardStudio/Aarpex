@@ -13,6 +13,15 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-09-29
+
+### Added
+- **Server-side scheduler for Industry Agents.** Agents now get checked for due follow-ups by a Vercel Cron job (`/api/cron/agent-scan`, hourly) in addition to the existing ~10-minute browser-tab scan -- so an agent keeps drafting follow-ups even when nobody has AarPex open in a browser tab. The cron endpoint scans every active, auto-run-enabled agent across all tenants, applies the same due-lead and dedup rules as the browser scan (skips leads with a pending or recently-actioned draft, caps at 5 new drafts per agent per run), and writes drafts straight into Agent Actions for approval, same as before.
+  - Requires a `CRON_SECRET` environment variable set on the Vercel project; the endpoint checks the `Authorization: Bearer` header Vercel sends on cron-triggered requests against it and refuses the request otherwise.
+  - Inbound-reply detection (reading the mailbox for replies) is unchanged and still runs client-side only -- this release covers outbound follow-up drafting only.
+  - The "Browser monitoring" status pill/label across the Industry Agents UI has been renamed to "Monitored" to reflect that checking no longer depends on a browser tab being open.
+- Extracted the AI email-drafting logic from `/api/ai/personalized-email` into a reusable `generatePersonalizedEmailCore` function so the new cron endpoint can call it directly, in-process, instead of making an HTTP request to itself.
+
 ## [2.4.0] - 2026-09-29
 
 ### Added

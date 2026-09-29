@@ -1072,64 +1072,76 @@ Return pure valid JSON only.`;
 // activity to draft one specific, ready-to-send email rather than a
 // merge-tag template. Returned subject/body are meant to prefill the
 // EmailComposeModal for the rep to review before sending.
-app.post("/api/ai/personalized-email", async (req, res) => {
-  try {
-    const {
-      recipientName,
-      recipientCompany,
-      recipientJobTitle,
-      recipientIndustry,
-      knowledgeEntries, // string[] -- content of linked KnowledgeBaseEntry rows (manual + AI-extracted)
-      activities, // recent Activity rows for this lead/contact
-      agent, // optional IndustryAgent for recipientIndustry
-      productName, // optional: the specific product/service to center this email on (from the agent's Product/Service picker)
-      productPitch, // optional: that product's marketing pitch
-      senderName,
-      senderCompany,
-      goal, // optional: what this specific email should accomplish, e.g. "book a demo call"
-    } = req.body;
+// Core of /api/ai/personalized-email, factored out so the server-side agent
+// scan (runAgentScanServerSide, below) can draft the exact same email a
+// user's browser would have gotten, without an internal HTTP round-trip.
+// The route handler right after this is now a thin wrapper around it.
+async function generatePersonalizedEmailCore(input: {
+  recipientName: string;
+  recipientCompany?: string;
+  recipientJobTitle?: string;
+  recipientIndustry?: string;
+  knowledgeEntries?: string[];
+  activities?: any[];
+  agent?: any;
+  productName?: string;
+  productPitch?: string;
+  senderName?: string;
+  senderCompany?: string;
+  goal?: string;
+}): Promise<{ subject: string; body: string; source: string }> {
+  const {
+    recipientName,
+    recipientCompany,
+    recipientJobTitle,
+    recipientIndustry,
+    knowledgeEntries,
+    activities,
+    agent,
+    productName,
+    productPitch,
+    senderName,
+    senderCompany,
+    goal,
+  } = input;
 
-    if (!recipientName) {
-      return res.status(400).json({ error: "Recipient name is required" });
-    }
-
-    const firstName = String(recipientName).split(" ")[0] || "there";
-    const knowledgeLine =
-      (knowledgeEntries || []).length > 0
-        ? `\n\nWhat we know about ${recipientName} / ${recipientCompany || "their company"} (from our CRM's knowledge base — use this to make the email genuinely specific, not generic):\n${(knowledgeEntries || [])
-            .slice(0, 8)
-            .map((k: string, i: number) => `${i + 1}. ${k}`)
-            .join("\n")}`
-        : "";
-    const activityLine =
-      (activities || []).length > 0
-        ? `\n\nRecent activity history: ${(activities || [])
-            .slice(0, 5)
-            .map((a: any) => `${a.type}: ${a.description}`)
-            .join("; ")}`
-        : "";
-    const agentLine = agent
-      ? `\n\nIndustry Agent for "${agent.industry}" — follow this guidance:
+  const firstName = String(recipientName).split(" ")[0] || "there";
+  const knowledgeLine =
+    (knowledgeEntries || []).length > 0
+      ? `\n\nWhat we know about ${recipientName} / ${recipientCompany || "their company"} (from our CRM's knowledge base — use this to make the email genuinely specific, not generic):\n${(knowledgeEntries || [])
+          .slice(0, 8)
+          .map((k: string, i: number) => `${i + 1}. ${k}`)
+          .join("\n")}`
+      : "";
+  const activityLine =
+    (activities || []).length > 0
+      ? `\n\nRecent activity history: ${(activities || [])
+          .slice(0, 5)
+          .map((a: any) => `${a.type}: ${a.description}`)
+          .join("; ")}`
+      : "";
+  const agentLine = agent
+    ? `\n\nIndustry Agent for "${agent.industry}" — follow this guidance:
 - Tone: ${agent.tone || "professional and direct"}
 - Talking points to weave in: ${(agent.talkingPoints || []).join(", ") || "none specified"}
 - Common pain points to speak to: ${(agent.painPoints || []).join(", ") || "none specified"}
 ${agent.objectionNotes ? `- Objection handling notes: ${agent.objectionNotes}` : ""}
 ${agent.customInstructions ? `- Additional instructions: ${agent.customInstructions}` : ""}${agentPersonalityLine(agent)}`
-      : "";
-    const productLine = productName
-      ? `\n\nCenter this email specifically around the following product/service rather than speaking generically: "${productName}"${
-          productPitch ? `. Its marketing pitch: "${productPitch}"` : ""
-        }. Weave its concrete value into the body and the call-to-action.`
-      : "";
+    : "";
+  const productLine = productName
+    ? `\n\nCenter this email specifically around the following product/service rather than speaking generically: "${productName}"${
+        productPitch ? `. Its marketing pitch: "${productPitch}"` : ""
+      }. Weave its concrete value into the body and the call-to-action.`
+    : "";
 
-    const fallbackSubject = `Quick idea for ${recipientCompany || firstName}`;
-    const fallbackBody = `Dear ${firstName},\n\nI wanted to reach out directly given your role${
-      recipientJobTitle ? ` as ${recipientJobTitle}` : ""
-    } at ${recipientCompany || "your company"}. ${
-      agent?.painPoints?.[0] ? `Teams in ${agent.industry} often deal with ${agent.painPoints[0].toLowerCase()}, and that's exactly where we can help.` : "I think there's a strong fit worth a short conversation."
-    }\n\nWould you be open to a quick call this week?\n\nBest regards,\n${senderName || "Account Executive"}\n${senderCompany || ""}`;
+  const fallbackSubject = `Quick idea for ${recipientCompany || firstName}`;
+  const fallbackBody = `Dear ${firstName},\n\nI wanted to reach out directly given your role${
+    recipientJobTitle ? ` as ${recipientJobTitle}` : ""
+  } at ${recipientCompany || "your company"}. ${
+    agent?.painPoints?.[0] ? `Teams in ${agent.industry} often deal with ${agent.painPoints[0].toLowerCase()}, and that's exactly where we can help.` : "I think there's a strong fit worth a short conversation."
+  }\n\nWould you be open to a quick call this week?\n\nBest regards,\n${senderName || "Account Executive"}\n${senderCompany || ""}`;
 
-    const prompt = `You are an expert B2B sales rep at ${senderCompany || "our company"} writing ONE specific, personalized email to a single named recipient — not a template with merge tags. Write it as if you did real research on them.
+  const prompt = `You are an expert B2B sales rep at ${senderCompany || "our company"} writing ONE specific, personalized email to a single named recipient — not a template with merge tags. Write it as if you did real research on them.
 
 Recipient: ${recipientName}${recipientJobTitle ? `, ${recipientJobTitle}` : ""} at ${recipientCompany || "their company"}${recipientIndustry ? ` (industry: ${recipientIndustry})` : ""}.${knowledgeLine}${activityLine}${agentLine}${productLine}
 ${goal ? `\n\nGoal of this specific email: ${goal}` : ""}
@@ -1139,25 +1151,244 @@ Write a subject line and email body. Reference at least one concrete, specific d
 Return pure JSON only, no markdown fences, in this exact shape:
 { "subject": "...", "body": "..." }`;
 
-    const rawAiText = await callAIForAgent(agent, prompt);
-    if (rawAiText) {
-      try {
-        const parsed = JSON.parse(rawAiText);
-        if (parsed.subject && parsed.body) {
-          return res.json({ subject: parsed.subject, body: parsed.body, source: "gemini" });
-        }
-      } catch {
-        // fall through to heuristic
+  const rawAiText = await callAIForAgent(agent, prompt);
+  if (rawAiText) {
+    try {
+      const parsed = JSON.parse(rawAiText);
+      if (parsed.subject && parsed.body) {
+        return { subject: parsed.subject, body: parsed.body, source: "gemini" };
       }
+    } catch {
+      // fall through to heuristic
     }
+  }
 
-    return res.json({ subject: fallbackSubject, body: fallbackBody, source: "heuristic" });
+  return { subject: fallbackSubject, body: fallbackBody, source: "heuristic" };
+}
+
+app.post("/api/ai/personalized-email", async (req, res) => {
+  try {
+    const { recipientName } = req.body;
+    if (!recipientName) {
+      return res.status(400).json({ error: "Recipient name is required" });
+    }
+    const result = await generatePersonalizedEmailCore(req.body);
+    return res.json(result);
   } catch {
     return res.json({
       subject: "Quick idea for your team",
       body: "Hi,\n\nI wanted to reach out about a way we could help your team. Would you be open to a short call this week?\n\nBest regards,\nSales Team",
       source: "fallback",
     });
+  }
+});
+
+// ----------------------------------------------------------------------------
+// Server-side Industry Agent scan -- the "server-side scheduler" that was
+// missing before this. The browser-side scan in CRMContext.tsx only runs
+// while someone has AarPex open in a tab; this endpoint does the same
+// due-follow-up check directly against the database, so it works from a
+// Vercel Cron job on a fixed schedule independent of anyone's browser.
+//
+// Scoped to follow-up drafting only for now -- inbound-reply detection
+// (which needs a live IMAP connection per tenant's mailbox) stays
+// client-side for this first version, since a mailbox check per tenant is
+// a heavier, slower operation than fits comfortably in a fixed-budget
+// cron tick across every tenant. The two scans are additive, not
+// conflicting: this one fills the gap when nobody has a tab open; the
+// client one keeps working (and covers replies) whenever someone does.
+//
+// Auth: sending a request with the wrong or missing Authorization header
+// simply gets refused -- this never runs unauthenticated. Vercel
+// automatically sends `Authorization: Bearer <value>` to a cron-invoked
+// endpoint when the CRON_SECRET environment variable is set on the
+// project (see vercel.json's crons entry + Vercel's Cron Jobs docs), so
+// set CRON_SECRET in the Vercel dashboard for this to actually fire.
+// ----------------------------------------------------------------------------
+
+// Best-effort duplicate of src/lib/industryMatch.ts's normalizeIndustry --
+// this file has no imports from src/ (see agentPersonalityLine above for
+// why), so the same normalization is kept here in the same shape rather
+// than compared with a plain trim/lowercase, which is the exact class of
+// bug that file's comments describe.
+const INVISIBLE_CHARS_RE = /[​-‏‪-‮⁠-⁩﻿­]/g;
+function normalizeIndustryServer(value: string | null | undefined): string {
+  return (value || "")
+    .normalize("NFKC")
+    .replace(INVISIBLE_CHARS_RE, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+app.post("/api/cron/agent-scan", async (req, res) => {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    return res.status(500).json({
+      error: "CRON_SECRET is not configured on this deployment -- set it in the Vercel project's Environment Variables so this endpoint can authenticate cron requests.",
+    });
+  }
+  const authHeader = req.headers.authorization || "";
+  if (authHeader !== `Bearer ${cronSecret}`) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const supabase = getServerSupabase();
+  if (!supabase) {
+    return res.status(500).json({ error: "Supabase is not configured on this deployment." });
+  }
+
+  const outcome = { agentsScanned: 0, draftsCreated: 0, errors: [] as string[] };
+
+  try {
+    const { data: agentRows, error: agentsErr } = await supabase
+      .from("industry_agents")
+      .select("*")
+      .eq("is_active", true)
+      .eq("auto_run_enabled", true);
+    if (agentsErr) throw agentsErr;
+
+    const now = Date.now();
+    const scannedIds: string[] = [];
+    const tenantCache = new Map<string, any>();
+    const productCache = new Map<string, any>();
+
+    for (const row of agentRows || []) {
+      scannedIds.push(row.id);
+      outcome.agentsScanned += 1;
+      const tenantId = row.tenant_id;
+      const cadenceMs = Math.max(1, row.follow_up_frequency_days || 7) * 86400000;
+      const industryNorm = normalizeIndustryServer(row.industry);
+      const excluded = new Set(row.excluded_lead_ids || []);
+
+      try {
+        let tenant = tenantCache.get(tenantId);
+        if (tenant === undefined) {
+          const { data: t } = await supabase.from("tenants").select("*").eq("id", tenantId).maybeSingle();
+          tenant = t || null;
+          tenantCache.set(tenantId, tenant);
+        }
+
+        let product: any = null;
+        if (row.product_id) {
+          const cacheKey = `${tenantId}:${row.product_id}`;
+          product = productCache.get(cacheKey);
+          if (product === undefined) {
+            const { data: p } = await supabase.from("products").select("*").eq("id", row.product_id).maybeSingle();
+            product = p || null;
+            productCache.set(cacheKey, product);
+          }
+        }
+
+        const { data: leadRows, error: leadsErr } = await supabase.from("leads").select("*").eq("tenant_id", tenantId);
+        if (leadsErr) throw leadsErr;
+
+        // Same eligibility rule as the client scan's dueLeads filter
+        // (CRMContext.tsx): matching industry, not excluded, has an email,
+        // not Converted/Lost, and cadence has actually elapsed since last
+        // contact (or creation, if never contacted).
+        const dueLeads = (leadRows || []).filter((l: any) => {
+          if (normalizeIndustryServer(l.industry) !== industryNorm) return false;
+          if (excluded.has(l.id)) return false;
+          if (!l.email) return false;
+          if (l.status === "Converted" || l.status === "Lost") return false;
+          const reference = l.last_contact ? new Date(l.last_contact).getTime() : new Date(l.created_at || 0).getTime();
+          if (!reference || now - reference < cadenceMs) return false;
+          return true;
+        });
+
+        if (dueLeads.length === 0) continue;
+
+        const { data: existingActions } = await supabase
+          .from("agent_actions")
+          .select("recipient_email, status, created_at")
+          .eq("tenant_id", tenantId)
+          .eq("action_type", "follow_up");
+        const hasPendingOrRecent = (email: string) =>
+          (existingActions || []).some(
+            (a: any) =>
+              (a.recipient_email || "").toLowerCase() === email.toLowerCase() &&
+              (a.status === "pending" || now - new Date(a.created_at).getTime() < cadenceMs)
+          );
+
+        const agentForPrompt = {
+          industry: row.industry,
+          tone: row.tone,
+          talkingPoints: row.talking_points || [],
+          painPoints: row.pain_points || [],
+          objectionNotes: row.objection_notes,
+          customInstructions: row.custom_instructions,
+          agentNature: row.agent_nature,
+          personalityType: row.personality_type,
+          modelProvider: row.model_provider,
+          modelName: row.model_name,
+        };
+
+        const toInsert: any[] = [];
+        // Same per-pass cap as the client scan (dueLeads.slice(0, 5)) --
+        // keeps one cron tick bounded even for an industry with a huge
+        // backlog of newly-due leads.
+        for (const lead of dueLeads.slice(0, 5)) {
+          if (hasPendingOrRecent(lead.email)) continue;
+          try {
+            const { data: leadActivities } = await supabase
+              .from("activities")
+              .select("type, description")
+              .eq("lead_id", lead.id)
+              .order("created_at", { ascending: false })
+              .limit(5);
+
+            const draft = await generatePersonalizedEmailCore({
+              recipientName: lead.name,
+              recipientCompany: lead.company,
+              recipientJobTitle: lead.job_title,
+              recipientIndustry: lead.industry,
+              activities: leadActivities || [],
+              agent: agentForPrompt,
+              productName: product?.name,
+              productPitch: product?.pitch,
+              senderCompany: tenant?.company_name || tenant?.name,
+              goal: `Send a follow-up -- it's been ${row.follow_up_frequency_days || 7}+ days since last contact with no response.`,
+            });
+
+            toInsert.push({
+              id: `agt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+              tenant_id: tenantId,
+              industry: row.industry,
+              action_type: "follow_up",
+              lead_id: lead.id,
+              recipient_name: lead.name,
+              recipient_email: lead.email,
+              subject: draft.subject,
+              body: draft.body,
+              reasoning: `No response in ${row.follow_up_frequency_days || 7}+ days (agent cadence for ${row.industry}). Drafted by the server-side scheduler.`,
+              status: "pending",
+              trigger_source: "auto_followup",
+              created_at: new Date().toISOString(),
+            });
+          } catch (err: any) {
+            outcome.errors.push(`lead ${lead.id}: ${err?.message || err}`);
+          }
+        }
+
+        if (toInsert.length > 0) {
+          const { error: insertErr } = await supabase.from("agent_actions").insert(toInsert as any);
+          if (insertErr) throw insertErr;
+          outcome.draftsCreated += toInsert.length;
+        }
+      } catch (err: any) {
+        outcome.errors.push(`agent ${row.id} (${row.industry}): ${err?.message || err}`);
+      }
+    }
+
+    if (scannedIds.length > 0) {
+      await (supabase.from("industry_agents") as any).update({ last_scan_at: new Date().toISOString() }).in("id", scannedIds);
+    }
+
+    return res.json({ success: true, ...outcome, scannedAt: new Date().toISOString() });
+  } catch (err: any) {
+    console.error("[cron/agent-scan] failed:", err);
+    return res.status(500).json({ success: false, error: err?.message || "Scan failed", ...outcome });
   }
 });
 

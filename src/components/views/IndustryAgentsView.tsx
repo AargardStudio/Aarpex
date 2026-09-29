@@ -326,12 +326,16 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
 
   const hasWebmail = ((activeTenant?.webmailConfigs || []) as any[]).length > 0;
 
-  // Monitoring status -- deliberately never claims continuous monitoring.
-  // This app has no server-side scheduler; the scan only runs while this
-  // browser tab is open (see runAgentScan in CRMContext.tsx), so the
-  // honest states are: off, off-because-agent-paused, checking right
-  // now, or "browser monitoring" with a last-checked time -- never a plain
-  // green "always on".
+  // Monitoring status -- follow-up drafting is covered two ways now: this
+  // client-side scan (see runAgentScan in CRMContext.tsx), which only runs
+  // while a browser tab is open but also drafts from inbound-reply
+  // detection, and the server-side cron hitting /api/cron/agent-scan (see
+  // server.ts) once an hour independent of any tab. `lastScanAt` is shared
+  // by both, so "last checked" reflects whichever ran more recently. The
+  // honest states are: off, off-because-agent-paused, checking right now,
+  // or "monitored" with a last-checked time -- never a plain green "always
+  // on", since the browser side genuinely can stop (a closed tab) even
+  // though the hourly server side won't.
   const monitoringState: "off" | "checking" | "browser" | "not_yet" = !draft.autoRunEnabled || !draft.isActive
     ? "off"
     : isAgentScanRunning
@@ -624,13 +628,15 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
               )}
               {monitoringState === "browser" && (
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-amber-300">
-                    <span className="w-2 h-2 rounded-full bg-amber-400" />
-                    Browser monitoring -- last checked {timeAgo(lastAgentScanAt)}
+                  <div className="flex items-center gap-2 text-emerald-300">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    Monitored -- last checked {timeAgo(lastAgentScanAt)}
                   </div>
                   <p className="text-slate-500">
-                    AarPex checks this Agent while this workspace is open in a browser tab. There's no
-                    server-side scheduler yet, so it does not run in the background when no tab is open.
+                    AarPex checks this Agent while this workspace is open in a browser tab (every ~10 minutes),
+                    and separately on the server once an hour even when no tab is open -- so follow-ups keep
+                    going out either way. Only the browser check can also read your inbox for replies, since
+                    that needs a live connection to your mailbox.
                   </p>
                 </div>
               )}
@@ -638,11 +644,12 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-amber-300">
                     <span className="w-2 h-2 rounded-full bg-amber-400" />
-                    Browser monitoring -- hasn't checked yet this session
+                    Hasn't checked yet this session
                   </div>
                   <p className="text-slate-500">
-                    The first check runs shortly after this workspace loads, then every ~10 minutes while a tab
-                    stays open.
+                    The first browser check runs shortly after this workspace loads, then every ~10 minutes
+                    while a tab stays open -- and a server-side check also runs once an hour regardless, so
+                    this Agent is monitored even before that first browser check happens.
                   </p>
                 </div>
               )}
@@ -1235,8 +1242,8 @@ const AgentCard: React.FC<{
               {agent.isActive ? "Active" : "Paused"}
             </span>
             {monitoringState === "browser" && (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-500/15 text-amber-300 border-amber-500/30" title={`Last checked ${timeAgo(lastAgentScanAt)}`}>
-                Browser monitoring
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-500/15 text-emerald-300 border-emerald-500/30" title={`Server checks hourly; last browser check ${timeAgo(lastAgentScanAt)}`}>
+                Monitored
               </span>
             )}
             {monitoringState === "checking" && (
