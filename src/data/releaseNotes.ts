@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.3.0",
+    date: "2026-09-29",
+    headline: "See Every Email Your Agents Have Sent",
+    tagline: "A new Sent Items log in Industry Agents, filterable by industry and by agent.",
+    highlights: [
+      {
+        title: "Sent Items tab",
+        description: "Every follow-up, reply, and negotiation offer your Industry Agents have actually sent, in one browsable list.",
+      },
+      {
+        title: "Filter by Industry or Agent",
+        description: "Narrow down to one industry, one specific agent, or search by subject and recipient.",
+      },
+      {
+        title: "Jump straight to the lead",
+        description: "Click through from any sent email to that lead's full profile.",
+      },
+    ],
+  },
+  {
     version: "2.2.0",
     date: "2026-09-28",
     headline: "Full Lead Editing, a 360° Profile, and Smarter Agents",

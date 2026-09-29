@@ -13,6 +13,13 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-09-29
+
+### Added
+- **"Sent Items" tab in Industry Agents** -- a browsable log of every outbound email an Industry Agent has actually sent, filterable by Industry and by the specific Agent, plus a free-text search across subject/recipient. A summary strip up top shows a live count per agent. Each entry shows the industry, the sending agent, the action type (follow-up / reply / negotiation offer), recipient, subject, and when it was sent, with a "View Lead" jump straight to that lead's profile.
+  - Sourced from Agent Actions with status `approved` -- the same status `approveAndSendAgentAction` only sets after a real SMTP send actually succeeds, never on a simulated or failed send, so this list is genuinely "what went out," not "what was clicked."
+  - An action's industry is matched against the current agent list by normalized industry name (not by ID), so a paused or edited agent's historical sends still show up correctly; anything whose industry no longer matches any agent (e.g. the agent was deleted) is grouped under "Unmatched / deleted agent" instead of disappearing.
+
 ## [2.2.1] - 2026-09-29
 
 ### Fixed

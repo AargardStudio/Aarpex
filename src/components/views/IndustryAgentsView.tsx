@@ -1293,12 +1293,223 @@ const AgentCard: React.FC<{
   );
 };
 
+// ----------------------------------------------------------------------------
+// Sent Items -- every outbound email an Industry Agent has actually sent,
+// browsable by Industry and by the specific Agent that sent it.
+//
+// Source of truth: AgentAction rows with status "approved". That status is
+// deliberately load-bearing here (see approveAndSendAgentAction in
+// CRMContext.tsx) -- it is only ever set after the live SMTP send actually
+// succeeded, never on a simulated send or a failed one, so "approved" here
+// means "this genuinely went out", not merely "a human clicked approve".
+//
+// An action's `industry` field is a free-text snapshot taken at draft time
+// (matches whatever the lead's industry was then), so the agent that "owns"
+// a historical sent item is looked up by normalized industry-name match
+// against the CURRENT agent list, ignoring isActive/deleted state -- a
+// paused or since-edited agent should still get credit for mail it sent
+// while it was live. If no agent matches at all (deleted since, or the
+// industry was renamed), the item is grouped under "Unmatched / Deleted Agent"
+// rather than silently dropped.
+// ----------------------------------------------------------------------------
+const SentItemsPanel: React.FC = () => {
+  const { agentActions, industryAgents, setSelectedLeadId } = useCRM() as any;
+
+  const [industryFilter, setIndustryFilter] = useState<string>("all");
+  const [agentFilter, setAgentFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
+
+  const agentForIndustry = React.useCallback(
+    (industry: string): IndustryAgent | undefined => {
+      const normalized = normalizeIndustry(industry);
+      if (!normalized) return undefined;
+      return (industryAgents as IndustryAgent[]).find((p) => normalizeIndustry(p.industry) === normalized);
+    },
+    [industryAgents]
+  );
+
+  const sent = React.useMemo(
+    () =>
+      ((agentActions || []) as AgentAction[])
+        .filter((a) => a.status === "approved")
+        .sort((a, b) => new Date(b.resolvedAt || b.createdAt).getTime() - new Date(a.resolvedAt || a.createdAt).getTime()),
+    [agentActions]
+  );
+
+  const industries = React.useMemo(() => {
+    const set = new Set<string>();
+    sent.forEach((a) => a.industry && set.add(a.industry));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [sent]);
+
+  // Every agent that has actually sent at least one email, plus a synthetic
+  // "unmatched" bucket for items whose industry no longer maps to any agent.
+  const agentOptions = React.useMemo(() => {
+    const byId = new Map<string, { id: string; label: string }>();
+    let hasUnmatched = false;
+    sent.forEach((a) => {
+      const agent = agentForIndustry(a.industry);
+      if (agent) byId.set(agent.id, { id: agent.id, label: `${agent.industry} Agent` });
+      else hasUnmatched = true;
+    });
+    const list = Array.from(byId.values()).sort((a, b) => a.label.localeCompare(b.label));
+    if (hasUnmatched) list.push({ id: "__unmatched__", label: "Unmatched / deleted agent" });
+    return list;
+  }, [sent, agentForIndustry]);
+
+  const filtered = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return sent.filter((a) => {
+      if (industryFilter !== "all" && normalizeIndustry(a.industry) !== normalizeIndustry(industryFilter)) return false;
+      if (agentFilter !== "all") {
+        const agent = agentForIndustry(a.industry);
+        if (agentFilter === "__unmatched__") {
+          if (agent) return false;
+        } else if (!agent || agent.id !== agentFilter) {
+          return false;
+        }
+      }
+      if (q) {
+        const haystack = `${a.subject} ${a.recipientEmail} ${a.recipientName} ${a.industry}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [sent, industryFilter, agentFilter, search, agentForIndustry]);
+
+  // Per-agent counts, for the summary strip -- computed off the full sent
+  // list (not `filtered`), so the strip stays a stable overview even while
+  // the list below is filtered down.
+  const perAgentCounts = React.useMemo(() => {
+    const counts = new Map<string, { label: string; count: number }>();
+    sent.forEach((a) => {
+      const agent = agentForIndustry(a.industry);
+      const key = agent ? agent.id : "__unmatched__";
+      const label = agent ? agent.industry : "Unmatched / deleted agent";
+      const existing = counts.get(key);
+      if (existing) existing.count += 1;
+      else counts.set(key, { label, count: 1 });
+    });
+    return Array.from(counts.values()).sort((a, b) => b.count - a.count);
+  }, [sent, agentForIndustry]);
+
+  return (
+    <div className="space-y-4">
+      {sent.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {perAgentCounts.map((c) => (
+            <div
+              key={c.label}
+              className="px-3 py-2 bg-[#181b21] border border-[#2d323f] rounded-xl flex items-center gap-2"
+            >
+              <Mail className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+              <span className="text-xs font-bold text-white">{c.count}</span>
+              <span className="text-[11px] text-slate-400">{c.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search subject, recipient..."
+            className="w-full pl-8 pr-3 py-2 bg-[#0f1115] border border-[#2d323f] rounded-lg text-xs text-slate-200 placeholder:text-slate-500"
+          />
+        </div>
+        <select
+          value={industryFilter}
+          onChange={(e) => setIndustryFilter(e.target.value)}
+          className="px-3 py-2 bg-[#0f1115] border border-[#2d323f] rounded-lg text-xs text-slate-200"
+        >
+          <option value="all">All industries</option>
+          {industries.map((ind) => (
+            <option key={ind} value={ind}>
+              {ind}
+            </option>
+          ))}
+        </select>
+        <select
+          value={agentFilter}
+          onChange={(e) => setAgentFilter(e.target.value)}
+          className="px-3 py-2 bg-[#0f1115] border border-[#2d323f] rounded-lg text-xs text-slate-200"
+        >
+          <option value="all">All agents</option>
+          {agentOptions.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {sent.length === 0 ? (
+        <div className="p-10 text-center bg-[#181b21] rounded-2xl border border-[#2d323f] text-slate-400 text-xs space-y-2">
+          <InboxIcon className="w-8 h-8 text-slate-600 mx-auto" />
+          <p>No agent emails have been sent yet. Approved follow-ups, replies, and negotiation offers will show up here once they go out.</p>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="p-10 text-center bg-[#181b21] rounded-2xl border border-[#2d323f] text-slate-400 text-xs space-y-2">
+          <Search className="w-8 h-8 text-slate-600 mx-auto" />
+          <p>No sent emails match this filter.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((a) => {
+            const agent = agentForIndustry(a.industry);
+            const sentAt = a.resolvedAt || a.createdAt;
+            return (
+              <div key={a.id} className="bg-[#181b21] rounded-xl border border-[#2d323f] p-4 space-y-2">
+                <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                  <span className="px-2 py-0.5 rounded-md bg-teal-500/10 border border-teal-500/30 text-teal-300 font-semibold">
+                    {a.industry || "Unknown industry"}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-[#252a36] border border-[#3d4455] text-slate-300 font-semibold">
+                    {agent ? `${agent.industry} Agent` : "Unmatched / deleted agent"}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-[#252a36] border border-[#3d4455] text-slate-400 flex items-center gap-1">
+                    {a.actionType === "email_reply" ? <InboxIcon className="w-3 h-3" /> : <Mail className="w-3 h-3" />}
+                    {actionTypeLabel[a.actionType]}
+                  </span>
+                  <span className="ml-auto text-slate-500">{new Date(sentAt).toLocaleString()}</span>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-white truncate">{a.subject}</p>
+                    <p className="text-xs text-slate-400 truncate">
+                      To: {a.recipientName ? `${a.recipientName} <${a.recipientEmail}>` : a.recipientEmail}
+                    </p>
+                  </div>
+                  {a.leadId && (
+                    <button
+                      onClick={() => setSelectedLeadId(a.leadId)}
+                      className="shrink-0 text-indigo-300 hover:text-indigo-200 font-semibold text-xs flex items-center gap-1"
+                    >
+                      View Lead
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const IndustryAgentsView: React.FC = () => {
   const { industryAgents, bulkSetIndustryAgentActive, bulkDeleteIndustryAgents, runAgentScanNow, isAgentScanRunning } = useCRM() as any;
   const [isFormOpen, setFormOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<IndustryAgent | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isCheckingAll, setIsCheckingAll] = useState(false);
+  const [activeSection, setActiveSection] = useState<"agents" | "sent">("agents");
 
   const activeAgentCount = industryAgents.filter((a: IndustryAgent) => a.isActive).length;
   const handleCheckAllNow = async () => {
@@ -1377,7 +1588,7 @@ export const IndustryAgentsView: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {industryAgents.length > 0 && (
+          {activeSection === "agents" && industryAgents.length > 0 && (
             <button
               onClick={handleCheckAllNow}
               disabled={isAgentScanRunning || isCheckingAll || activeAgentCount === 0}
@@ -1388,90 +1599,123 @@ export const IndustryAgentsView: React.FC = () => {
               Check All Agents Now
             </button>
           )}
-          <button
-            onClick={() => {
-              setEditingAgent(null);
-              setFormOpen(true);
-            }}
-            className="px-3.5 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            New Agent
-          </button>
+          {activeSection === "agents" && (
+            <button
+              onClick={() => {
+                setEditingAgent(null);
+                setFormOpen(true);
+              }}
+              className="px-3.5 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New Agent
+            </button>
+          )}
         </div>
       </div>
 
-      <AgentsIntroBanner />
+      <div className="flex items-center gap-1 border-b border-[#2d323f]">
+        <button
+          onClick={() => setActiveSection("agents")}
+          className={`px-3.5 py-2 text-xs font-bold flex items-center gap-1.5 border-b-2 -mb-px transition-colors ${
+            activeSection === "agents"
+              ? "border-teal-400 text-white"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <BookMarked className="w-3.5 h-3.5" />
+          Agents
+        </button>
+        <button
+          onClick={() => setActiveSection("sent")}
+          className={`px-3.5 py-2 text-xs font-bold flex items-center gap-1.5 border-b-2 -mb-px transition-colors ${
+            activeSection === "sent"
+              ? "border-teal-400 text-white"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <InboxIcon className="w-3.5 h-3.5" />
+          Sent Items
+        </button>
+      </div>
 
-      {industryAgents.length > 0 && (
-        <label className="flex items-center gap-1.5 text-[11px] text-slate-400 px-1 cursor-pointer w-fit">
-          <input
-            type="checkbox"
-            checked={allSelected}
-            onChange={toggleSelectAll}
-            className="w-3.5 h-3.5 rounded border-[#3d4455] accent-teal-500"
-          />
-          Select all {industryAgents.length}
-        </label>
-      )}
-
-      {selectedIds.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 bg-[#181b21] border border-[#2d323f] rounded-xl px-4 py-2.5">
-          <span className="text-xs font-bold text-white">{selectedIds.size} selected</span>
-          <button
-            onClick={() => handleBulkActivate(true)}
-            className="px-3 py-1.5 bg-[#252a36] hover:bg-[#2f3544] text-slate-300 hover:text-emerald-300 border border-[#3d4455] rounded-lg text-xs font-semibold flex items-center gap-1.5"
-          >
-            <Power className="w-3.5 h-3.5" />
-            Activate
-          </button>
-          <button
-            onClick={() => handleBulkActivate(false)}
-            className="px-3 py-1.5 bg-[#252a36] hover:bg-[#2f3544] text-slate-300 hover:text-white border border-[#3d4455] rounded-lg text-xs font-semibold flex items-center gap-1.5"
-          >
-            <PauseCircle className="w-3.5 h-3.5" />
-            Pause
-          </button>
-          <button
-            onClick={handleBulkDelete}
-            className="px-3 py-1.5 bg-[#252a36] hover:bg-rose-950/40 text-slate-300 hover:text-rose-300 border border-[#3d4455] hover:border-rose-500/40 rounded-lg text-xs font-semibold flex items-center gap-1.5"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            Delete
-          </button>
-          <button
-            onClick={clearSelection}
-            className="ml-auto px-3 py-1.5 bg-[#252a36] hover:bg-[#2f3544] text-slate-300 hover:text-white border border-[#3d4455] rounded-lg text-xs font-semibold flex items-center gap-1.5"
-          >
-            <X className="w-3.5 h-3.5" />
-            Clear
-          </button>
-        </div>
-      )}
-
-      {industryAgents.length === 0 ? (
-        <div className="p-10 text-center bg-[#181b21] rounded-2xl border border-[#2d323f] text-slate-400 text-xs space-y-2">
-          <BookMarked className="w-8 h-8 text-slate-600 mx-auto" />
-          <p>
-            No industry agents yet. Create one for any industry you sell into -- AarPex will use it to tailor email
-            copy, qualification, and follow-up automatically.
-          </p>
-        </div>
+      {activeSection === "sent" ? (
+        <SentItemsPanel />
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {industryAgents.map((p) => (
-            <AgentCard
-              key={p.id}
-              agent={p}
-              selected={selectedIds.has(p.id)}
-              onToggleSelected={() => toggleSelected(p.id)}
-              onEdit={() => {
-                setEditingAgent(p);
-                setFormOpen(true);
-              }}
-            />
-          ))}
-        </div>
+        <>
+          <AgentsIntroBanner />
+
+          {industryAgents.length > 0 && (
+            <label className="flex items-center gap-1.5 text-[11px] text-slate-400 px-1 cursor-pointer w-fit">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={toggleSelectAll}
+                className="w-3.5 h-3.5 rounded border-[#3d4455] accent-teal-500"
+              />
+              Select all {industryAgents.length}
+            </label>
+          )}
+
+          {selectedIds.size > 0 && (
+            <div className="flex flex-wrap items-center gap-3 bg-[#181b21] border border-[#2d323f] rounded-xl px-4 py-2.5">
+              <span className="text-xs font-bold text-white">{selectedIds.size} selected</span>
+              <button
+                onClick={() => handleBulkActivate(true)}
+                className="px-3 py-1.5 bg-[#252a36] hover:bg-[#2f3544] text-slate-300 hover:text-emerald-300 border border-[#3d4455] rounded-lg text-xs font-semibold flex items-center gap-1.5"
+              >
+                <Power className="w-3.5 h-3.5" />
+                Activate
+              </button>
+              <button
+                onClick={() => handleBulkActivate(false)}
+                className="px-3 py-1.5 bg-[#252a36] hover:bg-[#2f3544] text-slate-300 hover:text-white border border-[#3d4455] rounded-lg text-xs font-semibold flex items-center gap-1.5"
+              >
+                <PauseCircle className="w-3.5 h-3.5" />
+                Pause
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                className="px-3 py-1.5 bg-[#252a36] hover:bg-rose-950/40 text-slate-300 hover:text-rose-300 border border-[#3d4455] hover:border-rose-500/40 rounded-lg text-xs font-semibold flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete
+              </button>
+              <button
+                onClick={clearSelection}
+                className="ml-auto px-3 py-1.5 bg-[#252a36] hover:bg-[#2f3544] text-slate-300 hover:text-white border border-[#3d4455] rounded-lg text-xs font-semibold flex items-center gap-1.5"
+              >
+                <X className="w-3.5 h-3.5" />
+                Clear
+              </button>
+            </div>
+          )}
+
+          {industryAgents.length === 0 ? (
+            <div className="p-10 text-center bg-[#181b21] rounded-2xl border border-[#2d323f] text-slate-400 text-xs space-y-2">
+              <BookMarked className="w-8 h-8 text-slate-600 mx-auto" />
+              <p>
+                No industry agents yet. Create one for any industry you sell into -- AarPex will use it to tailor email
+                copy, qualification, and follow-up automatically.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {industryAgents.map((p) => (
+                <AgentCard
+                  key={p.id}
+                  agent={p}
+                  selected={selectedIds.has(p.id)}
+                  onToggleSelected={() => toggleSelected(p.id)}
+                  onEdit={() => {
+                    setEditingAgent(p);
+                    setFormOpen(true);
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {isFormOpen && (
