@@ -10,6 +10,47 @@ import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 
+// Industry Agent personality dials (agentNature / personalityType, see
+// types.ts's IndustryAgent) -- short prompt-facing descriptions, kept as a
+// self-contained copy here rather than imported from src/lib, matching how
+// this file already keeps no imports from src/ (it's bundled separately via
+// esbuild). The UI's own copy (with fuller wording, for display) lives in
+// src/lib/agentPersonality.ts -- keep the two in sync if either changes.
+const AGENT_NATURE_PROMPT: Record<string, string> = {
+  Aggressive: "Direct and assertive -- push for a decision, create urgency, don't let the conversation stall.",
+  Emotional: "Warm and relationship-first -- lead with empathy and rapport, appeal to how the decision will feel, not just the numbers.",
+  "Problem Solver": "Consultative and practical -- lead with diagnosing their specific problem and mapping the solution to it, low-pressure.",
+};
+const MBTI_PROMPT: Record<string, string> = {
+  INTJ: "strategic and direct; make a concise, confident, long-term-value case and skip small talk",
+  INTP: "analytical and curious; explain the reasoning and let the logic of the solution speak for itself",
+  ENTJ: "decisive and results-focused; frame everything around efficiency, ROI, and getting to a decision fast",
+  ENTP: "energetic and idea-driven; explore possibilities and angles, a bit of playful challenge is fine",
+  INFJ: "thoughtful and sincere; speak to deeper purpose and long-term impact, not just immediate features",
+  INFP: "warm and values-driven; emphasize authenticity and genuine fit over hard-sell tactics",
+  ENFJ: "encouraging and people-focused; build the prospect up, frame the offer as helping their team succeed",
+  ENFP: "enthusiastic and warm; lead with genuine excitement and personal connection",
+  ISTJ: "methodical and precise; lead with facts, specifics, and a clear, reliable process",
+  ISFJ: "considerate and steady; reassuring in tone, address concerns thoroughly before pushing forward",
+  ESTJ: "businesslike and organized; state the case plainly with clear next steps and timelines",
+  ESFJ: "friendly and accommodating; personable tone, attentive to the relationship alongside the pitch",
+  ISTP: "practical and to the point; keep the message short, concrete, and low on fluff",
+  ISFP: "easygoing and genuine; low-pressure tone that respects the prospect's own pace",
+  ESTP: "energetic and bold; direct, confident, comfortable pushing for a quick yes",
+  ESFP: "upbeat and personable; make the message feel like a friendly conversation, not a pitch",
+};
+function agentPersonalityLine(agent: any): string {
+  if (!agent) return "";
+  const parts: string[] = [];
+  if (agent.agentNature && AGENT_NATURE_PROMPT[agent.agentNature]) {
+    parts.push(`- Agent nature (${agent.agentNature}): ${AGENT_NATURE_PROMPT[agent.agentNature]}`);
+  }
+  if (agent.personalityType && MBTI_PROMPT[agent.personalityType]) {
+    parts.push(`- Write in the communication style of an ${agent.personalityType} personality type: ${MBTI_PROMPT[agent.personalityType]}.`);
+  }
+  return parts.length ? `\n${parts.join("\n")}` : "";
+}
+
 // Safe directory derivation for both ESM and CJS bundled outputs
 const currentDir = typeof __dirname !== "undefined" ? __dirname : process.cwd();
 
@@ -818,7 +859,7 @@ app.post("/api/ai/email-campaign", async (req, res) => {
 - Talking points to weave in: ${(agent.talkingPoints || []).join(", ") || "none specified"}
 - Common pain points in this industry to speak to: ${(agent.painPoints || []).join(", ") || "none specified"}
 ${agent.objectionNotes ? `- Objection handling notes: ${agent.objectionNotes}` : ""}
-${agent.customInstructions ? `- Additional instructions: ${agent.customInstructions}` : ""}`
+${agent.customInstructions ? `- Additional instructions: ${agent.customInstructions}` : ""}${agentPersonalityLine(agent)}`
       : "";
 
     const prompt = `You are a world-class B2B email marketing strategist writing an outbound email SEQUENCE for ${senderCompany || "a B2B company"}.
@@ -1073,7 +1114,7 @@ app.post("/api/ai/personalized-email", async (req, res) => {
 - Talking points to weave in: ${(agent.talkingPoints || []).join(", ") || "none specified"}
 - Common pain points to speak to: ${(agent.painPoints || []).join(", ") || "none specified"}
 ${agent.objectionNotes ? `- Objection handling notes: ${agent.objectionNotes}` : ""}
-${agent.customInstructions ? `- Additional instructions: ${agent.customInstructions}` : ""}`
+${agent.customInstructions ? `- Additional instructions: ${agent.customInstructions}` : ""}${agentPersonalityLine(agent)}`
       : "";
     const productLine = productName
       ? `\n\nCenter this email specifically around the following product/service rather than speaking generically: "${productName}"${

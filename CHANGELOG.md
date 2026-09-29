@@ -13,6 +13,14 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-09-29
+
+### Added
+- **Instant Follow-up.** A "Send Instant Follow-up" button on a lead's profile (in the Industry Agent section) drafts a follow-up for that specific lead right now, bypassing the agent's normal follow-up cadence (which otherwise only proposes one once `followUpFrequencyDays` have passed since last contact). Like every other AI-drafted action, it lands in Agent Approvals for review -- "instant" means drafted immediately, never sent without approval.
+- **Agent nature.** Industry Agents can now be set to Aggressive, Emotional, or Problem Solver, layered on top of (not replacing) the existing tone/talking points/objection notes -- it colors how assertively or empathetically the agent argues its case in every drafted email.
+- **Myers-Briggs personality type.** Any of the 16 MBTI types can be assigned to an agent, and its drafts lean into that type's communication style (e.g. an INTJ agent writes concise, strategic, low-small-talk copy; an ENFP agent writes warm and enthusiastic copy). Both new fields are optional -- an agent with neither set drafts exactly as it did before.
+  - New `agent_nature` / `personality_type` columns (migration 0021, already applied live), both nullable.
+
 ## [2.3.0] - 2026-09-29
 
 ### Added

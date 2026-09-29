@@ -326,6 +326,7 @@ interface CRMContextType {
   // negotiation action proposes into before anything reaches a prospect.
   agentActions: AgentAction[];
   addAgentAction: (action: Omit<AgentAction, "id" | "createdAt" | "status">) => AgentAction;
+  draftInstantFollowUp: (leadId: string) => Promise<boolean>;
   resolveAgentAction: (id: string, status: AgentActionStatus, updates?: Partial<AgentAction>) => void;
   deleteAgentAction: (id: string) => void;
   approveAndSendAgentAction: (id: string, overrides?: { subject?: string; body?: string }) => Promise<boolean>;
@@ -2556,6 +2557,56 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newAction;
   };
 
+  // Instant follow-up -- drafts a follow-up for one specific lead right now,
+  // bypassing this agent's normal follow-up cadence (which otherwise only
+  // proposes a follow-up once followUpFrequencyDays have passed since last
+  // contact -- see the dueLeads filter in the automatic scan above). Still
+  // lands in the normal Agent Approvals queue like every other AI-drafted
+  // action: instant means "drafted now," never "sent without approval."
+  const draftInstantFollowUp = async (leadId: string): Promise<boolean> => {
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead || !lead.email) return false;
+    const agent = getAgentForIndustry(lead.industry);
+    if (!agent) return false;
+    const agentProduct = agent.productId ? products.find((p) => p.id === agent.productId) : undefined;
+    try {
+      const res = await apiFetch("/api/ai/personalized-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipientName: lead.name,
+          recipientCompany: lead.company,
+          recipientJobTitle: lead.jobTitle,
+          recipientIndustry: lead.industry,
+          activities: activities.filter((a) => a.leadId === lead.id),
+          agent,
+          productName: agentProduct?.name,
+          productPitch: agentProduct?.pitch,
+          senderName: currentUser?.name,
+          senderCompany: activeTenant?.companyName || activeTenant?.name,
+          goal: "Send a follow-up right now -- the user asked for this instantly rather than waiting for the agent's normal cadence.",
+        }),
+      });
+      const data = await res.json();
+      if (!data.subject || !data.body) return false;
+      addAgentAction({
+        industry: agent.industry,
+        actionType: "follow_up",
+        leadId: lead.id,
+        recipientName: lead.name,
+        recipientEmail: lead.email,
+        subject: data.subject,
+        body: data.body,
+        reasoning: "Instant follow-up requested manually -- not the agent's normal cadence.",
+        triggerSource: "manual",
+      });
+      return true;
+    } catch (err) {
+      console.error("[instant follow-up] draft failed for lead", leadId, err);
+      return false;
+    }
+  };
+
   const resolveAgentAction = (id: string, status: AgentActionStatus, updates?: Partial<AgentAction>) => {
     setAgentActions((prev) =>
       prev.map((a) =>
@@ -3118,6 +3169,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         agentActions,
         addAgentAction,
+        draftInstantFollowUp,
         resolveAgentAction,
         deleteAgentAction,
         approveAndSendAgentAction,

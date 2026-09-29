@@ -359,6 +359,32 @@ export type PreferredOutreachChannel = "Email" | "WhatsApp" | "Call" | "Mixed";
 // feature in AarPex; there is no per-tenant key to configure.
 export type AIProvider = "openai" | "gemini";
 
+// Agent "nature" -- a coarse dial on how the agent argues its case, on top
+// of (not instead of) tone/talkingPoints/objectionNotes. See
+// src/lib/agentPersonality.ts for the prompt-facing description of each.
+export type AgentNature = "Aggressive" | "Emotional" | "Problem Solver";
+
+// The 16 Myers-Briggs types. Optional -- when set, the agent's drafts lean
+// into that type's communication style (see src/lib/agentPersonality.ts
+// for the short description injected into the AI prompt for each one).
+export type MBTIType =
+  | "INTJ"
+  | "INTP"
+  | "ENTJ"
+  | "ENTP"
+  | "INFJ"
+  | "INFP"
+  | "ENFJ"
+  | "ENFP"
+  | "ISTJ"
+  | "ISFJ"
+  | "ESTJ"
+  | "ESFJ"
+  | "ISTP"
+  | "ISFP"
+  | "ESTP"
+  | "ESFP";
+
 export interface IndustryAgent {
   id: string;
   industry: string; // freeform, ideally matches src/data/industries.ts INDUSTRIES
@@ -393,6 +419,11 @@ export interface IndustryAgent {
   // don't cover, e.g. "always mention our 24/7 support", "never discuss
   // pricing before qualifying budget", "keep emails under 100 words".
   customInstructions?: string;
+  // Optional personality dials, layered on top of everything above -- both
+  // are free to leave unset, in which case the AI prompt omits them
+  // entirely and drafting behaves exactly as it did before this existed.
+  agentNature?: AgentNature;
+  personalityType?: MBTIType;
   // Follow-up cadence & channel defaults
   preferredChannel: PreferredOutreachChannel;
   followUpFrequencyDays: number;

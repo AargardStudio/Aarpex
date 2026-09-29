@@ -29,10 +29,11 @@ import {
   AlertTriangle,
   Zap,
 } from "lucide-react";
-import { IndustryAgent, PreferredOutreachChannel, AgentAction, AIProvider } from "../../types";
+import { IndustryAgent, PreferredOutreachChannel, AgentAction, AIProvider, AgentNature, MBTIType } from "../../types";
 import { INDUSTRIES } from "../../data/industries";
 import { normalizeIndustry, sanitizeIndustryText, summarizeIndustryUsage, findCloseIndustryMatches, IndustryUsage } from "../../lib/industryMatch";
 import { AI_PROVIDER_MODELS, AI_PROVIDER_LABELS, defaultModelFor } from "../../lib/aiProviders";
+import { AGENT_NATURES, AGENT_NATURE_DESCRIPTIONS, MBTI_TYPES, MBTI_INFO } from "../../lib/agentPersonality";
 
 function csv(list: string[] | undefined): string {
   return (list || []).join(", ");
@@ -86,6 +87,8 @@ const emptyDraft = (): Omit<IndustryAgent, "id" | "createdAt" | "updatedAt" | "c
   painPoints: [],
   objectionNotes: "",
   customInstructions: "",
+  agentNature: undefined,
+  personalityType: undefined,
   qualificationGuidance: "",
   preferredChannel: "Email",
   followUpFrequencyDays: 7,
@@ -192,6 +195,8 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
           painPoints: editing.painPoints,
           objectionNotes: editing.objectionNotes || "",
           customInstructions: editing.customInstructions || "",
+          agentNature: editing.agentNature,
+          personalityType: editing.personalityType,
           qualificationGuidance: editing.qualificationGuidance || "",
           preferredChannel: editing.preferredChannel,
           followUpFrequencyDays: editing.followUpFrequencyDays,
@@ -909,6 +914,48 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
                 className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg resize-none focus:outline-none focus:border-teal-400"
               />
             </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1 flex items-center gap-1">
+                  <Zap className="w-3 h-3" /> Agent nature
+                </label>
+                <select
+                  value={draft.agentNature || ""}
+                  onChange={(e) => setDraft((p) => ({ ...p, agentNature: (e.target.value || undefined) as AgentNature | undefined }))}
+                  className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+                >
+                  <option value="">None (rely on tone above)</option>
+                  {AGENT_NATURES.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                {draft.agentNature && (
+                  <p className="text-[10px] text-slate-500 mt-1">{AGENT_NATURE_DESCRIPTIONS[draft.agentNature]}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1 flex items-center gap-1">
+                  <Bot className="w-3 h-3" /> Personality type (Myers-Briggs)
+                </label>
+                <select
+                  value={draft.personalityType || ""}
+                  onChange={(e) => setDraft((p) => ({ ...p, personalityType: (e.target.value || undefined) as MBTIType | undefined }))}
+                  className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+                >
+                  <option value="">None</option>
+                  {MBTI_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t} -- {MBTI_INFO[t].nickname}
+                    </option>
+                  ))}
+                </select>
+                {draft.personalityType && (
+                  <p className="text-[10px] text-slate-500 mt-1">{MBTI_INFO[draft.personalityType].description}</p>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Qualification guidance */}
@@ -1247,6 +1294,27 @@ const AgentCard: React.FC<{
               {t}
             </span>
           ))}
+        </div>
+      )}
+
+      {(agent.agentNature || agent.personalityType) && (
+        <div className="flex flex-wrap gap-1.5">
+          {agent.agentNature && (
+            <span
+              className="text-[10px] px-2 py-0.5 bg-teal-500/10 border border-teal-500/30 text-teal-300 rounded-full font-semibold"
+              title={AGENT_NATURE_DESCRIPTIONS[agent.agentNature]}
+            >
+              {agent.agentNature}
+            </span>
+          )}
+          {agent.personalityType && (
+            <span
+              className="text-[10px] px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 rounded-full font-semibold"
+              title={MBTI_INFO[agent.personalityType].description}
+            >
+              {agent.personalityType} -- {MBTI_INFO[agent.personalityType].nickname}
+            </span>
+          )}
         </div>
       )}
 

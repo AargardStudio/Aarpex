@@ -36,6 +36,7 @@ import {
   Bot,
   ShieldCheck,
   Trash2,
+  Zap,
 } from "lucide-react";
 import { apiFetch } from "../../lib/apiClient";
 import { sanitizeIndustryText } from "../../lib/industryMatch";
@@ -96,6 +97,7 @@ export const LeadProfileDrawer: React.FC = () => {
     getAgentForIndustry,
     products,
     addAgentAction,
+    draftInstantFollowUp,
     deals,
     pipelines,
     tasks,
@@ -114,6 +116,9 @@ export const LeadProfileDrawer: React.FC = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState(false);
+
+  const [isSendingInstantFollowUp, setIsSendingInstantFollowUp] = useState(false);
+  const [instantFollowUpResult, setInstantFollowUpResult] = useState<"ok" | "error" | null>(null);
 
   const [manualNote, setManualNote] = useState("");
   const [isRefreshingSummary, setIsRefreshingSummary] = useState(false);
@@ -493,6 +498,20 @@ export const LeadProfileDrawer: React.FC = () => {
       console.error(err);
     } finally {
       setIsProposingOffer(false);
+    }
+  };
+
+  const handleInstantFollowUp = async () => {
+    if (isSendingInstantFollowUp) return;
+    setIsSendingInstantFollowUp(true);
+    setInstantFollowUpResult(null);
+    try {
+      const ok = await draftInstantFollowUp(lead.id);
+      setInstantFollowUpResult(ok ? "ok" : "error");
+    } catch {
+      setInstantFollowUpResult("error");
+    } finally {
+      setIsSendingInstantFollowUp(false);
     }
   };
 
@@ -1073,6 +1092,28 @@ export const LeadProfileDrawer: React.FC = () => {
                   </div>
                 ) : (
                   <p className="text-slate-400">No matching Industry Agent is currently active for this lead's industry.</p>
+                )}
+
+                {agent && (
+                  <div className="space-y-1.5">
+                    <button
+                      onClick={handleInstantFollowUp}
+                      disabled={isSendingInstantFollowUp || !lead.email}
+                      title={!lead.email ? "This lead has no email address on file" : "Draft a follow-up right now, without waiting for this agent's normal cadence"}
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold"
+                    >
+                      <Zap className={`w-3.5 h-3.5 ${isSendingInstantFollowUp ? "animate-pulse" : ""}`} />
+                      {isSendingInstantFollowUp ? "Drafting..." : "Send Instant Follow-up"}
+                    </button>
+                    {instantFollowUpResult === "ok" && (
+                      <p className="text-[11px] text-emerald-600 font-semibold">
+                        Drafted -- review and approve it in Agent Approvals to actually send it.
+                      </p>
+                    )}
+                    {instantFollowUpResult === "error" && (
+                      <p className="text-[11px] text-rose-600 font-semibold">Couldn't draft a follow-up. Try again in a moment.</p>
+                    )}
+                  </div>
                 )}
 
                 <div className="pt-2 border-t border-slate-100 space-y-2">

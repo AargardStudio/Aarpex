@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.4.0",
+    date: "2026-09-29",
+    headline: "Give Your Agents a Personality",
+    tagline: "Instant follow-ups, plus a nature and a Myers-Briggs type for every Industry Agent.",
+    highlights: [
+      {
+        title: "Send Instant Follow-up",
+        description: "Draft a follow-up for one lead right now, without waiting for the agent's usual cadence -- still goes through your approval.",
+      },
+      {
+        title: "Agent nature",
+        description: "Set an agent to Aggressive, Emotional, or Problem Solver to shape how it argues its case.",
+      },
+      {
+        title: "Myers-Briggs personality",
+        description: "Assign any of the 16 MBTI types and its drafts write in that style.",
+      },
+    ],
+  },
+  {
     version: "2.3.0",
     date: "2026-09-29",
     headline: "See Every Email Your Agents Have Sent",
