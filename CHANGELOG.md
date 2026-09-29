@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.5.1] - 2026-09-29
+
+### Fixed
+- **`/api/cron/agent-scan` was unreachable.** The pre-existing global `/api/*` auth middleware intercepted the cron job's `Authorization: Bearer <CRON_SECRET>` header, tried to validate it as a Supabase user session token, and rejected it with a generic 401 before the endpoint's own `CRON_SECRET` check ever ran. Added `/api/cron/agent-scan` to the same bypass list as `/api/health`.
+
 ## [2.5.0] - 2026-09-29
 
 ### Added

@@ -118,9 +118,15 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
 }
 
 // Every /api/* route requires a valid session once Supabase is configured,
-// except the health check (used for uptime monitoring, which can't sign in).
+// except the health check (used for uptime monitoring, which can't sign in)
+// and the cron-triggered agent scan, which authenticates itself against
+// CRON_SECRET further down (Vercel Cron sends "Authorization: Bearer
+// <CRON_SECRET>", not a Supabase user session -- letting it hit
+// requireAuth would treat that as a bogus session token and 401 it before
+// the route's own check ever runs).
 app.use((req, res, next) => {
   if (req.path === "/api/health") return next();
+  if (req.path === "/api/cron/agent-scan") return next();
   if (!req.path.startsWith("/api/")) return next();
   return requireAuth(req, res, next);
 });
