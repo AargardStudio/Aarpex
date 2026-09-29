@@ -26,10 +26,10 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     version: "2.5.0",
     date: "2026-09-29",
     headline: "Agents Now Work Even When You've Closed the Tab",
-    tagline: "A real server-side scheduler checks for due follow-ups every hour, on top of the existing live browser scan.",
+    tagline: "A real server-side scheduler checks for due follow-ups once a day, on top of the existing live browser scan.",
     highlights: [
       {
-        title: "Server-side hourly scan",
+        title: "Server-side daily scan",
         description: "Industry Agents get checked for due follow-ups on a schedule that runs on our servers -- no browser tab required.",
       },
       {

@@ -330,12 +330,14 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
   // client-side scan (see runAgentScan in CRMContext.tsx), which only runs
   // while a browser tab is open but also drafts from inbound-reply
   // detection, and the server-side cron hitting /api/cron/agent-scan (see
-  // server.ts) once an hour independent of any tab. `lastScanAt` is shared
-  // by both, so "last checked" reflects whichever ran more recently. The
-  // honest states are: off, off-because-agent-paused, checking right now,
-  // or "monitored" with a last-checked time -- never a plain green "always
-  // on", since the browser side genuinely can stop (a closed tab) even
-  // though the hourly server side won't.
+  // server.ts) once a day independent of any tab (Vercel's free/Hobby plan
+  // only allows daily cron jobs -- upgrading to Pro would allow a tighter
+  // schedule). `lastScanAt` is shared by both, so "last checked" reflects
+  // whichever ran more recently. The honest states are: off,
+  // off-because-agent-paused, checking right now, or "monitored" with a
+  // last-checked time -- never a plain green "always on", since the
+  // browser side genuinely can stop (a closed tab) even though the daily
+  // server side won't.
   const monitoringState: "off" | "checking" | "browser" | "not_yet" = !draft.autoRunEnabled || !draft.isActive
     ? "off"
     : isAgentScanRunning
@@ -634,7 +636,7 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
                   </div>
                   <p className="text-slate-500">
                     AarPex checks this Agent while this workspace is open in a browser tab (every ~10 minutes),
-                    and separately on the server once an hour even when no tab is open -- so follow-ups keep
+                    and separately on the server once a day even when no tab is open -- so follow-ups keep
                     going out either way. Only the browser check can also read your inbox for replies, since
                     that needs a live connection to your mailbox.
                   </p>
@@ -648,7 +650,7 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
                   </div>
                   <p className="text-slate-500">
                     The first browser check runs shortly after this workspace loads, then every ~10 minutes
-                    while a tab stays open -- and a server-side check also runs once an hour regardless, so
+                    while a tab stays open -- and a server-side check also runs once a day regardless, so
                     this Agent is monitored even before that first browser check happens.
                   </p>
                 </div>
@@ -1242,7 +1244,7 @@ const AgentCard: React.FC<{
               {agent.isActive ? "Active" : "Paused"}
             </span>
             {monitoringState === "browser" && (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-500/15 text-emerald-300 border-emerald-500/30" title={`Server checks hourly; last browser check ${timeAgo(lastAgentScanAt)}`}>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-500/15 text-emerald-300 border-emerald-500/30" title={`Server checks once a day; last browser check ${timeAgo(lastAgentScanAt)}`}>
                 Monitored
               </span>
             )}
