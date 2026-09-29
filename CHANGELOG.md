@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-09-29
+
+### Fixed
+- **Grey background patch in the Lead drawer's Overview and 360° tabs.** The tab content wrapper used `bg-slate-50/40`, an opacity variant the global dark-theme override didn't cover (only `/50` and `/70` were listed), so it fell through to Tailwind's literal light grey instead of the app's dark surface color -- the same class of bug as the 2.2.0 backdrop fix, just a different spot. Added `/40` to the covered list in `index.css` (also fixes the same unlisted variant in Tasks view's completed-task row background) and it now renders as the same dark surface as every card around it.
+
 ## [2.2.0] - 2026-09-28
 
 ### Added
