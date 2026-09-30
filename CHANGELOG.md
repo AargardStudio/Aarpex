@@ -13,6 +13,12 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.5.3] - 2026-09-30
+
+### Fixed
+- **Production outage, real root cause: `vercel.json`'s `buildCommand` had been reverted to `vite build`, which never produces `dist/server.cjs`.** v2.5.0 (`96125d5`) silently undid two earlier, already-shipped fixes while adding the scheduler. `d752511` ("Fix ERR_MODULE_NOT_FOUND: point the Vercel Function at the pre-built bundle") had set `buildCommand` to `npm run build` precisely so the `esbuild server.ts ... --outfile=dist/server.cjs` step runs on Vercel, and `9996915` ("Fix /app 404: serve the SPA from static output, not through the function") had pointed the `/app` rewrites back at `/index.html`. With `buildCommand` reset to plain `vite build`, `dist/server.cjs` was never built on Vercel, so the Function crashed at cold start with `ERR_MODULE_NOT_FOUND: /var/task/dist/server.cjs` on every `/app` and `/api/*` request. Both settings restored to their known-good state.
+- **Corrects v2.5.2's diagnosis.** The `crons` entry was never the cause -- it merely shipped in the same commit as the `buildCommand` regression, which is why removing it did not bring the site back. A cron schedule can be re-added safely when wanted.
+
 ## [2.5.2] - 2026-09-29
 
 ### Fixed
