@@ -7,5 +7,8 @@
     { "source": "/app/assets/(.*)", "destination": "/assets/$1" },
     { "source": "/app", "destination": "/index.html" },
     { "source": "/app/(.*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    { "path": "/api/cron/agent-scan", "schedule": "0 13 * * *" }
   ]
 }

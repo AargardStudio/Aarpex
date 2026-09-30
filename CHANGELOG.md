@@ -13,6 +13,14 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.6.1] - 2026-09-30
+
+### Changed
+- **Server-side daily agent scan is back on.** Restores the `crons` entry in `vercel.json` (once a day at 13:00 UTC, within Vercel's Hobby-plan limit) that v2.5.2 removed during the outage. The outage was caused by `buildCommand` being reverted (fixed in v2.5.3), not by the cron entry, so it is safe to re-add. Requires the `CRON_SECRET` environment variable to be set in Vercel.
+
+### Fixed
+- **`/api/cron/agent-scan` only answered `POST`, but Vercel Cron always calls with `GET`.** Every scheduled run would have returned 404 and the scan would never have fired. The endpoint now answers both `GET` (Vercel Cron) and `POST` (manual testing), sharing one handler and the same `CRON_SECRET` check.
+
 ## [2.6.0] - 2026-09-30
 
 ### Added

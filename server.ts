@@ -1245,7 +1245,10 @@ function normalizeIndustryServer(value: string | null | undefined): string {
     .replace(/\s+/g, " ");
 }
 
-app.post("/api/cron/agent-scan", async (req, res) => {
+// Vercel Cron invokes its target with an HTTP GET (never POST), so this must
+// answer GET or the scheduled run would 404 every day. POST is kept as well
+// so the endpoint can still be triggered by hand (curl) for testing.
+const handleCronAgentScan = async (req: express.Request, res: express.Response) => {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
     return res.status(500).json({
@@ -1427,7 +1430,9 @@ app.post("/api/cron/agent-scan", async (req, res) => {
     console.error("[cron/agent-scan] failed:", err);
     return res.status(500).json({ success: false, error: err?.message || "Scan failed", ...outcome });
   }
-});
+};
+app.get("/api/cron/agent-scan", handleCronAgentScan);
+app.post("/api/cron/agent-scan", handleCronAgentScan);
 
 // AI Lead/Contact Knowledge Summary — auto-extracts a knowledge base entry
 // from a lead/contact's own record + activity history, so the "individual
