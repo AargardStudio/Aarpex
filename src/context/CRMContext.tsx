@@ -327,6 +327,20 @@ interface CRMContextType {
   agentActions: AgentAction[];
   addAgentAction: (action: Omit<AgentAction, "id" | "createdAt" | "status">) => AgentAction;
   draftInstantFollowUp: (leadId: string) => Promise<boolean>;
+  // Agent-level instant controls (the buttons on each agent card).
+  // draftAgentFollowUpsNow: drafts a follow-up for every eligible lead of one
+  //   agent right now, ignoring its normal cadence, capped per click. Drafts
+  //   land in the approval queue like everything else.
+  // sendAgentDraftsNow: sends every draft waiting in that agent's approval
+  //   queue immediately, one at a time, through approveAndSendAgentAction.
+  // setAgentNextEmailDirective: arms/disarms the one-shot "add pricing" /
+  //   "add more problems" switches consumed by the agent's next batch.
+  draftAgentFollowUpsNow: (agentId: string) => Promise<{ drafted: number; remaining: number; reason?: string }>;
+  sendAgentDraftsNow: (agentId: string) => Promise<{ total: number; sent: number; failed: number }>;
+  setAgentNextEmailDirective: (
+    agentId: string,
+    patch: { includePricing?: boolean; extraProblems?: boolean }
+  ) => void;
   resolveAgentAction: (id: string, status: AgentActionStatus, updates?: Partial<AgentAction>) => void;
   deleteAgentAction: (id: string) => void;
   approveAndSendAgentAction: (id: string, overrides?: { subject?: string; body?: string }) => Promise<boolean>;
@@ -371,6 +385,22 @@ interface CRMContextType {
   quickCreateType: "lead" | "deal" | "invoice" | "payment" | "activity" | "task";
   setQuickCreateType: (type: "lead" | "deal" | "invoice" | "payment" | "activity" | "task") => void;
 }
+
+// One-shot "instant control" switches on an Industry Agent (armed from the
+// agent card) become extra fields on the /api/ai/personalized-email request.
+// Pricing text comes only from the agent's linked Product; when there isn't
+// one (or it has no price) it is left undefined and the server is told not to
+// invent figures. Pair every use with `hasAgentDirectives` so the switches
+// are reset once a batch has actually been drafted.
+const buildAgentDirectiveFields = (agent: IndustryAgent, product?: Product) => ({
+  includePricing: !!agent.nextEmailIncludePricing,
+  extraProblems: !!agent.nextEmailExtraProblems,
+  productPricing:
+    product && Number(product.price) > 0
+      ? `${product.currency || "USD"} ${product.price}${product.pricingModel ? ` (${product.pricingModel})` : ""}`
+      : undefined,
+});
+const hasAgentDirectives = (agent: IndustryAgent) => !!agent.nextEmailIncludePricing || !!agent.nextEmailExtraProblems;
 
 const CRMContext = createContext<CRMContextType | undefined>(undefined);
 
@@ -878,6 +908,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 senderName: curUser?.name,
                 senderCompany: curTenant?.companyName || curTenant?.name,
                 goal: `Send a follow-up -- it's been ${agent.followUpFrequencyDays}+ days since last contact with no response.`,
+                ...buildAgentDirectiveFields(agent, agentProduct),
               }),
             });
             const data = await res.json();
@@ -895,6 +926,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           } catch (err) {
             console.error("[agent scan] follow-up draft failed for lead", lead.id, err);
           }
+        }
+
+        // The one-shot switches only ever apply to the very next batch --
+        // reset them once this agent has actually drafted something.
+        if (hasAgentDirectives(agent) && newActions.some((a) => a.industry === agent.industry && a.actionType === "follow_up")) {
+          setIndustryAgents((prev) =>
+            prev.map((p) => (p.id === agent.id ? { ...p, nextEmailIncludePricing: false, nextEmailExtraProblems: false } : p))
+          );
         }
 
         // Reply detection -- reuses the same IMAP check the manual Inbox
@@ -2585,10 +2624,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           senderName: currentUser?.name,
           senderCompany: activeTenant?.companyName || activeTenant?.name,
           goal: "Send a follow-up right now -- the user asked for this instantly rather than waiting for the agent's normal cadence.",
+          ...buildAgentDirectiveFields(agent, agentProduct),
         }),
       });
       const data = await res.json();
       if (!data.subject || !data.body) return false;
+      if (hasAgentDirectives(agent)) {
+        updateIndustryAgent(agent.id, { nextEmailIncludePricing: false, nextEmailExtraProblems: false });
+      }
       addAgentAction({
         industry: agent.industry,
         actionType: "follow_up",
@@ -2705,6 +2748,116 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       resolveAgentAction(id, "pending", { reasoning: `${action.reasoning} — last send attempt failed: ${err.message || "network error"}` });
       return false;
     }
+  };
+
+  // Arms/disarms the one-shot switches on an agent (see IndustryAgent).
+  const setAgentNextEmailDirective = (
+    agentId: string,
+    patch: { includePricing?: boolean; extraProblems?: boolean }
+  ) => {
+    const updates: Partial<IndustryAgent> = {};
+    if (patch.includePricing !== undefined) updates.nextEmailIncludePricing = patch.includePricing;
+    if (patch.extraProblems !== undefined) updates.nextEmailExtraProblems = patch.extraProblems;
+    updateIndustryAgent(agentId, updates);
+  };
+
+  // "Create a follow-up email now" -- drafts a follow-up for each eligible
+  // lead of ONE agent immediately, ignoring the agent's normal cadence. Each
+  // draft goes to the approval queue like any other; nothing is sent. Leads
+  // that already have a pending follow-up are skipped, and a single click
+  // drafts at most MAX_PER_CLICK (each one is a real AI call), reporting how
+  // many eligible leads are left so a second click can pick them up.
+  const draftAgentFollowUpsNow = async (
+    agentId: string
+  ): Promise<{ drafted: number; remaining: number; reason?: string }> => {
+    const MAX_PER_CLICK = 10;
+    const agent = industryAgents.find((a) => a.id === agentId);
+    if (!agent) return { drafted: 0, remaining: 0, reason: "That agent no longer exists." };
+    if (!agent.isActive) return { drafted: 0, remaining: 0, reason: "Activate this agent first." };
+    const industryLc = normalizeIndustry(agent.industry);
+    const agentProduct = agent.productId ? products.find((p) => p.id === agent.productId) : undefined;
+
+    const eligible = leads.filter((l) => {
+      if (normalizeIndustry(l.industry) !== industryLc) return false;
+      if ((agent.excludedLeadIds || []).includes(l.id)) return false;
+      if (!l.email) return false;
+      if (l.status === "Converted" || l.status === "Lost") return false;
+      return !agentActions.some(
+        (a) =>
+          a.status === "pending" &&
+          a.actionType === "follow_up" &&
+          a.recipientEmail.toLowerCase() === l.email.toLowerCase()
+      );
+    });
+    if (eligible.length === 0) {
+      return { drafted: 0, remaining: 0, reason: "No leads are waiting for a follow-up (everyone eligible already has a draft, or none match)." };
+    }
+
+    const batch = eligible.slice(0, MAX_PER_CLICK);
+    const directiveFields = buildAgentDirectiveFields(agent, agentProduct);
+    let drafted = 0;
+    for (const lead of batch) {
+      try {
+        const res = await apiFetch("/api/ai/personalized-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            recipientName: lead.name,
+            recipientCompany: lead.company,
+            recipientJobTitle: lead.jobTitle,
+            recipientIndustry: lead.industry,
+            activities: activities.filter((a) => a.leadId === lead.id),
+            agent,
+            productName: agentProduct?.name,
+            productPitch: agentProduct?.pitch,
+            senderName: currentUser?.name,
+            senderCompany: activeTenant?.companyName || activeTenant?.name,
+            goal: "Send a follow-up right now -- the user asked for this instantly rather than waiting for the agent's normal cadence.",
+            ...directiveFields,
+          }),
+        });
+        const data = await res.json();
+        if (!data.subject || !data.body) continue;
+        addAgentAction({
+          industry: agent.industry,
+          actionType: "follow_up",
+          leadId: lead.id,
+          recipientName: lead.name,
+          recipientEmail: lead.email,
+          subject: data.subject,
+          body: data.body,
+          reasoning: "Instant follow-up requested manually from the agent card -- not the agent's normal cadence.",
+          triggerSource: "manual",
+        });
+        drafted += 1;
+      } catch (err) {
+        console.error("[instant follow-ups] draft failed for lead", lead.id, err);
+      }
+    }
+    if (drafted > 0 && hasAgentDirectives(agent)) {
+      updateIndustryAgent(agent.id, { nextEmailIncludePricing: false, nextEmailExtraProblems: false });
+    }
+    return { drafted, remaining: Math.max(0, eligible.length - batch.length) };
+  };
+
+  // "Send email now" -- sends every draft waiting in one agent's approval
+  // queue right now. Goes through approveAndSendAgentAction for each item
+  // (same live-SMTP send, same activity log, same "approved only if it truly
+  // went out" guarantee), one at a time so a failure on one never blocks the
+  // rest and the mailbox isn't hit with a burst of parallel connections.
+  const sendAgentDraftsNow = async (agentId: string): Promise<{ total: number; sent: number; failed: number }> => {
+    const agent = industryAgents.find((a) => a.id === agentId);
+    if (!agent) return { total: 0, sent: 0, failed: 0 };
+    const industryLc = normalizeIndustry(agent.industry);
+    const waiting = agentActions.filter((a) => a.status === "pending" && normalizeIndustry(a.industry) === industryLc);
+    let sent = 0;
+    let failed = 0;
+    for (const action of waiting) {
+      const ok = await approveAndSendAgentAction(action.id);
+      if (ok) sent += 1;
+      else failed += 1;
+    }
+    return { total: waiting.length, sent, failed };
   };
 
   // File Manager ----------------------------------------------------------
@@ -3170,6 +3323,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         agentActions,
         addAgentAction,
         draftInstantFollowUp,
+        draftAgentFollowUpsNow,
+        sendAgentDraftsNow,
+        setAgentNextEmailDirective,
         resolveAgentAction,
         deleteAgentAction,
         approveAndSendAgentAction,

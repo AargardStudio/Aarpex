@@ -28,6 +28,12 @@ import {
   Inbox as InboxIcon,
   AlertTriangle,
   Zap,
+  Send,
+  MailPlus,
+  DollarSign,
+  Lightbulb,
+  Loader2,
+  ChevronLeft,
 } from "lucide-react";
 import { IndustryAgent, PreferredOutreachChannel, AgentAction, AIProvider, AgentNature, MBTIType } from "../../types";
 import { INDUSTRIES } from "../../data/industries";
@@ -1180,8 +1186,12 @@ const AgentCard: React.FC<{
   selected: boolean;
   onToggleSelected: () => void;
 }> = ({ agent, onEdit, selected, onToggleSelected }) => {
-  const { deleteIndustryAgent, updateIndustryAgent, leads, rawCompanies, products, agentActions, lastAgentScanAt, isAgentScanRunning, runAgentScanNow, setActiveNav } = useCRM() as any;
+  const { deleteIndustryAgent, updateIndustryAgent, leads, rawCompanies, products, agentActions, lastAgentScanAt, isAgentScanRunning, runAgentScanNow, setActiveNav, draftAgentFollowUpsNow, sendAgentDraftsNow, setAgentNextEmailDirective } = useCRM() as any;
   const [isRunningNow, setIsRunningNow] = useState(false);
+  // Which instant-control button is mid-flight ("send" | "followup"), plus a
+  // short result line shown under the buttons (cleared on the next click).
+  const [instantBusy, setInstantBusy] = useState<"send" | "followup" | null>(null);
+  const [instantNotice, setInstantNotice] = useState<{ tone: "ok" | "warn"; text: string } | null>(null);
   const linkedProduct = agent.productId ? products.find((p: any) => p.id === agent.productId) : null;
   const ChannelIcon = channelIcon(agent.preferredChannel);
   const industryLc = normalizeIndustry(agent.industry);
@@ -1208,6 +1218,51 @@ const AgentCard: React.FC<{
       }
     }
     updateIndustryAgent(agent.id, { isActive: !agent.isActive });
+  };
+
+  const handleSendNow = async () => {
+    if (instantBusy || pendingCount === 0) return;
+    if (
+      !confirm(
+        `Send ${pendingCount} waiting email${pendingCount === 1 ? "" : "s"} now?\n\nThese go out immediately from your connected mailbox to real recipients. Each one is logged to its lead's timeline and appears in Sent Items.`
+      )
+    ) {
+      return;
+    }
+    setInstantBusy("send");
+    setInstantNotice(null);
+    try {
+      const r = await sendAgentDraftsNow(agent.id);
+      if (r.failed === 0) {
+        setInstantNotice({ tone: "ok", text: `Sent ${r.sent} email${r.sent === 1 ? "" : "s"}. Find ${r.sent === 1 ? "it" : "them"} in Sent Items.` });
+      } else {
+        setInstantNotice({
+          tone: "warn",
+          text: `Sent ${r.sent} of ${r.total}. ${r.failed} did not go out and ${r.failed === 1 ? "is" : "are"} still waiting in Agent Approvals with the reason noted.`,
+        });
+      }
+    } finally {
+      setInstantBusy(null);
+    }
+  };
+
+  const handleCreateFollowUps = async () => {
+    if (instantBusy || !agent.isActive) return;
+    setInstantBusy("followup");
+    setInstantNotice(null);
+    try {
+      const r = await draftAgentFollowUpsNow(agent.id);
+      if (r.drafted === 0) {
+        setInstantNotice({ tone: "warn", text: r.reason || "Nothing was drafted." });
+      } else {
+        setInstantNotice({
+          tone: "ok",
+          text: `Drafted ${r.drafted} follow-up${r.drafted === 1 ? "" : "s"} for your review in Agent Approvals.${r.remaining > 0 ? ` ${r.remaining} more lead${r.remaining === 1 ? "" : "s"} eligible -- click again to draft the next batch.` : ""}`,
+        });
+      }
+    } finally {
+      setInstantBusy(null);
+    }
   };
 
   const handleRunNow = async () => {
@@ -1356,6 +1411,84 @@ const AgentCard: React.FC<{
         )}
       </div>
 
+      <div className="pt-3 border-t border-[#2d323f] space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Instant controls</span>
+          {(agent.nextEmailIncludePricing || agent.nextEmailExtraProblems) && (
+            <span className="text-[10px] text-teal-300">Applies to the next emails this agent drafts</span>
+          )}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={handleSendNow}
+            disabled={!!instantBusy || pendingCount === 0}
+            title={pendingCount === 0 ? "No drafts waiting for this agent -- use \"Create a follow-up email now\" first" : `Send the ${pendingCount} waiting draft${pendingCount === 1 ? "" : "s"} right now`}
+            className="px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 bg-teal-600 hover:bg-teal-500 text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-teal-600"
+          >
+            {instantBusy === "send" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            {instantBusy === "send" ? "Sending..." : `Send email now${pendingCount > 0 ? ` (${pendingCount})` : ""}`}
+          </button>
+          <button
+            type="button"
+            onClick={handleCreateFollowUps}
+            disabled={!!instantBusy || !agent.isActive}
+            title={!agent.isActive ? "Activate this agent first" : "Draft a follow-up for this agent's leads right now, ignoring its normal schedule"}
+            className="px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 bg-[#252a36] hover:bg-[#2f3544] text-slate-100 border border-[#3d4455] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#252a36]"
+          >
+            {instantBusy === "followup" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MailPlus className="w-3.5 h-3.5 text-teal-400" />}
+            {instantBusy === "followup" ? "Drafting..." : "Create a follow-up email now"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setAgentNextEmailDirective(agent.id, { includePricing: !agent.nextEmailIncludePricing })}
+            aria-pressed={!!agent.nextEmailIncludePricing}
+            title={
+              agent.nextEmailIncludePricing
+                ? "Armed -- click to cancel"
+                : linkedProduct && Number(linkedProduct.price) > 0
+                ? `Include ${linkedProduct.name}'s pricing in the next emails this agent drafts`
+                : "No priced product is linked to this agent, so the email will offer a tailored quote instead of quoting figures"
+            }
+            className={`px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-colors ${
+              agent.nextEmailIncludePricing
+                ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-200"
+                : "bg-[#252a36] hover:bg-[#2f3544] border-[#3d4455] text-slate-100"
+            }`}
+          >
+            {agent.nextEmailIncludePricing ? <CheckCircle2 className="w-3.5 h-3.5" /> : <DollarSign className="w-3.5 h-3.5 text-teal-400" />}
+            {agent.nextEmailIncludePricing ? "Pricing added to next email" : "Add pricing in the next email"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setAgentNextEmailDirective(agent.id, { extraProblems: !agent.nextEmailExtraProblems })}
+            aria-pressed={!!agent.nextEmailExtraProblems}
+            title={agent.nextEmailExtraProblems ? "Armed -- click to cancel" : "Have the next emails raise extra problems businesses like this commonly face, and discuss them"}
+            className={`px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-colors text-left ${
+              agent.nextEmailExtraProblems
+                ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-200"
+                : "bg-[#252a36] hover:bg-[#2f3544] border-[#3d4455] text-slate-100"
+            }`}
+          >
+            {agent.nextEmailExtraProblems ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> : <Lightbulb className="w-3.5 h-3.5 text-teal-400 shrink-0" />}
+            <span className="leading-tight">
+              {agent.nextEmailExtraProblems ? "More problems added to next email" : "Add more relevant problems and discuss them in the next email"}
+            </span>
+          </button>
+        </div>
+        {instantNotice && (
+          <div
+            className={`px-3 py-2 rounded-lg text-[11px] border ${
+              instantNotice.tone === "ok"
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-200"
+                : "bg-amber-500/10 border-amber-500/30 text-amber-200"
+            }`}
+          >
+            {instantNotice.text}
+          </div>
+        )}
+      </div>
+
       {pendingCount > 0 && (
         <button
           type="button"
@@ -1372,7 +1505,8 @@ const AgentCard: React.FC<{
 
 // ----------------------------------------------------------------------------
 // Sent Items -- every outbound email an Industry Agent has actually sent,
-// browsable by Industry and by the specific Agent that sent it.
+// browsable by Industry and by the specific Agent that sent it, laid out like
+// a mail client: message list on the left, the full email on the right.
 //
 // Source of truth: AgentAction rows with status "approved". That status is
 // deliberately load-bearing here (see approveAndSendAgentAction in
@@ -1389,12 +1523,64 @@ const AgentCard: React.FC<{
 // industry was renamed), the item is grouped under "Unmatched / Deleted Agent"
 // rather than silently dropped.
 // ----------------------------------------------------------------------------
+// Small helpers for the inbox-style Sent Items view below.
+const AVATAR_COLORS = [
+  "bg-teal-500/20 text-teal-300 border-teal-500/30",
+  "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
+  "bg-amber-500/20 text-amber-300 border-amber-500/30",
+  "bg-rose-500/20 text-rose-300 border-rose-500/30",
+  "bg-sky-500/20 text-sky-300 border-sky-500/30",
+  "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+  "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30",
+];
+
+function avatarFor(seed: string): { initials: string; color: string } {
+  const clean = (seed || "?").trim();
+  const words = clean.replace(/<.*>/, "").split(/\s+/).filter(Boolean);
+  const initials =
+    words.length >= 2 ? (words[0][0] + words[1][0]).toUpperCase() : clean.slice(0, 2).toUpperCase() || "?";
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) hash = (hash * 31 + clean.charCodeAt(i)) >>> 0;
+  return { initials, color: AVATAR_COLORS[hash % AVATAR_COLORS.length] };
+}
+
+// Mail-client style timestamp: time for today, "Yesterday", weekday within
+// the last week, otherwise a short date (with the year once it's not this year).
+function mailTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dayDiff = Math.floor((startOfToday - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86400000);
+  if (dayDiff <= 0) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (dayDiff === 1) return "Yesterday";
+  if (dayDiff < 7) return d.toLocaleDateString([], { weekday: "short" });
+  return d.toLocaleDateString([], d.getFullYear() === now.getFullYear() ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+}
+
+function mailGroupLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "Older";
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dayDiff = Math.floor((startOfToday - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86400000);
+  if (dayDiff <= 0) return "Today";
+  if (dayDiff === 1) return "Yesterday";
+  if (dayDiff < 7) return "Earlier this week";
+  if (dayDiff < 31) return "Earlier this month";
+  return "Older";
+}
+
 const SentItemsPanel: React.FC = () => {
   const { agentActions, industryAgents, setSelectedLeadId } = useCRM() as any;
 
   const [industryFilter, setIndustryFilter] = useState<string>("all");
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Below the lg breakpoint the list and the reading pane can't sit side by
+  // side, so this decides which one is showing (like a phone mail app).
+  const [mobileReading, setMobileReading] = useState(false);
 
   const agentForIndustry = React.useCallback(
     (industry: string): IndustryAgent | undefined => {
@@ -1419,8 +1605,6 @@ const SentItemsPanel: React.FC = () => {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [sent]);
 
-  // Every agent that has actually sent at least one email, plus a synthetic
-  // "unmatched" bucket for items whose industry no longer maps to any agent.
   const agentOptions = React.useMemo(() => {
     const byId = new Map<string, { id: string; label: string }>();
     let hasUnmatched = false;
@@ -1447,135 +1631,263 @@ const SentItemsPanel: React.FC = () => {
         }
       }
       if (q) {
-        const haystack = `${a.subject} ${a.recipientEmail} ${a.recipientName} ${a.industry}`.toLowerCase();
+        const haystack = `${a.subject} ${a.body} ${a.recipientEmail} ${a.recipientName} ${a.industry}`.toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
     });
   }, [sent, industryFilter, agentFilter, search, agentForIndustry]);
 
-  // Per-agent counts, for the summary strip -- computed off the full sent
-  // list (not `filtered`), so the strip stays a stable overview even while
-  // the list below is filtered down.
+  // Per-agent counts double as one-click filters. Computed off the full sent
+  // list (not `filtered`) so the strip stays a stable overview.
   const perAgentCounts = React.useMemo(() => {
-    const counts = new Map<string, { label: string; count: number }>();
+    const counts = new Map<string, { id: string; label: string; count: number }>();
     sent.forEach((a) => {
       const agent = agentForIndustry(a.industry);
       const key = agent ? agent.id : "__unmatched__";
       const label = agent ? agent.industry : "Unmatched / deleted agent";
       const existing = counts.get(key);
       if (existing) existing.count += 1;
-      else counts.set(key, { label, count: 1 });
+      else counts.set(key, { id: key, label, count: 1 });
     });
     return Array.from(counts.values()).sort((a, b) => b.count - a.count);
   }, [sent, agentForIndustry]);
 
-  return (
-    <div className="space-y-4">
-      {sent.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {perAgentCounts.map((c) => (
-            <div
-              key={c.label}
-              className="px-3 py-2 bg-[#181b21] border border-[#2d323f] rounded-xl flex items-center gap-2"
-            >
-              <Mail className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-              <span className="text-xs font-bold text-white">{c.count}</span>
-              <span className="text-[11px] text-slate-400">{c.label}</span>
-            </div>
-          ))}
-        </div>
-      )}
+  // Keep a valid message open on desktop: the first one until the user picks
+  // another, and never one that has been filtered out.
+  const selected = React.useMemo(
+    () => filtered.find((a) => a.id === selectedId) || filtered[0] || null,
+    [filtered, selectedId]
+  );
 
-      <div className="flex flex-col sm:flex-row gap-2">
-        <div className="relative flex-1">
-          <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search subject, recipient..."
-            className="w-full pl-8 pr-3 py-2 bg-[#0f1115] border border-[#2d323f] rounded-lg text-xs text-slate-200 placeholder:text-slate-500"
-          />
-        </div>
-        <select
-          value={industryFilter}
-          onChange={(e) => setIndustryFilter(e.target.value)}
-          className="px-3 py-2 bg-[#0f1115] border border-[#2d323f] rounded-lg text-xs text-slate-200"
+  const grouped = React.useMemo(() => {
+    const groups: { label: string; items: AgentAction[] }[] = [];
+    filtered.forEach((a) => {
+      const label = mailGroupLabel(a.resolvedAt || a.createdAt);
+      const last = groups[groups.length - 1];
+      if (last && last.label === label) last.items.push(a);
+      else groups.push({ label, items: [a] });
+    });
+    return groups;
+  }, [filtered]);
+
+  if (sent.length === 0) {
+    return (
+      <div className="p-10 text-center bg-[#181b21] rounded-2xl border border-[#2d323f] text-slate-400 text-xs space-y-2">
+        <InboxIcon className="w-8 h-8 text-slate-600 mx-auto" />
+        <p className="text-slate-300 font-semibold text-sm">Nothing sent yet</p>
+        <p>Approved follow-ups, replies, and negotiation offers show up here once they have actually gone out.</p>
+      </div>
+    );
+  }
+
+  const openMessage = (id: string) => {
+    setSelectedId(id);
+    setMobileReading(true);
+  };
+
+  const selectedAgent = selected ? agentForIndustry(selected.industry) : undefined;
+  const selectedSentAt = selected ? selected.resolvedAt || selected.createdAt : "";
+  const selectedAvatar = selected ? avatarFor(selected.recipientName || selected.recipientEmail) : null;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setAgentFilter("all")}
+          className={`px-3 py-1.5 rounded-full border text-[11px] font-semibold flex items-center gap-1.5 transition-colors ${
+            agentFilter === "all" ? "bg-teal-500/15 border-teal-500/40 text-teal-200" : "bg-[#181b21] border-[#2d323f] text-slate-400 hover:text-slate-200"
+          }`}
         >
-          <option value="all">All industries</option>
-          {industries.map((ind) => (
-            <option key={ind} value={ind}>
-              {ind}
-            </option>
-          ))}
-        </select>
-        <select
-          value={agentFilter}
-          onChange={(e) => setAgentFilter(e.target.value)}
-          className="px-3 py-2 bg-[#0f1115] border border-[#2d323f] rounded-lg text-xs text-slate-200"
-        >
-          <option value="all">All agents</option>
-          {agentOptions.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.label}
-            </option>
-          ))}
-        </select>
+          All sent
+          <span className="font-bold">{sent.length}</span>
+        </button>
+        {perAgentCounts.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => setAgentFilter(agentFilter === c.id ? "all" : c.id)}
+            className={`px-3 py-1.5 rounded-full border text-[11px] font-semibold flex items-center gap-1.5 transition-colors ${
+              agentFilter === c.id ? "bg-teal-500/15 border-teal-500/40 text-teal-200" : "bg-[#181b21] border-[#2d323f] text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            {c.label}
+            <span className="font-bold">{c.count}</span>
+          </button>
+        ))}
       </div>
 
-      {sent.length === 0 ? (
-        <div className="p-10 text-center bg-[#181b21] rounded-2xl border border-[#2d323f] text-slate-400 text-xs space-y-2">
-          <InboxIcon className="w-8 h-8 text-slate-600 mx-auto" />
-          <p>No agent emails have been sent yet. Approved follow-ups, replies, and negotiation offers will show up here once they go out.</p>
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="p-10 text-center bg-[#181b21] rounded-2xl border border-[#2d323f] text-slate-400 text-xs space-y-2">
-          <Search className="w-8 h-8 text-slate-600 mx-auto" />
-          <p>No sent emails match this filter.</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {filtered.map((a) => {
-            const agent = agentForIndustry(a.industry);
-            const sentAt = a.resolvedAt || a.createdAt;
-            return (
-              <div key={a.id} className="bg-[#181b21] rounded-xl border border-[#2d323f] p-4 space-y-2">
-                <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                  <span className="px-2 py-0.5 rounded-md bg-teal-500/10 border border-teal-500/30 text-teal-300 font-semibold">
-                    {a.industry || "Unknown industry"}
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md bg-[#252a36] border border-[#3d4455] text-slate-300 font-semibold">
-                    {agent ? `${agent.industry} Agent` : "Unmatched / deleted agent"}
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md bg-[#252a36] border border-[#3d4455] text-slate-400 flex items-center gap-1">
-                    {a.actionType === "email_reply" ? <InboxIcon className="w-3 h-3" /> : <Mail className="w-3 h-3" />}
-                    {actionTypeLabel[a.actionType]}
-                  </span>
-                  <span className="ml-auto text-slate-500">{new Date(sentAt).toLocaleString()}</span>
+      <div className="rounded-2xl border border-[#2d323f] bg-[#181b21] overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(300px,390px)_1fr] lg:h-[calc(100vh-330px)] lg:min-h-[480px]">
+          {/* ---- Message list ---- */}
+          <div className={`flex flex-col min-h-0 border-b lg:border-b-0 lg:border-r border-[#2d323f] ${mobileReading ? "hidden lg:flex" : "flex"}`}>
+            <div className="p-2.5 border-b border-[#2d323f] space-y-2 bg-[#121418]">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search sent mail"
+                  className="w-full pl-8 pr-3 py-2 bg-[#0f1115] border border-[#2d323f] rounded-lg text-xs text-slate-200 placeholder:text-slate-500"
+                />
+              </div>
+              <select
+                value={industryFilter}
+                onChange={(e) => setIndustryFilter(e.target.value)}
+                className="w-full px-3 py-1.5 bg-[#0f1115] border border-[#2d323f] rounded-lg text-xs text-slate-200"
+              >
+                <option value="all">All industries</option>
+                {industries.map((ind) => (
+                  <option key={ind} value={ind}>
+                    {ind}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex-1 overflow-y-auto max-h-[70vh] lg:max-h-none">
+              {filtered.length === 0 ? (
+                <div className="p-8 text-center text-slate-500 text-xs space-y-2">
+                  <Search className="w-7 h-7 text-slate-600 mx-auto" />
+                  <p>No sent emails match this filter.</p>
                 </div>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-white truncate">{a.subject}</p>
-                    <p className="text-xs text-slate-400 truncate">
-                      To: {a.recipientName ? `${a.recipientName} <${a.recipientEmail}>` : a.recipientEmail}
-                    </p>
+              ) : (
+                grouped.map((group) => (
+                  <div key={group.label}>
+                    <div className="sticky top-0 z-10 px-3.5 py-1.5 bg-[#121418]/95 backdrop-blur text-[10px] font-bold uppercase tracking-wider text-slate-500 border-b border-[#2d323f]">
+                      {group.label}
+                    </div>
+                    {group.items.map((a) => {
+                      const isSelected = selected?.id === a.id;
+                      const av = avatarFor(a.recipientName || a.recipientEmail);
+                      const snippet = (a.body || "").replace(/\s+/g, " ").trim().slice(0, 110);
+                      return (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => openMessage(a.id)}
+                          className={`w-full text-left flex items-start gap-3 px-3.5 py-3 border-b border-[#2d323f]/70 border-l-2 transition-colors ${
+                            isSelected ? "bg-[#252a36] border-l-teal-400" : "border-l-transparent hover:bg-[#1e222b]"
+                          }`}
+                        >
+                          <div className={`w-9 h-9 rounded-full border flex items-center justify-center text-[11px] font-bold shrink-0 ${av.color}`}>
+                            {av.initials}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span className="text-[13px] font-bold text-white truncate">{a.recipientName || a.recipientEmail}</span>
+                              <span className="text-[10px] text-slate-500 shrink-0">{mailTime(a.resolvedAt || a.createdAt)}</span>
+                            </div>
+                            <div className="text-xs text-slate-200 truncate">{a.subject}</div>
+                            <div className="text-[11px] text-slate-500 truncate">{snippet}</div>
+                            <div className="flex items-center gap-1.5 mt-1.5">
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-teal-500/10 border border-teal-500/25 text-teal-300 truncate max-w-[140px]">
+                                {a.industry || "Unknown industry"}
+                              </span>
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[#252a36] border border-[#3d4455] text-slate-400">
+                                {actionTypeLabel[a.actionType]}
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
-                  {a.leadId && (
-                    <button
-                      onClick={() => setSelectedLeadId(a.leadId)}
-                      className="shrink-0 text-indigo-300 hover:text-indigo-200 font-semibold text-xs flex items-center gap-1"
-                    >
-                      View Lead
-                      <ArrowRight className="w-3 h-3" />
-                    </button>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* ---- Reading pane ---- */}
+          <div className={`flex flex-col min-h-0 ${mobileReading ? "flex" : "hidden lg:flex"}`}>
+            {selected && selectedAvatar ? (
+              <>
+                <div className="p-4 sm:p-5 border-b border-[#2d323f] space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => setMobileReading(false)}
+                    className="lg:hidden flex items-center gap-1 text-xs font-semibold text-slate-400 hover:text-white"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Back to sent mail
+                  </button>
+                  <h2 className="text-base sm:text-lg font-bold text-white leading-snug">{selected.subject}</h2>
+                  <div className="flex items-start gap-3">
+                    <div className={`w-10 h-10 rounded-full border flex items-center justify-center text-xs font-bold shrink-0 ${selectedAvatar.color}`}>
+                      {selectedAvatar.initials}
+                    </div>
+                    <div className="min-w-0 flex-1 text-xs space-y-0.5">
+                      <div className="text-slate-300">
+                        <span className="text-slate-500">From </span>
+                        <span className="font-semibold text-white">{selectedAgent ? `${selectedAgent.industry} Agent` : "Industry Agent"}</span>
+                        {selected.resolvedBy && <span className="text-slate-500"> · approved by {selected.resolvedBy}</span>}
+                      </div>
+                      <div className="text-slate-300 break-words">
+                        <span className="text-slate-500">To </span>
+                        <span className="font-semibold text-white">{selected.recipientName || selected.recipientEmail}</span>
+                        {selected.recipientName && <span className="text-slate-500">{` <${selected.recipientEmail}>`}</span>}
+                      </div>
+                      <div className="text-slate-500">{new Date(selectedSentAt).toLocaleString([], { dateStyle: "full", timeStyle: "short" })}</div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      Delivered
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-teal-500/10 border border-teal-500/30 text-teal-300">
+                      {selected.industry || "Unknown industry"}
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[#252a36] border border-[#3d4455] text-slate-300 flex items-center gap-1">
+                      {selected.actionType === "email_reply" ? <InboxIcon className="w-3 h-3" /> : <Mail className="w-3 h-3" />}
+                      {actionTypeLabel[selected.actionType]}
+                    </span>
+                    {selected.actionType === "negotiation_offer" && selected.proposedDiscountPercent ? (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-300">
+                        {selected.proposedDiscountPercent}% offered
+                      </span>
+                    ) : null}
+                    {selected.leadId && (
+                      <button
+                        onClick={() => setSelectedLeadId(selected.leadId)}
+                        className="ml-auto text-indigo-300 hover:text-indigo-200 font-semibold text-xs flex items-center gap-1"
+                      >
+                        View Lead
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 max-h-[70vh] lg:max-h-none">
+                  <div className="text-[13px] leading-relaxed text-slate-200 whitespace-pre-wrap break-words">{selected.body}</div>
+                  {selected.reasoning && (
+                    <div className="px-3.5 py-3 rounded-xl bg-[#121418] border border-[#2d323f] text-[11px] text-slate-400 leading-relaxed">
+                      <span className="font-bold text-slate-300">Why the agent sent this: </span>
+                      {selected.reasoning}
+                    </div>
+                  )}
+                  {selected.triggerSnippet && (
+                    <div className="px-3.5 py-3 rounded-xl bg-[#121418] border border-[#2d323f] text-[11px] text-slate-400 leading-relaxed">
+                      <span className="font-bold text-slate-300">They had written: </span>
+                      {selected.triggerSnippet}
+                    </div>
                   )}
                 </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center p-10 text-center text-slate-500 text-xs">
+                <div className="space-y-2">
+                  <Mail className="w-8 h-8 text-slate-600 mx-auto" />
+                  <p>Select a message to read it.</p>
+                </div>
               </div>
-            );
-          })}
+            )}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

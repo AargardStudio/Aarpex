@@ -1095,6 +1095,12 @@ async function generatePersonalizedEmailCore(input: {
   senderName?: string;
   senderCompany?: string;
   goal?: string;
+  // One-shot instant-control switches (see IndustryAgent.nextEmailIncludePricing
+  // / nextEmailExtraProblems). productPricing is the linked product's real
+  // price line, when it has one -- the model is told never to invent figures.
+  includePricing?: boolean;
+  extraProblems?: boolean;
+  productPricing?: string;
 }): Promise<{ subject: string; body: string; source: string }> {
   const {
     recipientName,
@@ -1109,6 +1115,9 @@ async function generatePersonalizedEmailCore(input: {
     senderName,
     senderCompany,
     goal,
+    includePricing,
+    extraProblems,
+    productPricing,
   } = input;
 
   const firstName = String(recipientName).split(" ")[0] || "there";
@@ -1140,6 +1149,15 @@ ${agent.customInstructions ? `- Additional instructions: ${agent.customInstructi
       }. Weave its concrete value into the body and the call-to-action.`
     : "";
 
+  const pricingLine = includePricing
+    ? productPricing
+      ? `\n\nInclude pricing in this email. State it plainly and accurately, using ONLY this real pricing: ${productPricing}. Do not offer any discount, and do not invent or alter any figure.`
+      : `\n\nThe sender wants pricing addressed in this email, but no price list is on file. Do NOT invent any figures or ranges. Instead say that pricing is tailored to their situation and offer to send a quick, specific quote.`
+    : "";
+  const extraProblemsLine = extraProblems
+    ? `\n\nGo beyond the pain points listed above: identify 2-3 additional, specific problems that businesses like theirs${recipientIndustry ? ` in ${recipientIndustry}` : ""} commonly face, and discuss them concretely, tying each to how we can help. Do not state made-up facts about the recipient's own company as if you knew them.`
+    : "";
+
   const fallbackSubject = `Quick idea for ${recipientCompany || firstName}`;
   const fallbackBody = `Dear ${firstName},\n\nI wanted to reach out directly given your role${
     recipientJobTitle ? ` as ${recipientJobTitle}` : ""
@@ -1149,10 +1167,10 @@ ${agent.customInstructions ? `- Additional instructions: ${agent.customInstructi
 
   const prompt = `You are an expert B2B sales rep at ${senderCompany || "our company"} writing ONE specific, personalized email to a single named recipient — not a template with merge tags. Write it as if you did real research on them.
 
-Recipient: ${recipientName}${recipientJobTitle ? `, ${recipientJobTitle}` : ""} at ${recipientCompany || "their company"}${recipientIndustry ? ` (industry: ${recipientIndustry})` : ""}.${knowledgeLine}${activityLine}${agentLine}${productLine}
+Recipient: ${recipientName}${recipientJobTitle ? `, ${recipientJobTitle}` : ""} at ${recipientCompany || "their company"}${recipientIndustry ? ` (industry: ${recipientIndustry})` : ""}.${knowledgeLine}${activityLine}${agentLine}${productLine}${pricingLine}${extraProblemsLine}
 ${goal ? `\n\nGoal of this specific email: ${goal}` : ""}
 
-Write a subject line and email body. Reference at least one concrete, specific detail from what we know about them if anything specific was provided above — avoid generic filler. Keep the body under 180 words, end with one clear call-to-action, and sign off with the sender's name and company.
+Write a subject line and email body. Reference at least one concrete, specific detail from what we know about them if anything specific was provided above — avoid generic filler. Keep the body under ${includePricing || extraProblems ? 240 : 180} words, end with one clear call-to-action, and sign off with the sender's name and company.
 
 Return pure JSON only, no markdown fences, in this exact shape:
 { "subject": "...", "body": "..." }`;
@@ -1355,6 +1373,12 @@ app.post("/api/cron/agent-scan", async (req, res) => {
               productPitch: product?.pitch,
               senderCompany: tenant?.company_name || tenant?.name,
               goal: `Send a follow-up -- it's been ${row.follow_up_frequency_days || 7}+ days since last contact with no response.`,
+              includePricing: !!row.next_email_include_pricing,
+              extraProblems: !!row.next_email_extra_problems,
+              productPricing:
+                product && Number(product.price) > 0
+                  ? `${product.currency || "USD"} ${product.price}${product.pricing_model ? ` (${product.pricing_model})` : ""}`
+                  : undefined,
             });
 
             toInsert.push({
@@ -1381,6 +1405,13 @@ app.post("/api/cron/agent-scan", async (req, res) => {
           const { error: insertErr } = await supabase.from("agent_actions").insert(toInsert as any);
           if (insertErr) throw insertErr;
           outcome.draftsCreated += toInsert.length;
+          // The one-shot instant-control switches only ever apply to the very
+          // next batch -- reset them now that a batch has actually been drafted.
+          if (row.next_email_include_pricing || row.next_email_extra_problems) {
+            await (supabase.from("industry_agents") as any)
+              .update({ next_email_include_pricing: false, next_email_extra_problems: false })
+              .eq("id", row.id);
+          }
         }
       } catch (err: any) {
         outcome.errors.push(`agent ${row.id} (${row.industry}): ${err?.message || err}`);

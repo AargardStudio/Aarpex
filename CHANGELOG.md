@@ -13,6 +13,18 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-09-30
+
+### Added
+- **Instant controls on every Industry Agent card**, four one-click buttons:
+  - **Send email now** -- sends every draft waiting in that agent's approval queue immediately (after a confirm showing the count). Goes through the same `approveAndSendAgentAction` path as the Agent Approvals page, so each email is sent one at a time over live SMTP, logged to the lead's timeline, and only marked "approved" if it genuinely went out; failures stay in the queue with the reason noted.
+  - **Create a follow-up email now** -- drafts a follow-up for the agent's eligible leads right now, ignoring the normal follow-up cadence. Drafts land in Agent Approvals; nothing is sent. Capped at 10 leads per click (each is a real AI call) and reports how many more are eligible; leads that already have a pending follow-up are skipped.
+  - **Add pricing in the next email** and **Add more relevant problems and discuss them in the next email** -- one-shot switches that colour the agent's next batch of drafts. Pricing uses only the agent's linked Product price; with no priced product the email offers a tailored quote instead of inventing figures, and no discount is offered. The problems switch asks the AI to raise 2-3 additional, industry-relevant problems beyond the agent's saved pain points. Both reset automatically once a batch has actually been drafted, whether by the browser scan, the server-side scan, "Create a follow-up email now", or a per-lead instant follow-up.
+- New migration `0022_industry_agent_next_email_directives.sql` adds `next_email_include_pricing` / `next_email_extra_problems` to `industry_agents`. Both columns are deliberately nullable (default false): `tenantDataSync` omits undefined keys, so mixed batches write explicit NULLs into missing columns, and a `NOT NULL` column would have stopped the whole table from saving (the failure migration 0017 documents).
+
+### Changed
+- **Sent Items now looks like a mail client.** Message list on the left grouped Today / Yesterday / Earlier this week / Older, with sender avatars, recipient, subject and a body preview; the full email on the right with From / To / date, a Delivered badge, industry and action-type chips, the reason the agent sent it, and a "View Lead" link. Clickable per-agent count chips filter the list, search now also covers the email body, and on phones the list and reading pane swap like a mobile mail app. Same data as before: only emails that actually went out (`approved` actions).
+
 ## [2.5.3] - 2026-09-30
 
 ### Fixed

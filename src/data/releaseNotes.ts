@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.6.0",
+    date: "2026-09-30",
+    headline: "Take Control of Your Agents, Instantly",
+    tagline: "Four one-click controls on every agent, and a Sent Items view that finally feels like an inbox.",
+    highlights: [
+      {
+        title: "Send now, follow up now",
+        description: "Send an agent's waiting emails immediately, or have it draft fresh follow-ups on the spot instead of waiting for its schedule.",
+      },
+      {
+        title: "Steer the next email",
+        description: "Add pricing, or have the agent raise more problems relevant to the business, in the very next email it writes.",
+      },
+      {
+        title: "Sent Items, inbox-style",
+        description: "Browse everything your agents have sent in a familiar mail layout, with the full email one click away and filters by agent.",
+      },
+    ],
+  },
+  {
     version: "2.5.0",
     date: "2026-09-29",
     headline: "Agents Now Work Even When You've Closed the Tab",

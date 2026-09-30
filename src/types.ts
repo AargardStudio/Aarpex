@@ -424,6 +424,12 @@ export interface IndustryAgent {
   // entirely and drafting behaves exactly as it did before this existed.
   agentNature?: AgentNature;
   personalityType?: MBTIType;
+  // One-shot "instant control" switches, armed from the agent card and
+  // consumed (reset to false) the moment this agent drafts its next batch of
+  // emails -- so each only ever affects the very next batch. Optional/absent
+  // means off, identical to false.
+  nextEmailIncludePricing?: boolean;
+  nextEmailExtraProblems?: boolean;
   // Follow-up cadence & channel defaults
   preferredChannel: PreferredOutreachChannel;
   followUpFrequencyDays: number;
