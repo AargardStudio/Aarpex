@@ -143,7 +143,7 @@ const CRMMainContent: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#0f1115] font-sans text-slate-100 antialiased">
+    <div className="flex h-dvh w-screen overflow-hidden bg-[#0f1115] font-sans text-slate-100 antialiased">
       {/* Structural Navigation Sidebar */}
       <Sidebar />
 
@@ -153,7 +153,7 @@ const CRMMainContent: React.FC = () => {
         <Header />
 
         {/* Scrollable View Canvas */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6 bg-[#0f1115] custom-scrollbar flex flex-col justify-between">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-6 bg-[#0f1115] custom-scrollbar flex flex-col justify-between">
           <div className="mx-auto max-w-7xl w-full flex-1">
             {renderActiveView()}
           </div>

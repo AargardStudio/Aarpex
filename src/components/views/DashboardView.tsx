@@ -209,7 +209,7 @@ export const DashboardView: React.FC = () => {
   }, []);
 
   return (
-    <div id="dashboard-view" className="space-y-4 sm:space-y-6 animate-in fade-in duration-200 text-slate-100">
+    <div id="dashboard-view" className="flex flex-col gap-4 sm:gap-6 animate-in fade-in duration-200 text-slate-100">
       {/* Getting Started -- very simple, ordered checklist for brand-new
           users. Dismissible (remembered per browser); reappears for anyone
           who hasn't dismissed it yet, regardless of how much data already
@@ -325,7 +325,7 @@ export const DashboardView: React.FC = () => {
                 Live Briefing • 8:00 AM
               </span>
             </div>
-            <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-white flex flex-wrap items-center gap-2">
+            <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-white">
               Good morning, <span className="text-teal-300">{currentUser.name}</span>.
             </h2>
             <p className="text-slate-300 text-xs max-w-2xl leading-relaxed">
@@ -369,8 +369,10 @@ export const DashboardView: React.FC = () => {
         )}
       </div>
 
-      {/* What's New in AarPex (log book) + CEO Notes, side by side */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+      {/* What's New in AarPex (log book) + CEO Notes, side by side. On phones
+          and tablets it moves to the bottom so the numbers and the approvals
+          waiting on you come first. */}
+      <div className="order-last lg:order-none grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
       <div className="lg:col-span-2 bg-[#181b21] rounded-2xl p-4 sm:p-5 border border-[#2d323f] shadow-lg text-white space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2.5">
@@ -489,11 +491,11 @@ export const DashboardView: React.FC = () => {
                     <div className="text-slate-400 text-[11px] truncate mt-0.5">{act.subject}</div>
                     <div className="text-slate-500 text-[10px] mt-1 leading-snug">{act.reasoning}</div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-2.5 sm:gap-1.5 shrink-0">
                     <button
                       onClick={() => approveAndSendAgentAction(act.id)}
                       title="Approve & Send"
-                      className="p-1.5 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/40 text-teal-300 transition-colors"
+                      className="p-2.5 sm:p-1.5 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/40 text-teal-300 transition-colors"
                     >
                       <Check className="w-3.5 h-3.5" />
                     </button>
@@ -504,7 +506,7 @@ export const DashboardView: React.FC = () => {
                         }
                       }}
                       title="Reject"
-                      className="p-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 transition-colors"
+                      className="p-2.5 sm:p-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 transition-colors"
                     >
                       <XIcon className="w-3.5 h-3.5" />
                     </button>
@@ -648,7 +650,7 @@ export const DashboardView: React.FC = () => {
                 Tracking monthly billing velocity and payment realization
               </p>
             </div>
-            <span className="text-xs text-teal-400 font-mono font-medium">2026 H1</span>
+            <span className="text-xs text-teal-400 font-mono font-medium whitespace-nowrap shrink-0 ml-2">2026 H1</span>
           </div>
 
           <div className="h-64 w-full">

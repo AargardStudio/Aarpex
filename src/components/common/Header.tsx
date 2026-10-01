@@ -130,7 +130,7 @@ export const Header: React.FC = () => {
         <h1 className="text-base sm:text-xl font-bold text-white tracking-tight truncate">
           {activeNav}
         </h1>
-        <span className="text-xs text-teal-400 font-medium hidden sm:inline-block">
+        <span className="text-xs text-teal-400 font-medium hidden xl:inline-block">
           / Overview & Management
         </span>
       </div>
@@ -138,7 +138,7 @@ export const Header: React.FC = () => {
       {/* Center Search Bar with Smart AI Integration -- hidden on phone/tablet,
           replaced there by the icon button below that reveals a full-width
           search row under the header instead. */}
-      <div className="flex-1 max-w-md mx-6 relative hidden md:block">
+      <div className="flex-1 max-w-md mx-6 relative hidden lg:block">
         <div className="relative">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -243,7 +243,7 @@ export const Header: React.FC = () => {
             rendered below the header on phone/tablet. */}
         <button
           onClick={() => setIsMobileSearchOpen((v) => !v)}
-          className="md:hidden p-2 rounded-lg bg-[#181b21] hover:bg-[#222630] border border-[#2d323f] text-slate-300 hover:text-white transition-colors"
+          className="lg:hidden p-2 rounded-lg bg-[#181b21] hover:bg-[#222630] border border-[#2d323f] text-slate-300 hover:text-white transition-colors"
           title="Search"
         >
           <Search className="w-4 h-4" />
@@ -511,7 +511,7 @@ export const Header: React.FC = () => {
     {/* Mobile/tablet search row -- revealed by the search icon button above.
         Reuses the same AI-search behavior as the desktop bar. */}
     {isMobileSearchOpen && (
-      <div className="md:hidden bg-[#121418] border-b border-[#282d39] px-3 py-2.5 sticky top-14 z-20">
+      <div className="lg:hidden bg-[#121418] border-b border-[#282d39] px-3 py-2.5 sticky top-14 z-20">
         <div className="relative">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input

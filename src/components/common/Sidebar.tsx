@@ -157,7 +157,7 @@ export const Sidebar: React.FC = () => {
 
       <aside
         id="crm-sidebar"
-        className={`w-64 bg-[#121418] border-r border-[#282d39] flex flex-col h-screen shrink-0 select-none text-slate-300 fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-in-out lg:static lg:z-auto lg:translate-x-0 ${
+        className={`w-64 bg-[#121418] border-r border-[#282d39] flex flex-col h-dvh shrink-0 select-none text-slate-300 fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-in-out lg:static lg:z-auto lg:translate-x-0 ${
           isMobileSidebarOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
         }`}
       >

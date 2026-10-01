@@ -13,6 +13,16 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.8.1] - 2026-10-01
+
+### Changed
+- **Dashboard optimised for phones and tablets** (checked at 320, 375, 768 and 1024 px wide).
+  - On phones and tablets the numbers and the Agent Approvals waiting on you now come first; "What's New" and CEO Notes move to the bottom (desktop order unchanged).
+  - Header: the search box and the "/ Overview & Management" label no longer get squeezed on tablets. Search is a button until large screens, and the label shows only on extra-large ones.
+  - Agent Approvals approve/reject buttons are larger with more space between them on touch screens, so a tap is less likely to hit the wrong one.
+  - The greeting no longer leaves a stray full stop on its own line, and the "2026 H1" chart label no longer wraps.
+  - App height now uses the dynamic viewport (`h-dvh`) so the bottom of the page is not hidden behind the mobile browser's address bar, and the page respects the iPhone safe area (`viewport-fit=cover`).
+
 ## [2.8.0] - 2026-10-01
 
 ### Added
