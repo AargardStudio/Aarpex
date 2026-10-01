@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.8.0",
+    date: "2026-10-01",
+    headline: "Know Every Lead's Business Before You Write a Word",
+    tagline: "The Aargard Business Intelligence Construct now audits each lead's website, and you decide what it looks for.",
+    highlights: [
+      {
+        title: "ABIC business audit",
+        description: "Reads a lead's own website, verifies what they actually sell, then scores the business and ranks the lead A to D, with the best way to sell to them. Anything it can't see is marked Unknown, never guessed.",
+      },
+      {
+        title: "Customize what it checks",
+        description: "Ask your own questions (\"Do they sell honey?\") and set a focus per industry. Answers come strictly from the website: Yes, No or Unclear, with the evidence.",
+      },
+      {
+        title: "Emails built on the audit",
+        description: "Agents automatically audit new leads and write follow-ups around each lead's primary sales angle. Nothing is sent without your approval.",
+      },
+    ],
+  },
+  {
     version: "2.7.0",
     date: "2026-10-01",
     headline: "Agents That Learn From Every Reply",

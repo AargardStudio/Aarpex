@@ -1,3 +1,4 @@
+import { AbicAuditPanel } from "./AbicAuditPanel";
 import React, { useState } from "react";
 import { useCRM } from "../../context/CRMContext";
 import {
@@ -1478,6 +1479,7 @@ export const LeadProfileDrawer: React.FC = () => {
 
           {activeTab === "ai" && (
             <div className="space-y-4">
+              <AbicAuditPanel lead={lead} />
               <div className="p-5 bg-[#181b21] text-white rounded-2xl border border-[#2d323f] shadow-xl space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="space-y-1">

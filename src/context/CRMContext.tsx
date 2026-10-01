@@ -65,6 +65,7 @@ import {
 import { defaultTenants } from "../data/tenantData";
 import { PLATFORM_PLAN, PLATFORM_TRIAL_DAYS, FOUNDER_EMAIL } from "../data/subscriptionPlans";
 import { apiFetch } from "../lib/apiClient";
+import { abicAuditDue, abicLeadPatch, callAbicAudit, upsertAbicKnowledge, parseAbicSnapshot } from "../lib/abic";
 import { normalizeIndustry } from "../lib/industryMatch";
 
 // Local key for an in-progress "add another workspace" request (from
@@ -347,6 +348,12 @@ interface CRMContextType {
   //   returns how many leads changed. Taking charge also withdraws that
   //   lead's unsent AI drafts.
   setLeadOperatorControl: (leadId: string, inControl: boolean) => void;
+  // runAbicAudit: runs the (customisable) ABIC website audit for one lead and
+  //   stores the result on the lead + in its own knowledge entry.
+  runAbicAudit: (
+    leadId: string,
+    options?: { extraChecks?: string[]; focus?: string }
+  ) => Promise<{ status: "ok" | "insufficient_data" | "ai_unavailable"; message?: string }>;
   setAgentOperatorControl: (agentId: string, inControl: boolean) => { changed: number; withdrawn: number };
   resolveAgentAction: (id: string, status: AgentActionStatus, updates?: Partial<AgentAction>) => void;
   deleteAgentAction: (id: string) => void;
@@ -834,6 +841,20 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
 
       const newActions: Omit<AgentAction, "id" | "createdAt" | "status">[] = [];
+      // ABIC audit text produced during THIS pass (state hasn't re-rendered
+      // yet, so drafts need it handed over directly).
+      const abicTextByLead = new Map<string, string>();
+      // Everything we know about one lead, handed to the email drafter so
+      // follow-ups are specific rather than generic.
+      const knowledgeFor = (leadId: string): string[] => {
+        const entries = curKnowledge
+          .filter((k) => (k.linkedLeadIds || []).includes(leadId) && !(abicTextByLead.has(leadId) && k.tags.includes("ABIC-Audit")))
+          .slice(0, 6)
+          .map((k) => `${k.title}: ${k.content.slice(0, 1800)}`);
+        const fresh = abicTextByLead.get(leadId);
+        if (fresh) entries.unshift(fresh);
+        return entries;
+      };
       // Reply learning (see the reply block below): what each new inbound
       // reply taught us, leads whose reply the operator must handle
       // personally (Take Charge), and addresses whose older unsent reply
@@ -856,6 +877,29 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // manually-built Email Marketing campaign gets from its own
         // Product/Service picker.
         const agentProduct = agent.productId ? curProducts.find((prod) => prod.id === agent.productId) : undefined;
+
+        // ABIC audits -- research the lead's own website (never audited, or
+        // last audited 30+ days ago), a couple per agent per pass so a scan
+        // stays quick. The result lands on the lead, in its own knowledge,
+        // and is used by the drafts below in this same pass.
+        const auditCandidates = curLeads
+          .filter(
+            (l) =>
+              normalizeIndustry(l.industry) === industryLc &&
+              !(agent.excludedLeadIds || []).includes(l.id) &&
+              !abicTextByLead.has(l.id) &&
+              abicAuditDue(l)
+          )
+          .slice(0, 2);
+        for (const lead of auditCandidates) {
+          const result = await callAbicAudit(lead, { checks: agent.auditChecks, focus: agent.auditFocus });
+          const patch = abicLeadPatch(result);
+          setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, ...patch } : l)));
+          if (result.status === "ok" && result.knowledgeText) {
+            abicTextByLead.set(lead.id, result.knowledgeText);
+            setKnowledgeBase((prev) => upsertAbicKnowledge(prev, lead, result.knowledgeText!));
+          }
+        }
 
         // Follow-up due: leads
         const dueLeads = curLeads.filter((l) => {
@@ -922,6 +966,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 recipientCompany: lead.company,
                 recipientJobTitle: lead.jobTitle,
                 recipientIndustry: lead.industry,
+                knowledgeEntries: knowledgeFor(lead.id),
                 activities: leadActs,
                 agent,
                 productName: agentProduct?.name,
@@ -1042,9 +1087,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 // 3) Otherwise draft a tailored reply using what we now know
                 //    -- queued for one-click approval, never auto-sent.
                 const leadKnowledge = [
-                  ...curKnowledge
-                    .filter((k) => (k.linkedLeadIds || []).includes(record.id))
-                    .map((k) => `${k.title}: ${k.content}`),
+                  ...knowledgeFor(record.id),
                   `Latest reply (${reply.date.slice(0, 10)}): ${analysis.note}`,
                 ];
                 try {
@@ -2965,6 +3008,34 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  const runAbicAudit = async (
+    leadId: string,
+    options?: { extraChecks?: string[]; focus?: string }
+  ): Promise<{ status: "ok" | "insufficient_data" | "ai_unavailable"; message?: string }> => {
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead) return { status: "ai_unavailable", message: "Lead not found." };
+    const agent = getAgentForIndustry(lead.industry);
+    const checks = Array.from(new Set([...(agent?.auditChecks || []), ...(options?.extraChecks || [])]));
+    const focus = [agent?.auditFocus, options?.focus].filter(Boolean).join(". ");
+    const result = await callAbicAudit(lead, { checks, focus: focus || undefined });
+    const patch = abicLeadPatch(result);
+    updateLead(leadId, patch);
+    if (result.status === "ok" && result.knowledgeText) {
+      setKnowledgeBase((prev) => upsertAbicKnowledge(prev, lead, result.knowledgeText!));
+      addActivity({
+        type: "Note",
+        leadId,
+        date: new Date().toISOString().split("T")[0],
+        time: new Date().toTimeString().slice(0, 5),
+        user: currentUser?.name || "Operator",
+        description: `ABIC audit run on ${lead.name}'s website — score ${result.snapshot?.overallScore ?? "n/a"}/100, priority ${result.snapshot?.leadPriority ?? "n/a"}.`,
+        outcome: "Audit saved to knowledge",
+        nextAction: result.snapshot?.primarySalesAngle || "",
+      });
+    }
+    return { status: result.status, message: result.message };
+  };
+
   const setAgentOperatorControl = (agentId: string, inControl: boolean): { changed: number; withdrawn: number } => {
     const agent = industryAgents.find((a) => a.id === agentId);
     if (!agent) return { changed: 0, withdrawn: 0 };
@@ -3567,6 +3638,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAgentNextEmailDirective,
         setLeadOperatorControl,
         setAgentOperatorControl,
+        runAbicAudit,
         resolveAgentAction,
         deleteAgentAction,
         approveAndSendAgentAction,

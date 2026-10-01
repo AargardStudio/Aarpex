@@ -213,6 +213,13 @@ export interface Lead {
   // Identifier of the last inbound reply the agent already learned from, so
   // the same email is never processed twice.
   lastReplyKey?: string;
+  // ABIC audit (Aargard Business Intelligence Construct) -- see
+  // src/lib/abic.ts. abicSnapshot is the structured result as JSON text.
+  abicAuditedAt?: string;
+  abicScore?: number;
+  abicOpportunityScore?: number;
+  abicPriority?: "A" | "B" | "C" | "D";
+  abicSnapshot?: string;
 }
 
 // ----------------------------------------------------------------------------
@@ -436,6 +443,10 @@ export interface IndustryAgent {
   // means off, identical to false.
   nextEmailIncludePricing?: boolean;
   nextEmailExtraProblems?: boolean;
+  // Customisable ABIC audit: free-text focus plus yes/no questions answered
+  // from each lead's website (e.g. "Do they sell honey?").
+  auditFocus?: string;
+  auditChecks?: string[];
   // Follow-up cadence & channel defaults
   preferredChannel: PreferredOutreachChannel;
   followUpFrequencyDays: number;

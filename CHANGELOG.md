@@ -13,6 +13,16 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-10-01
+
+### Added
+- **ABIC Business Audit (Snapshot).** New `POST /api/ai/abic-audit` reads a lead's own website (home page plus up to three key inner pages, SSRF-guarded), extracts observable signals (HTTPS, mobile viewport, structured data, FAQ, forms, WhatsApp/chat/analytics, privacy/terms, CMS hints, social links), and applies the Aargard Business Intelligence Construct: business-model verification first, strategy, per-category scores, overall ABIC score, cluster, Aargard Opportunity Score, Lead Priority A–D, primary/secondary sales angle, best entry/expansion service, strengths, gaps, top opportunities and an explicit "unknown" list. Every finding carries an evidence tag (Verified / Strong inference / Hypothesis / Unknown); unreadable sites return "insufficient data" rather than a guess. Social profiles are not scraped.
+- **Customizable audits.** Each Industry Agent can carry an audit focus and up to 8 yes/no questions (e.g. "Do they sell honey?") answered strictly from the website as YES / NO / UNCLEAR with evidence. A lead's audit panel also accepts one-off questions and a one-off focus per run.
+- **Lead panel:** new "ABIC Business Audit" card in the lead's AI tab. Results are saved to the lead (`abicScore`, `abicOpportunityScore`, `abicPriority`, `abicSnapshot`) and to a lead-scoped, editable "ABIC Audit" knowledge entry (tags `AI-Generated`, `ABIC-Audit`).
+- **Automatic audits.** The agent scan (browser) and the daily cron audit leads that have a website and were never audited or last audited 30+ days ago (2 per agent per browser pass; 2 per cron run).
+- **Emails use the audit.** Follow-up, reply and cron drafts now receive everything linked to the lead (previously follow-ups received none) and, when an ABIC audit exists, are told to build around its primary sales angle, mention only Verified/Strong-inference gaps, and never reveal scores or priority.
+- Migrations `0024_lead_abic_audit.sql` (leads: `abic_*`, nullable) and `0025_industry_agent_audit_custom.sql` (industry_agents: `audit_focus`, `audit_checks`, nullable).
+
 ## [2.7.0] - 2026-10-01
 
 ### Added

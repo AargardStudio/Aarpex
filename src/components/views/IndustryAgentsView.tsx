@@ -94,6 +94,8 @@ const emptyDraft = (): Omit<IndustryAgent, "id" | "createdAt" | "updatedAt" | "c
   painPoints: [],
   objectionNotes: "",
   customInstructions: "",
+  auditFocus: "",
+  auditChecks: [],
   agentNature: undefined,
   personalityType: undefined,
   qualificationGuidance: "",
@@ -202,6 +204,8 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
           painPoints: editing.painPoints,
           objectionNotes: editing.objectionNotes || "",
           customInstructions: editing.customInstructions || "",
+          auditFocus: editing.auditFocus || "",
+          auditChecks: editing.auditChecks || [],
           agentNature: editing.agentNature,
           personalityType: editing.personalityType,
           qualificationGuidance: editing.qualificationGuidance || "",
@@ -372,7 +376,11 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
       // elsewhere) never makes it into the saved record at all. See
       // sanitizeIndustryText() in industryMatch.ts for why this matters
       // beyond what normalizeIndustry() already protects.
-      const cleanDraft = { ...draft, industry: sanitizeIndustryText(draft.industry) };
+      const cleanDraft = {
+        ...draft,
+        industry: sanitizeIndustryText(draft.industry),
+        auditChecks: (draft.auditChecks || []).map((c) => c.trim()).filter(Boolean).slice(0, 8),
+      };
       if (editing) {
         updateIndustryAgent(editing.id, cleanDraft);
       } else {
@@ -929,6 +937,33 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
                 placeholder='e.g. "Always mention our 24/7 support", "never discuss pricing before qualifying budget", "keep emails under 100 words"'
                 className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg resize-none focus:outline-none focus:border-teal-400"
               />
+            </div>
+            <div className="p-3 bg-[#12151a] border border-[#2d323f] rounded-xl space-y-2.5">
+              <div className="text-slate-200 font-bold flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5 text-teal-400" /> Customize the ABIC audit for this industry
+              </div>
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">What matters to you (optional focus)</label>
+                <textarea
+                  rows={2}
+                  value={draft.auditFocus || ""}
+                  onChange={(e) => setDraft((p) => ({ ...p, auditFocus: e.target.value }))}
+                  placeholder='e.g. "We sell packaging to honey producers -- prioritise businesses that bottle and sell their own honey"'
+                  className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg resize-none focus:outline-none focus:border-teal-400"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1">Questions to answer from each lead's website (one per line, max 8)</label>
+                <textarea
+                  rows={3}
+                  value={(draft.auditChecks || []).join("\n")}
+                  onChange={(e) => setDraft((p) => ({ ...p, auditChecks: e.target.value.split("\n").slice(0, 8) }))}
+                  onBlur={() => setDraft((p) => ({ ...p, auditChecks: (p.auditChecks || []).map((c) => c.trim()).filter(Boolean) }))}
+                  placeholder={"Do they sell honey?\nDo they sell online?\nDo they ship internationally?"}
+                  className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg resize-none focus:outline-none focus:border-teal-400"
+                />
+                <p className="text-[10.5px] text-slate-500 mt-1">Each audit answers these YES / NO / UNCLEAR strictly from what the website shows, and the answers guide the agent's emails.</p>
+              </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
