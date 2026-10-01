@@ -13,6 +13,18 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-10-01
+
+### Added
+- **Agents learn from every reply.** The agent scan now reads the actual text of each new inbound reply (new `POST /api/webmail/fetch-replies`, de-quoted via `mailparser`), has the AI distil it (new `POST /api/ai/analyze-reply`) and appends a dated note to that lead's own "Reply Log" knowledge entry (tags `AI-Generated`, `Reply-Learned`; lead-scoped via `linkedLeadIds`, never industry-wide). A timeline Email activity is logged and the lead's `lastContact` updated.
+- **Reply drafts respond to what was said.** `email_reply` drafts now receive the reply text, the AI's read of it and all knowledge linked to the lead, and are queued in Agent Approvals for one-click approval (never auto-sent). A newer reply supersedes a stale unsent reply draft.
+- **Take Charge.** New per-lead button in the lead drawer and a bulk "Take Charge of all leads" button on each agent card. Leads under operator control are skipped by every follow-up path (browser scan, server cron scan, instant follow-ups); unsent AI drafts are withdrawn when control is taken; replies still update knowledge but create a High-priority task plus a desktop notification instead of a draft. Hand control back at any time.
+- Migration `0023_lead_take_charge.sql` adds nullable `leads.operator_in_control` and `leads.last_reply_key`.
+
+### Changed
+- Reply detection no longer re-drafts the same email: the last processed message id is stored per lead (`lastReplyKey`).
+- New dependency: `mailparser` (+ `@types/mailparser`).
+
 ## [2.6.1] - 2026-09-30
 
 ### Changed

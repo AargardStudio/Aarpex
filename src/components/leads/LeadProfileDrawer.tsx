@@ -34,6 +34,7 @@ import {
   Receipt,
   ListChecks,
   Bot,
+  Hand,
   ShieldCheck,
   Trash2,
   Zap,
@@ -97,6 +98,7 @@ export const LeadProfileDrawer: React.FC = () => {
     getAgentForIndustry,
     products,
     addAgentAction,
+    setLeadOperatorControl,
     draftInstantFollowUp,
     deals,
     pipelines,
@@ -543,6 +545,11 @@ export const LeadProfileDrawer: React.FC = () => {
                     <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
                       {lead.status}
                     </span>
+                    {lead.operatorInControl && (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+                        <Hand className="w-2.5 h-2.5" /> You're in charge
+                      </span>
+                    )}
                     <button
                       onClick={handleStartEditProfile}
                       className="text-slate-400 hover:text-indigo-600 p-1 rounded hover:bg-slate-200/60 transition-colors"
@@ -1094,7 +1101,35 @@ export const LeadProfileDrawer: React.FC = () => {
                   <p className="text-slate-400">No matching Industry Agent is currently active for this lead's industry.</p>
                 )}
 
-                {agent && (
+                {/* Take Charge -- silences the AI for this lead; operator replies personally */}
+                <div
+                  className={`p-3 rounded-lg border space-y-2 ${
+                    lead.operatorInControl ? "bg-amber-50 border-amber-200" : "bg-slate-50/70 border-slate-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
+                    <Hand className={`w-3.5 h-3.5 ${lead.operatorInControl ? "text-amber-600" : "text-slate-400"}`} />
+                    {lead.operatorInControl ? "You're in charge of this lead" : "AI is handling replies for this lead"}
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    {lead.operatorInControl
+                      ? "The AI won't draft or send anything here. When they write back you get a task and a notification, and the reply is still summarised into their knowledge."
+                      : "Take charge to stop the AI drafting follow-ups and replies for this lead. You'll only be notified, and you talk to them yourself."}
+                  </p>
+                  <button
+                    onClick={() => setLeadOperatorControl(lead.id, !lead.operatorInControl)}
+                    className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold ${
+                      lead.operatorInControl
+                        ? "bg-white hover:bg-slate-50 text-slate-700 border border-slate-300"
+                        : "bg-amber-500 hover:bg-amber-400 text-white"
+                    }`}
+                  >
+                    <Hand className="w-3.5 h-3.5" />
+                    {lead.operatorInControl ? "Hand back to AI" : "Take Charge"}
+                  </button>
+                </div>
+
+                {agent && !lead.operatorInControl && (
                   <div className="space-y-1.5">
                     <button
                       onClick={handleInstantFollowUp}

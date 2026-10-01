@@ -23,6 +23,26 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.7.0",
+    date: "2026-10-01",
+    headline: "Agents That Learn From Every Reply",
+    tagline: "Every reply teaches the agent about that lead, and you can take the wheel whenever you want.",
+    highlights: [
+      {
+        title: "Learns from every reply",
+        description: "When a prospect writes back, the agent reads it and adds what it learned (needs, objections, timing) to that lead's own knowledge. Visible, editable, never shared across leads.",
+      },
+      {
+        title: "Replies that answer what they said",
+        description: "The agent drafts a response to what the prospect actually wrote, using everything it knows about them. It waits in Agent Approvals for one click. Nothing is sent without you.",
+      },
+      {
+        title: "Take Charge",
+        description: "Silence the AI for one lead, or every lead under an agent. You get a task and a notification when they reply, and you talk to them yourself. Hand control back any time.",
+      },
+    ],
+  },
+  {
     version: "2.6.0",
     date: "2026-09-30",
     headline: "Take Control of Your Agents, Instantly",

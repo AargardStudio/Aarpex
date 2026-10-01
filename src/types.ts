@@ -207,6 +207,12 @@ export interface Lead {
   tags: string[];
   notes: string;
   convertedDealId?: string;
+  // "Take Charge": when true the operator handles this lead personally --
+  // Industry Agents stop drafting follow-ups/replies for it and only notify.
+  operatorInControl?: boolean;
+  // Identifier of the last inbound reply the agent already learned from, so
+  // the same email is never processed twice.
+  lastReplyKey?: string;
 }
 
 // ----------------------------------------------------------------------------

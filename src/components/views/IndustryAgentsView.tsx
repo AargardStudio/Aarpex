@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useCRM } from "../../context/CRMContext";
 import {
   BookMarked,
+  Hand,
   Plus,
   X,
   Trash2,
@@ -1186,7 +1187,7 @@ const AgentCard: React.FC<{
   selected: boolean;
   onToggleSelected: () => void;
 }> = ({ agent, onEdit, selected, onToggleSelected }) => {
-  const { deleteIndustryAgent, updateIndustryAgent, leads, rawCompanies, products, agentActions, lastAgentScanAt, isAgentScanRunning, runAgentScanNow, setActiveNav, draftAgentFollowUpsNow, sendAgentDraftsNow, setAgentNextEmailDirective } = useCRM() as any;
+  const { deleteIndustryAgent, updateIndustryAgent, leads, rawCompanies, products, agentActions, lastAgentScanAt, isAgentScanRunning, runAgentScanNow, setActiveNav, draftAgentFollowUpsNow, sendAgentDraftsNow, setAgentNextEmailDirective, setAgentOperatorControl } = useCRM() as any;
   const [isRunningNow, setIsRunningNow] = useState(false);
   // Which instant-control button is mid-flight ("send" | "followup"), plus a
   // short result line shown under the buttons (cleared on the next click).
@@ -1202,6 +1203,23 @@ const AgentCard: React.FC<{
   const pendingCount = ((agentActions || []) as AgentAction[]).filter(
     (a) => a.industry === agent.industry && a.status === "pending"
   ).length;
+  const operatorLeadCount = leads.filter((l: any) => normalizeIndustry(l.industry) === industryLc && l.operatorInControl).length;
+  const handleBulkTakeCharge = () => {
+    if (operatorLeadCount === 0) {
+      const ok = window.confirm(
+        `Take charge of all ${matchingLeadCount} ${agent.industry} leads?\n\nThe AI will stop drafting follow-ups and replies for them and only notify you. Any unsent AI drafts for these leads are withdrawn. You can hand any lead (or all of them) back at any time.`
+      );
+      if (!ok) return;
+      const r = setAgentOperatorControl(agent.id, true);
+      setInstantNotice({
+        tone: "ok",
+        text: r.changed === 0 ? "No leads to take over." : `You're in charge of ${r.changed} lead${r.changed === 1 ? "" : "s"}.${r.withdrawn ? ` ${r.withdrawn} unsent draft${r.withdrawn === 1 ? "" : "s"} withdrawn.` : ""}`,
+      });
+    } else {
+      const r = setAgentOperatorControl(agent.id, false);
+      setInstantNotice({ tone: "ok", text: `Handed ${r.changed} lead${r.changed === 1 ? "" : "s"} back to the agent.` });
+    }
+  };
 
   const monitoringState: "off" | "checking" | "browser" | "not_yet" = !agent.autoRunEnabled || !agent.isActive
     ? "off"
@@ -1476,6 +1494,22 @@ const AgentCard: React.FC<{
             </span>
           </button>
         </div>
+        <button
+          type="button"
+          onClick={handleBulkTakeCharge}
+          disabled={matchingLeadCount === 0}
+          title={operatorLeadCount > 0 ? "Hand every lead under this agent back to the AI" : "Stop the AI replying to every lead under this agent -- you'll only be notified"}
+          className={`w-full px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+            operatorLeadCount > 0
+              ? "bg-amber-500/15 border-amber-500/40 text-amber-200 hover:bg-amber-500/25"
+              : "bg-[#252a36] hover:bg-[#2f3544] border-[#3d4455] text-slate-100"
+          }`}
+        >
+          <Hand className="w-3.5 h-3.5 text-amber-400" />
+          {operatorLeadCount > 0
+            ? `You're in charge of ${operatorLeadCount} lead${operatorLeadCount === 1 ? "" : "s"} -- hand back to AI`
+            : "Take Charge of all leads (AI only notifies)"}
+        </button>
         {instantNotice && (
           <div
             className={`px-3 py-2 rounded-lg text-[11px] border ${

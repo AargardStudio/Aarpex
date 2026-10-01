@@ -341,6 +341,13 @@ interface CRMContextType {
     agentId: string,
     patch: { includePricing?: boolean; extraProblems?: boolean }
   ) => void;
+  // Take Charge: setLeadOperatorControl silences the AI for one lead (it only
+  //   notifies; the operator replies personally) or hands it back.
+  //   setAgentOperatorControl does the same for every lead under one agent and
+  //   returns how many leads changed. Taking charge also withdraws that
+  //   lead's unsent AI drafts.
+  setLeadOperatorControl: (leadId: string, inControl: boolean) => void;
+  setAgentOperatorControl: (agentId: string, inControl: boolean) => { changed: number; withdrawn: number };
   resolveAgentAction: (id: string, status: AgentActionStatus, updates?: Partial<AgentAction>) => void;
   deleteAgentAction: (id: string) => void;
   approveAndSendAgentAction: (id: string, overrides?: { subject?: string; body?: string }) => Promise<boolean>;
@@ -827,6 +834,19 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
 
       const newActions: Omit<AgentAction, "id" | "createdAt" | "status">[] = [];
+      // Reply learning (see the reply block below): what each new inbound
+      // reply taught us, leads whose reply the operator must handle
+      // personally (Take Charge), and addresses whose older unsent reply
+      // draft is now stale.
+      const replyLearnings: Array<{
+        lead: Lead;
+        analysis: { note: string; sentiment?: string; intent?: string; nextStep?: string };
+        subject: string;
+        date: string;
+        key: string;
+      }> = [];
+      const operatorAlerts: Array<{ lead: Lead; subject: string; intent?: string }> = [];
+      const supersedeReplyDraftFor: string[] = [];
 
       for (const agent of autoAgents) {
         const industryLc = normalizeIndustry(agent.industry);
@@ -841,6 +861,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const dueLeads = curLeads.filter((l) => {
           if (normalizeIndustry(l.industry) !== industryLc) return false;
           if ((agent.excludedLeadIds || []).includes(l.id)) return false;
+          if (l.operatorInControl) return false; // Take Charge: operator handles this lead
           if (!l.email) return false;
           if (l.status === "Converted" || l.status === "Lost") return false;
           const reference = l.lastContact ? new Date(l.lastContact).getTime() : new Date(l.createdDate || 0).getTime();
@@ -954,7 +975,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           if (addressToRecord.size > 0) {
             try {
-              const res = await apiFetch("/api/webmail/check-replies", {
+              const knownKeys: Record<string, string> = {};
+              candidateLeads.forEach((l) => {
+                if (l.lastReplyKey) knownKeys[l.email.toLowerCase()] = l.lastReplyKey;
+              });
+              const res = await apiFetch("/api/webmail/fetch-replies", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -964,32 +989,85 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   imapPort: mailCfg.imapPort,
                   imapEncryption: mailCfg.imapEncryption,
                   addresses: Array.from(addressToRecord.keys()),
+                  knownKeys,
                 }),
               });
               const data = await res.json();
-              const dayMs = 86400000;
-              for (const address of data.repliedEmails || []) {
-                if (hasPendingOrRecent(address, "email_reply", dayMs)) continue;
-                const match = addressToRecord.get(address.toLowerCase());
+              for (const reply of (data.replies || []) as Array<{ address: string; key: string; subject: string; date: string; text: string }>) {
+                const match = addressToRecord.get(String(reply.address).toLowerCase());
                 if (!match) continue;
-                const record = match.record;
-                const recipientName = record.name;
+                const record = match.record as Lead;
+                if (record.lastReplyKey === reply.key) continue;
+                const replyText = (reply.text || "").trim();
+                const address = reply.address;
+
+                // 1) Learn: summarise the reply into THIS lead's own knowledge
+                //    (never shared industry-wide) and log it on the timeline.
+                let analysis: { note: string; sentiment?: string; intent?: string; nextStep?: string } = {
+                  note: replyText.replace(/\s+/g, " ").slice(0, 280) || "Replied (no readable text).",
+                };
+                if (replyText) {
+                  try {
+                    const existing = curKnowledge.find(
+                      (k) => k.tags.includes("Reply-Learned") && (k.linkedLeadIds || []).includes(record.id)
+                    );
+                    const aRes = await apiFetch("/api/ai/analyze-reply", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        name: record.name,
+                        company: record.company,
+                        jobTitle: record.jobTitle,
+                        industry: record.industry,
+                        replyText,
+                        replySubject: reply.subject,
+                        existingKnowledge: existing?.content,
+                      }),
+                    });
+                    const aData = await aRes.json();
+                    if (aData.note) analysis = aData;
+                  } catch (err) {
+                    console.error("[agent scan] reply analysis failed for", address, err);
+                  }
+                }
+                replyLearnings.push({ lead: record, analysis, subject: reply.subject, date: reply.date, key: reply.key });
+
+                // 2) Take Charge: the operator is handling this lead --
+                //    notify only, never draft.
+                if (record.operatorInControl) {
+                  operatorAlerts.push({ lead: record, subject: reply.subject, intent: analysis.intent });
+                  continue;
+                }
+
+                // 3) Otherwise draft a tailored reply using what we now know
+                //    -- queued for one-click approval, never auto-sent.
+                const leadKnowledge = [
+                  ...curKnowledge
+                    .filter((k) => (k.linkedLeadIds || []).includes(record.id))
+                    .map((k) => `${k.title}: ${k.content}`),
+                  `Latest reply (${reply.date.slice(0, 10)}): ${analysis.note}`,
+                ];
                 try {
                   const draftRes = await apiFetch("/api/ai/personalized-email", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                      recipientName,
+                      recipientName: record.name,
                       recipientCompany: record.company,
                       recipientJobTitle: record.jobTitle,
                       recipientIndustry: agent.industry,
+                      knowledgeEntries: leadKnowledge,
                       activities: curActivities.filter((a) => a.leadId === record.id),
                       agent,
                       productName: agentProduct?.name,
                       productPitch: agentProduct?.pitch,
                       senderName: curUser?.name,
                       senderCompany: curTenant?.companyName || curTenant?.name,
-                      goal: "They just replied in our inbox -- draft a warm, specific reply that keeps the conversation moving forward.",
+                      replyText,
+                      replyAnalysis: [analysis.sentiment && `sentiment ${analysis.sentiment}`, analysis.intent && `intent ${analysis.intent}`, analysis.nextStep]
+                        .filter(Boolean)
+                        .join("; "),
+                      goal: "They just replied in our inbox -- draft a warm, specific reply to what they said that keeps the conversation moving forward.",
                     }),
                   });
                   const draftData = await draftRes.json();
@@ -997,21 +1075,117 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     industry: agent.industry,
                     actionType: "email_reply",
                     leadId: record.id,
-                    recipientName,
+                    recipientName: record.name,
                     recipientEmail: address,
                     subject: draftData.subject,
                     body: draftData.body,
-                    reasoning: `Detected a reply from ${address} in the inbox.`,
+                    reasoning: `Replied: "${analysis.note.slice(0, 160)}"`,
+                    triggerSnippet: replyText.slice(0, 300) || undefined,
                     triggerSource: "auto_reply",
                   });
+                  supersedeReplyDraftFor.push(address.toLowerCase());
                 } catch (err) {
                   console.error("[agent scan] reply draft failed for", address, err);
                 }
               }
             } catch (err) {
-              console.error("[agent scan] check-replies failed:", err);
+              console.error("[agent scan] fetch-replies failed:", err);
             }
           }
+        }
+      }
+
+      // ---- Reply learning: apply what the new inbound replies taught us ----
+      if (replyLearnings.length > 0) {
+        const todayStr = new Date().toISOString().split("T")[0];
+        const nowIso = new Date().toISOString();
+
+        // Lead-scoped knowledge: one "Reply Log" entry per lead, newest first,
+        // tagged so it's visible/editable/deletable in the Knowledge Base.
+        setKnowledgeBase((prev) => {
+          let next = prev;
+          for (const l of replyLearnings) {
+            const line = `[${l.date.slice(0, 10)}] ${l.analysis.note}${
+              l.analysis.intent && l.analysis.intent !== "unclear" ? ` (${l.analysis.intent.replace(/_/g, " ")})` : ""
+            }${l.analysis.nextStep ? ` Next: ${l.analysis.nextStep}` : ""}`;
+            const existing = next.find((k) => k.tags.includes("Reply-Learned") && (k.linkedLeadIds || []).includes(l.lead.id));
+            if (existing) {
+              next = next.map((k) =>
+                k.id === existing.id ? { ...k, content: `${line}\n${k.content}`.slice(0, 4000), updatedAt: nowIso } : k
+              );
+            } else {
+              next = [
+                {
+                  id:
+                    typeof crypto !== "undefined" && "randomUUID" in crypto
+                      ? crypto.randomUUID()
+                      : `kb_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+                  category: "company" as const,
+                  title: `${l.lead.name} — Reply Log`,
+                  content: line,
+                  tags: ["AI-Generated", "Reply-Learned"],
+                  linkedLeadIds: [l.lead.id],
+                  createdBy: "AI Agent",
+                  createdAt: nowIso,
+                  updatedAt: nowIso,
+                },
+                ...next,
+              ];
+            }
+          }
+          return next;
+        });
+
+        // Mark each reply as processed (never learn from the same email
+        // twice) and note the contact on the lead.
+        setLeads((prev) =>
+          prev.map((l) => {
+            const hit = replyLearnings.find((r) => r.lead.id === l.id);
+            return hit ? { ...l, lastReplyKey: hit.key, lastContact: hit.date.slice(0, 10) || todayStr } : l;
+          })
+        );
+
+        setActivities((prev) => [
+          ...replyLearnings.map((l, i) => ({
+            id: `act_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`,
+            type: "Email" as const,
+            leadId: l.lead.id,
+            date: todayStr,
+            time: new Date().toTimeString().slice(0, 5),
+            user: "AI Agent",
+            description: `Reply received from ${l.lead.name}${l.subject ? `: "${l.subject}"` : ""} — ${l.analysis.note.slice(0, 200)}`,
+            outcome: l.analysis.intent ? l.analysis.intent.replace(/_/g, " ") : "Replied",
+            nextAction: l.analysis.nextStep || "Review the drafted reply in Agent Approvals",
+          })),
+          ...prev,
+        ]);
+      }
+
+      // Take Charge: leads the operator handles personally get a task +
+      // notification instead of an AI draft.
+      if (operatorAlerts.length > 0) {
+        const dueStr = new Date().toISOString().split("T")[0];
+        setTasks((prev) => [
+          ...operatorAlerts.map((o, i) => ({
+            id: `tsk_${Date.now()}_${i}`,
+            title: `Reply to ${o.lead.name} (${o.lead.company || "lead"}) — they wrote back`,
+            assignedUser: curUser?.name || "Unassigned",
+            priority: "High" as const,
+            dueDate: dueStr,
+            status: "To Do" as const,
+            notes: `You've taken charge of this lead, so the AI did not draft a reply. Subject: "${o.subject || "(none)"}". Open the lead's Reply Log in Knowledge for a summary.`,
+          })),
+          ...prev,
+        ]);
+        try {
+          if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+            new Notification(
+              operatorAlerts.length === 1 ? `${operatorAlerts[0].lead.name} replied — your lead` : `${operatorAlerts.length} leads you manage replied`,
+              { body: "You're in charge of these leads, so no AI reply was drafted. Open AarPex to respond." }
+            );
+          }
+        } catch {
+          // best-effort only
         }
       }
 
@@ -1026,7 +1200,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             status: "pending" as const,
             createdAt: new Date().toISOString(),
           })),
-          ...prev,
+          ...prev.map((p) =>
+            p.status === "pending" && p.actionType === "email_reply" && supersedeReplyDraftFor.includes(p.recipientEmail.toLowerCase())
+              ? { ...p, status: "rejected" as const, resolvedAt: new Date().toISOString(), resolvedBy: "Superseded by a newer reply" }
+              : p
+          ),
         ]);
 
         // Best-effort desktop notification -- the agent may draft these
@@ -2605,6 +2783,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const draftInstantFollowUp = async (leadId: string): Promise<boolean> => {
     const lead = leads.find((l) => l.id === leadId);
     if (!lead || !lead.email) return false;
+    if (lead.operatorInControl) return false; // Take Charge: operator handles this lead
     const agent = getAgentForIndustry(lead.industry);
     if (!agent) return false;
     const agentProduct = agent.productId ? products.find((p) => p.id === agent.productId) : undefined;
@@ -2750,6 +2929,65 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Take Charge helpers. Unsent AI drafts for a lead the operator takes over
+  // are withdrawn (marked rejected) so nothing the AI wrote can still go out.
+  const withdrawPendingDraftsForLeads = (leadIds: string[]): number => {
+    const ids = new Set(leadIds);
+    const emails = new Set(leads.filter((l) => ids.has(l.id) && l.email).map((l) => l.email.toLowerCase()));
+    let count = 0;
+    setAgentActions((prev) =>
+      prev.map((a) => {
+        const mine = a.status === "pending" && ((a.leadId && ids.has(a.leadId)) || emails.has(a.recipientEmail.toLowerCase()));
+        if (!mine) return a;
+        count += 1;
+        return { ...a, status: "rejected" as const, resolvedAt: new Date().toISOString(), resolvedBy: "Take Charge — operator took over" };
+      })
+    );
+    return count;
+  };
+
+  const setLeadOperatorControl = (leadId: string, inControl: boolean) => {
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead) return;
+    updateLead(leadId, { operatorInControl: inControl });
+    if (inControl) withdrawPendingDraftsForLeads([leadId]);
+    addActivity({
+      type: "Note",
+      leadId,
+      date: new Date().toISOString().split("T")[0],
+      time: new Date().toTimeString().slice(0, 5),
+      user: currentUser?.name || "Operator",
+      description: inControl
+        ? `${currentUser?.name || "Operator"} took charge of ${lead.name} — AI agents will only notify, not draft or send.`
+        : `${currentUser?.name || "Operator"} handed ${lead.name} back to the AI agent.`,
+      outcome: inControl ? "Operator in control" : "AI agent active",
+      nextAction: inControl ? "Reply to this lead personally" : "",
+    });
+  };
+
+  const setAgentOperatorControl = (agentId: string, inControl: boolean): { changed: number; withdrawn: number } => {
+    const agent = industryAgents.find((a) => a.id === agentId);
+    if (!agent) return { changed: 0, withdrawn: 0 };
+    const industryLc = normalizeIndustry(agent.industry);
+    const targets = leads.filter((l) => normalizeIndustry(l.industry) === industryLc && !!l.operatorInControl !== inControl);
+    if (targets.length === 0) return { changed: 0, withdrawn: 0 };
+    const ids = new Set(targets.map((l) => l.id));
+    setLeads((prev) => prev.map((l) => (ids.has(l.id) ? { ...l, operatorInControl: inControl } : l)));
+    const withdrawn = inControl ? withdrawPendingDraftsForLeads(targets.map((l) => l.id)) : 0;
+    addActivity({
+      type: "Note",
+      date: new Date().toISOString().split("T")[0],
+      time: new Date().toTimeString().slice(0, 5),
+      user: currentUser?.name || "Operator",
+      description: inControl
+        ? `${currentUser?.name || "Operator"} took charge of all ${targets.length} ${agent.industry} leads — the agent will only notify.`
+        : `${currentUser?.name || "Operator"} handed ${targets.length} ${agent.industry} leads back to the agent.`,
+      outcome: inControl ? "Operator in control" : "AI agent active",
+      nextAction: "",
+    });
+    return { changed: targets.length, withdrawn };
+  };
+
   // Arms/disarms the one-shot switches on an agent (see IndustryAgent).
   const setAgentNextEmailDirective = (
     agentId: string,
@@ -2780,6 +3018,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const eligible = leads.filter((l) => {
       if (normalizeIndustry(l.industry) !== industryLc) return false;
       if ((agent.excludedLeadIds || []).includes(l.id)) return false;
+      if (l.operatorInControl) return false; // Take Charge: operator handles this lead
       if (!l.email) return false;
       if (l.status === "Converted" || l.status === "Lost") return false;
       return !agentActions.some(
@@ -3326,6 +3565,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         draftAgentFollowUpsNow,
         sendAgentDraftsNow,
         setAgentNextEmailDirective,
+        setLeadOperatorControl,
+        setAgentOperatorControl,
         resolveAgentAction,
         deleteAgentAction,
         approveAndSendAgentAction,
