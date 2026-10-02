@@ -23,6 +23,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.9.0",
+    date: "2026-10-02",
+    headline: "Edit any lead, right where you read it",
+    tagline: "Fix a detail the moment you spot it, with no hunting for the right form.",
+    highlights: [
+      { title: "Edit details button", description: "Update contact, business and pipeline fields straight from the Overview and 360° Profile tabs, including status, industry, salesperson and follow-up dates." },
+      { title: "Phone-friendly form", description: "The editor opens as a bottom sheet on mobile and a centred window on larger screens." },
+    ],
+  },
+  {
     version: "2.8.0",
     date: "2026-10-01",
     headline: "Know Every Lead's Business Before You Write a Word",

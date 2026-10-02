@@ -13,6 +13,12 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-10-02
+
+### Added
+- **Edit lead details from the Overview and 360° Profile tabs.** A new "Edit details" button opens a full form (bottom sheet on phones) covering contact info, business info (industry, category, country, city, source), pipeline (status, priority, value, salesperson, expected close, next follow-up), notes, tags and social links.
+- Changing the website automatically queues a fresh ABIC audit.
+
 ## [2.8.1] - 2026-10-01
 
 ### Changed

@@ -1,4 +1,5 @@
 import { AbicAuditPanel } from "./AbicAuditPanel";
+import { LeadDetailsEditor } from "./LeadDetailsEditor";
 import React, { useState } from "react";
 import { useCRM } from "../../context/CRMContext";
 import {
@@ -140,6 +141,7 @@ export const LeadProfileDrawer: React.FC = () => {
   // only committed to the CRM (in a single updateLead call) on Save;
   // Cancel just discards it.
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isDetailsEditorOpen, setIsDetailsEditorOpen] = useState(false);
   const [profileDraft, setProfileDraft] = useState<{
     name: string;
     company: string;
@@ -899,9 +901,12 @@ export const LeadProfileDrawer: React.FC = () => {
             <div className="space-y-5">
               {/* Contact & Identity */}
               <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between gap-2">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                   <Building2 className="w-3.5 h-3.5 text-slate-400" /> Contact &amp; Identity
                 </h3>
+                <button type="button" onClick={() => setIsDetailsEditorOpen(true)} className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold normal-case tracking-normal text-slate-600 hover:bg-slate-50 hover:text-indigo-600"><Pencil className="w-3 h-3" /> Edit details</button>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   <div>
                     <span className="text-slate-400 block text-[11px]">Name</span>
@@ -1224,7 +1229,10 @@ export const LeadProfileDrawer: React.FC = () => {
           {activeTab === "overview" && (
             <div className="space-y-5">
               <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between gap-2">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Lead Details</h3>
+                <button type="button" onClick={() => setIsDetailsEditorOpen(true)} className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold normal-case tracking-normal text-slate-600 hover:bg-slate-50 hover:text-indigo-600"><Pencil className="w-3 h-3" /> Edit details</button>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   <div>
                     <span className="text-slate-400 block text-[11px]">Email</span>
@@ -1752,6 +1760,7 @@ export const LeadProfileDrawer: React.FC = () => {
           )}
         </div>
       </div>
+      {isDetailsEditorOpen && <LeadDetailsEditor lead={lead} onClose={() => setIsDetailsEditorOpen(false)} />}
     </div>
   );
 };
