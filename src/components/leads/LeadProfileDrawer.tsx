@@ -1,5 +1,6 @@
 import { AbicAuditPanel } from "./AbicAuditPanel";
 import { LeadDetailsEditor } from "./LeadDetailsEditor";
+import { ReplyDraftPanel } from "./ReplyDraftPanel";
 import React, { useState } from "react";
 import { useCRM } from "../../context/CRMContext";
 import {
@@ -1134,6 +1135,8 @@ export const LeadProfileDrawer: React.FC = () => {
                     {lead.operatorInControl ? "Hand back to AI" : "Take Charge"}
                   </button>
                 </div>
+
+                <ReplyDraftPanel lead={lead} />
 
                 {agent && !lead.operatorInControl && (
                   <div className="space-y-1.5">

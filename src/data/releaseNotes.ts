@@ -23,6 +23,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.10.0",
+    date: "2026-10-03",
+    headline: "Reply to your leads in one click",
+    tagline: "AarPex reads what a lead wrote and drafts the answer in the tone you choose.",
+    highlights: [
+      { title: "Draft from their actual email", description: "Pulls the lead's latest reply from your inbox and writes a response to exactly what they said." },
+      { title: "Seven reply styles", description: "Short, warm, handle an objection, answer pricing, book a call, or leave the door open. Add your own instruction too." },
+      { title: "You stay in control", description: "Edit the draft, then send it to Agent Approvals. Nothing goes out without your approval." },
+    ],
+  },
+  {
     version: "2.9.0",
     date: "2026-10-02",
     headline: "Edit any lead, right where you read it",

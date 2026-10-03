@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-10-03
+
+### Added
+- **Draft a reply to a lead's email on demand.** In a lead's AI tab, "Draft a reply to their email" reads their latest reply from your connected mailbox (or lets you paste one), then drafts an answer in the style you pick: natural, short, warm, handle objection, answer pricing, book a call, or not now. Add an optional instruction, edit the draft, then send it to Agent Approvals. Nothing is sent from the panel. Works for Take Charge leads too.
+
 ## [2.9.0] - 2026-10-02
 
 ### Added
