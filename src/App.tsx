@@ -18,6 +18,7 @@ import { EmailMarketingView } from "./components/views/EmailMarketingView";
 import { ProductsView } from "./components/views/ProductsView";
 import { CeoNotesView } from "./components/views/CeoNotesView";
 import { InboxView } from "./components/views/InboxView";
+import { WhatsAppView } from "./components/views/WhatsAppView";
 import { ReportsView } from "./components/views/ReportsView";
 import { SettingsView } from "./components/views/SettingsView";
 import { KnowledgeBaseView } from "./components/views/KnowledgeBaseView";
@@ -133,6 +134,8 @@ const CRMMainContent: React.FC = () => {
         return <FileManagerView />;
       case "inbox":
         return <InboxView />;
+      case "whatsapp":
+        return <WhatsAppView />;
       case "reports":
         return <ReportsView />;
       case "settings":

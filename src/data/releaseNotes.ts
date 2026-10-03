@@ -23,6 +23,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.11.0",
+    date: "2026-10-04",
+    headline: "WhatsApp, run by your Industry Agents",
+    tagline: "The same leads, the same agents, a new channel: a full WhatsApp inbox with agent-drafted replies.",
+    highlights: [
+      { title: "A real WhatsApp inbox", description: "Chats, unread counts, sent / delivered / read ticks and a sent folder, all in one place, with replies from your leads arriving automatically." },
+      { title: "Agents work WhatsApp like email", description: "Turn WhatsApp on per industry agent. It drafts replies to inbound messages and follow-ups on schedule, using your approved template for first contact." },
+      { title: "Still your call", description: "Every WhatsApp message an agent writes waits in Agent Approvals. Take Charge of any lead and the AI steps back." },
+    ],
+  },
+  {
     version: "2.10.0",
     date: "2026-10-03",
     headline: "Reply to your leads in one click",

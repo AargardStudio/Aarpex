@@ -488,7 +488,7 @@ export const DashboardView: React.FC = () => {
                 >
                   <div className="min-w-0">
                     <div className="font-bold text-white truncate">{act.recipientName}</div>
-                    <div className="text-slate-400 text-[11px] truncate mt-0.5">{act.subject}</div>
+                    <div className="text-slate-400 text-[11px] truncate mt-0.5">{act.subject || (act.actionType === "whatsapp_reply" || act.actionType === "whatsapp_follow_up" ? "WhatsApp message" : "")}</div>
                     <div className="text-slate-500 text-[10px] mt-1 leading-snug">{act.reasoning}</div>
                   </div>
                   <div className="flex items-center gap-2.5 sm:gap-1.5 shrink-0">

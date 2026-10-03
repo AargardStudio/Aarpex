@@ -26,7 +26,7 @@ export const WhatsAppComposeModal: React.FC<WhatsAppComposeModalProps> = ({
   initialBody = "",
   leadId,
 }) => {
-  const { activeTenant, currentUser, addActivity } = useCRM();
+  const { activeTenant, sendWhatsApp } = useCRM();
 
   const [to, setTo] = useState(initialTo);
   const [mode, setMode] = useState<"text" | "template">("text");
@@ -80,57 +80,24 @@ export const WhatsAppComposeModal: React.FC<WhatsAppComposeModalProps> = ({
     setResultStatus(null);
 
     try {
-      const payload: Record<string, any> =
-        waProvider === "twilio"
+      // sendWhatsApp (shared with the WhatsApp inbox) sends, records the message
+      // in the lead's conversation and logs it to the activity timeline.
+      const data = await sendWhatsApp(
+        mode === "template"
           ? {
-              provider: "twilio",
-              twilioAccountSid: waConfig?.twilioAccountSid,
-              twilioAuthToken: waConfig?.twilioAuthToken,
-              twilioWhatsAppNumber: waConfig?.twilioWhatsAppNumber,
+              leadId,
               to: to.trim(),
+              templateName: templateName.trim(),
+              templateLanguage: templateLanguage.trim() || "en_US",
+              templateParams: templateParams.split(",").map((p) => p.trim()).filter(Boolean),
             }
-          : {
-              provider: "meta",
-              accessToken: waConfig?.accessToken,
-              phoneNumberId: waConfig?.phoneNumberId,
-              to: to.trim(),
-            };
-      if (mode === "template") {
-        payload.templateName = templateName.trim();
-        payload.templateLanguage = templateLanguage.trim() || "en_US";
-        if (templateParams.trim()) {
-          payload.templateParams = templateParams.split(",").map((p) => p.trim()).filter(Boolean);
-        }
-      } else {
-        payload.body = body.trim();
-      }
+          : { leadId, to: to.trim(), text: body.trim() }
+      );
 
-      const res = await apiFetch("/api/whatsapp/send-message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
+      if (data.ok) {
         setResultStatus({
           success: true,
           message: `Sent to ${to}.`,
-        });
-
-        addActivity({
-          type: "WhatsApp",
-          leadId,
-          date: new Date().toISOString().split("T")[0],
-          time: new Date().toTimeString().slice(0, 5),
-          user: currentUser?.name || "System",
-          description:
-            mode === "template"
-              ? `Sent WhatsApp template "${templateName}" to ${to}`
-              : `Sent WhatsApp message to ${to}: "${body.slice(0, 120)}${body.length > 120 ? "…" : ""}"`,
-          outcome: "Delivered",
-          nextAction: "Monitor for a reply",
         });
 
         setTimeout(() => {

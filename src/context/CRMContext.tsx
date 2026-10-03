@@ -20,6 +20,7 @@ import {
   TenantStripeConfig,
   TenantWebmailConfig,
   TenantWhatsAppConfig,
+  WhatsAppMessage,
   CRMSettings,
   SupabaseConfig,
   EmailAttachment,
@@ -38,6 +39,7 @@ import {
 import { STORAGE_LIMITS_BYTES } from "../data/subscriptionPlans";
 import { isSupabaseAuthConfigured, getSupabaseAuthClient } from "../config/supabaseAuthClient";
 import { getMailboxById } from "../lib/webmail";
+import { fetchWhatsAppMessages, upsertWhatsAppMessages, phoneDigits, samePhone } from "../lib/whatsappStore";
 import {
   syncTenantTable,
   syncTenantRow,
@@ -98,6 +100,7 @@ export type NavView =
   | "AI Insights"
   | "Email Marketing"
   | "Inbox"
+  | "WhatsApp"
   | "Reports"
   | "Settings"
   | "CEO Notes"
@@ -336,8 +339,8 @@ interface CRMContextType {
   //   queue immediately, one at a time, through approveAndSendAgentAction.
   // setAgentNextEmailDirective: arms/disarms the one-shot "add pricing" /
   //   "add more problems" switches consumed by the agent's next batch.
-  draftAgentFollowUpsNow: (agentId: string) => Promise<{ drafted: number; remaining: number; reason?: string }>;
-  sendAgentDraftsNow: (agentId: string) => Promise<{ total: number; sent: number; failed: number }>;
+  draftAgentFollowUpsNow: (agentId: string, channel?: "email" | "whatsapp") => Promise<{ drafted: number; remaining: number; reason?: string }>;
+  sendAgentDraftsNow: (agentId: string, channel?: "email" | "whatsapp") => Promise<{ total: number; sent: number; failed: number }>;
   setAgentNextEmailDirective: (
     agentId: string,
     patch: { includePricing?: boolean; extraProblems?: boolean }
@@ -355,6 +358,27 @@ interface CRMContextType {
     options?: { extraChecks?: string[]; focus?: string }
   ) => Promise<{ status: "ok" | "insufficient_data" | "ai_unavailable"; message?: string }>;
   setAgentOperatorControl: (agentId: string, inControl: boolean) => { changed: number; withdrawn: number };
+  // WhatsApp inbox. Messages are read/appended directly (inbound ones arrive via
+  // the server webhook even when the app is closed). sendWhatsApp sends one
+  // message to a lead and logs it; whatsAppWindowOpen says whether free text is
+  // allowed (they wrote within 24h) or a template is required.
+  whatsappMessages: WhatsAppMessage[];
+  refreshWhatsApp: () => Promise<void>;
+  sendWhatsApp: (opts: {
+    leadId?: string;
+    to?: string;
+    text?: string;
+    templateName?: string;
+    templateLanguage?: string;
+    templateParams?: string[];
+    source?: "manual" | "agent_approved";
+  }) => Promise<{ ok: boolean; error?: string; outsideWindow?: boolean }>;
+  whatsAppWindowOpen: (phone?: string) => boolean;
+  draftWhatsAppReply: (leadId: string, goal?: string) => Promise<string | null>;
+  markWhatsAppRead: (phone: string) => void;
+  whatsAppUnread: (phone?: string) => number;
+  whatsAppUnreadTotal: number;
+
   resolveAgentAction: (id: string, status: AgentActionStatus, updates?: Partial<AgentAction>) => void;
   deleteAgentAction: (id: string) => void;
   approveAndSendAgentAction: (id: string, overrides?: { subject?: string; body?: string }) => Promise<boolean>;
@@ -907,11 +931,42 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if ((agent.excludedLeadIds || []).includes(l.id)) return false;
           if (l.operatorInControl) return false; // Take Charge: operator handles this lead
           if (!l.email) return false;
+          if (followUpGoesToWhatsApp(agent, l)) return false; // this lead's follow-ups go over WhatsApp
+          if (agent.preferredChannel === "WhatsApp") return false;
           if (l.status === "Converted" || l.status === "Lost") return false;
           const reference = l.lastContact ? new Date(l.lastContact).getTime() : new Date(l.createdDate || 0).getTime();
           if (!reference || now - reference < cadenceMs) return false;
           return !hasPendingOrRecent(l.email, "follow_up", cadenceMs);
         });
+
+        // WhatsApp follow-ups -- same cadence, same approval queue. Only for
+        // agents with WhatsApp switched on and WhatsApp connected.
+        const waDueLeads = !waFollowUpsOn(agent) || !curTenant?.whatsappConfig?.isEnabled
+          ? []
+          : curLeads.filter((l) => {
+              if (normalizeIndustry(l.industry) !== industryLc) return false;
+              if ((agent.excludedLeadIds || []).includes(l.id)) return false;
+              if (l.operatorInControl) return false;
+              if (!followUpGoesToWhatsApp(agent, l)) return false;
+              if (l.status === "Converted" || l.status === "Lost") return false;
+              const reference = l.lastContact ? new Date(l.lastContact).getTime() : new Date(l.createdDate || 0).getTime();
+              if (!reference || now - reference < cadenceMs) return false;
+              const key = phoneDigits(l.whatsapp || l.phone).slice(-9);
+              return !curAgentActions.some(
+                (a) =>
+                  (a.actionType === "whatsapp_follow_up" || a.actionType === "whatsapp_reply") &&
+                  phoneDigits(a.recipientPhone).slice(-9) === key &&
+                  (a.status === "pending" || (a.actionType === "whatsapp_follow_up" && now - new Date(a.createdAt).getTime() < cadenceMs))
+              );
+            });
+        for (const lead of waDueLeads.slice(0, 5)) {
+          try {
+            const draft = await buildWaFollowUp(lead, agent, `Send a short, friendly follow-up -- it's been ${agent.followUpFrequencyDays}+ days since last contact with no response.`, "auto_followup");
+            if (draft) newActions.push(draft);
+          } catch (err) {
+            console.error("[agent scan] whatsapp follow-up failed for lead", lead.id, err);
+          }
+        }
 
         // Leads in this industry that don't have an AI-Generated
         // knowledge-base summary yet (checked against the live snapshot
@@ -1265,7 +1320,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 {
                   body:
                     newActions.length === 1
-                      ? `${newActions[0].recipientName}: ${newActions[0].subject}`
+                      ? `${newActions[0].recipientName}: ${newActions[0].subject || "WhatsApp message"}`
                       : "Review them in Agent Approvals.",
                 }
               );
@@ -2918,6 +2973,22 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ): Promise<boolean> => {
     const action = agentActions.find((a) => a.id === id);
     if (!action) return false;
+    if (action.actionType === "whatsapp_reply" || action.actionType === "whatsapp_follow_up") {
+      const text = overrides?.body ?? action.body;
+      const r = await sendWhatsApp(
+        action.templateName
+          ? { leadId: action.leadId, to: action.recipientPhone, text, templateName: action.templateName, templateLanguage: action.templateLanguage, templateParams: action.templateParams, source: "agent_approved" }
+          : { leadId: action.leadId, to: action.recipientPhone, text, source: "agent_approved" }
+      );
+      if (!r.ok) {
+        resolveAgentAction(id, "pending", {
+          reasoning: `${action.reasoning} — last send attempt failed: ${r.error || "unknown error"}`,
+        });
+        return false;
+      }
+      resolveAgentAction(id, "approved", { body: text });
+      return true;
+    }
     const mailCfg = getMailboxById(activeTenant);
     const subject = overrides?.subject ?? action.subject;
     const body = overrides?.body ?? action.body;
@@ -2970,6 +3041,355 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       resolveAgentAction(id, "pending", { reasoning: `${action.reasoning} — last send attempt failed: ${err.message || "network error"}` });
       return false;
     }
+  };
+
+
+  // ------------------------------------------------------------------------
+  // WhatsApp inbox (Meta Cloud API / Twilio). See src/lib/whatsappStore.ts.
+  // ------------------------------------------------------------------------
+  const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
+  const waDraftingRef = useRef<Set<string>>(new Set());
+  const [waRead, setWaRead] = useState<Record<string, string>>({});
+
+  const mergeWa = (prev: WhatsAppMessage[], incoming: WhatsAppMessage[]): WhatsAppMessage[] => {
+    const map = new Map<string, WhatsAppMessage>();
+    for (const m of prev) map.set(m.id, m);
+    for (const m of incoming) map.set(m.id, { ...map.get(m.id), ...m });
+    return Array.from(map.values()).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  };
+
+  const refreshWhatsApp = async () => {
+    if (!activeTenantId) return;
+    const rows = await fetchWhatsAppMessages(activeTenantId);
+    if (rows) setWhatsappMessages((prev) => mergeWa(prev, rows));
+  };
+
+  useEffect(() => {
+    if (!activeTenantId) return;
+    let cancelled = false;
+    try {
+      const raw = localStorage.getItem(`crm_tenant_${activeTenantId}_whatsapp`);
+      setWhatsappMessages(raw ? JSON.parse(raw) : []);
+      setWaRead(JSON.parse(localStorage.getItem(`crm_tenant_${activeTenantId}_whatsapp_read`) || "{}"));
+    } catch {
+      setWhatsappMessages([]);
+    }
+    const pull = async () => {
+      const rows = await fetchWhatsAppMessages(activeTenantId);
+      if (!cancelled && rows) setWhatsappMessages((prev) => mergeWa(prev, rows));
+    };
+    void pull();
+    const t = setInterval(() => {
+      if (typeof document === "undefined" || document.visibilityState === "visible") void pull();
+    }, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [activeTenantId]);
+
+  useEffect(() => {
+    if (!activeTenantId) return;
+    try {
+      localStorage.setItem(`crm_tenant_${activeTenantId}_whatsapp`, JSON.stringify(whatsappMessages.slice(0, 500)));
+    } catch {
+      // storage full or blocked -- the database copy is the source of truth
+    }
+  }, [whatsappMessages, activeTenantId]);
+
+  const saveWa = (msgs: WhatsAppMessage[]) => {
+    setWhatsappMessages((prev) => mergeWa(prev, msgs));
+    void upsertWhatsAppMessages(activeTenantId, msgs);
+  };
+
+  const whatsAppWindowOpen = (phone?: string): boolean => {
+    if (!phone) return false;
+    const last = whatsappMessages.find((m) => m.direction === "in" && samePhone(m.phone, phone));
+    return !!last && Date.now() - new Date(last.createdAt).getTime() < 24 * 3600 * 1000;
+  };
+
+  const markWhatsAppRead = (phone: string) => {
+    const d = phoneDigits(phone).slice(-9);
+    if (!d) return;
+    const next = { ...waRead, [d]: new Date().toISOString() };
+    setWaRead(next);
+    try {
+      localStorage.setItem(`crm_tenant_${activeTenantId}_whatsapp_read`, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  };
+
+  const whatsAppUnread = (phone?: string): number => {
+    const d = phoneDigits(phone).slice(-9);
+    if (!d) return 0;
+    const seen = waRead[d] || "";
+    return whatsappMessages.filter((m) => m.direction === "in" && phoneDigits(m.phone).slice(-9) === d && m.createdAt > seen).length;
+  };
+
+  const whatsAppUnreadTotal = useMemo(() => {
+    const seenByPhone = waRead;
+    return whatsappMessages.filter((m) => m.direction === "in" && m.createdAt > (seenByPhone[phoneDigits(m.phone).slice(-9)] || "")).length;
+  }, [whatsappMessages, waRead]);
+
+  const sendWhatsApp: CRMContextType["sendWhatsApp"] = async (opts) => {
+    const cfg = activeTenant?.whatsappConfig;
+    const provider = cfg?.provider || "meta";
+    const ready = provider === "twilio" ? !!(cfg?.twilioAccountSid && cfg?.twilioAuthToken && cfg?.twilioWhatsAppNumber) : !!(cfg?.accessToken && cfg?.phoneNumberId);
+    if (!cfg?.isEnabled || !ready) return { ok: false, error: "WhatsApp isn't connected. Connect it in Settings → WhatsApp." };
+    const lead = opts.leadId ? leads.find((l) => l.id === opts.leadId) : undefined;
+    const to = (opts.to || lead?.whatsapp || lead?.phone || "").trim();
+    if (!phoneDigits(to)) return { ok: false, error: "This lead has no WhatsApp or phone number." };
+    const payload: Record<string, any> =
+      provider === "twilio"
+        ? { provider: "twilio", twilioAccountSid: cfg.twilioAccountSid, twilioAuthToken: cfg.twilioAuthToken, twilioWhatsAppNumber: cfg.twilioWhatsAppNumber, to }
+        : { provider: "meta", accessToken: cfg.accessToken, phoneNumberId: cfg.phoneNumberId, to };
+    if (opts.templateName) {
+      payload.templateName = opts.templateName;
+      payload.templateLanguage = opts.templateLanguage || "en_US";
+      if (opts.templateParams?.length) payload.templateParams = opts.templateParams;
+    } else {
+      payload.body = opts.text || "";
+    }
+    const now = new Date();
+    const localId = `wa_out_${now.getTime()}_${Math.random().toString(36).slice(2, 7)}`;
+    try {
+      const res = await apiFetch("/api/whatsapp/send-message", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const data = await res.json();
+      const base: WhatsAppMessage = {
+        id: data.success && data.messageId ? data.messageId : localId,
+        leadId: opts.leadId,
+        phone: phoneDigits(to),
+        direction: "out",
+        body: opts.templateName ? opts.text || `[Template: ${opts.templateName}]${opts.templateParams?.length ? " " + opts.templateParams.join(", ") : ""}` : opts.text,
+        templateName: opts.templateName,
+        source: opts.source || "manual",
+        sentBy: currentUser?.name,
+        createdAt: now.toISOString(),
+      };
+      if (!data.success) {
+        saveWa([{ ...base, id: localId, status: "failed", error: data.error || "Send failed" }]);
+        return { ok: false, error: data.error || "Send failed", outsideWindow: !!data.outsideWindow };
+      }
+      saveWa([{ ...base, status: "sent" }]);
+      const today = now.toISOString().slice(0, 10);
+      if (opts.leadId) {
+        addActivity({
+          type: "WhatsApp",
+          leadId: opts.leadId,
+          date: today,
+          time: now.toTimeString().slice(0, 5),
+          user: currentUser?.name || "System",
+          description: opts.templateName ? `Sent WhatsApp template "${opts.templateName}"` : `Sent WhatsApp message: "${(opts.text || "").slice(0, 120)}${(opts.text || "").length > 120 ? "…" : ""}"`,
+          outcome: "Delivered",
+          nextAction: "Monitor for a reply",
+        });
+        updateLead(opts.leadId, { lastContact: today });
+      }
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || "Couldn't reach the server." };
+    }
+  };
+
+  const draftWhatsAppReply = async (leadId: string, goal?: string): Promise<string | null> => {
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead) return null;
+    const phone = lead.whatsapp || lead.phone;
+    const history = whatsappMessages
+      .filter((m) => m.leadId === leadId || samePhone(m.phone, phone))
+      .slice(0, 10)
+      .reverse();
+    const latestIn = [...history].reverse().find((m) => m.direction === "in");
+    const agent = getAgentForIndustry(lead.industry);
+    const product = agent?.productId ? products.find((p) => p.id === agent.productId) : undefined;
+    try {
+      const res = await apiFetch("/api/ai/whatsapp-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: lead.name,
+          company: lead.company,
+          jobTitle: lead.jobTitle,
+          industry: lead.industry,
+          history: history.map((m) => ({ direction: m.direction, body: m.body })),
+          latestMessage: latestIn?.body,
+          knowledge: knowledgeBase.filter((k) => (k.linkedLeadIds || []).includes(leadId)).map((k) => `${k.title}: ${k.content}`),
+          agent,
+          productName: product?.name,
+          productPitch: product?.pitch,
+          productPricing: product && Number(product.price) > 0 ? `${product.currency || "USD"} ${product.price}${product.pricingModel ? ` (${product.pricingModel})` : ""}` : undefined,
+          senderName: currentUser?.name,
+          senderCompany: activeTenant?.companyName || activeTenant?.name,
+          goal,
+        }),
+      });
+      const data = await res.json();
+      return data.body ? String(data.body) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Inbound messages: once per message, decide what happens. The agent only
+  // DRAFTS (into Agent Approvals); Take Charge leads get a task instead.
+  useEffect(() => {
+    if (!activeTenant?.whatsappConfig?.isEnabled) return;
+    const cutoff = Date.now() - 3 * 24 * 3600 * 1000;
+    const unhandled = whatsappMessages.filter((m) => m.direction === "in" && !m.aiHandledAt && !waDraftingRef.current.has(m.id));
+    if (unhandled.length === 0) return;
+    const latestPerPhone = new Map<string, WhatsAppMessage>();
+    for (const m of unhandled) {
+      const k = phoneDigits(m.phone).slice(-9);
+      const cur = latestPerPhone.get(k);
+      if (!cur || cur.createdAt < m.createdAt) latestPerPhone.set(k, m);
+    }
+    const nowIso = new Date().toISOString();
+    const stamp: WhatsAppMessage[] = [];
+    unhandled.forEach((m) => {
+      waDraftingRef.current.add(m.id);
+      stamp.push({ ...m, aiHandledAt: nowIso });
+    });
+    // Mark everything seen right away so another tab/refresh doesn't redo it.
+    saveWa(stamp);
+
+    (async () => {
+      for (const m of latestPerPhone.values()) {
+        if (new Date(m.createdAt).getTime() < cutoff) continue;
+        const answeredLater = whatsappMessages.some((o) => o.direction === "out" && samePhone(o.phone, m.phone) && o.createdAt > m.createdAt);
+        if (answeredLater) continue;
+        const lead = leads.find((l) => l.id === m.leadId) || leads.find((l) => samePhone(l.whatsapp, m.phone) || samePhone(l.phone, m.phone));
+        if (!lead) continue;
+        const today = nowIso.slice(0, 10);
+        addActivity({
+          type: "WhatsApp",
+          leadId: lead.id,
+          date: today,
+          time: new Date().toTimeString().slice(0, 5),
+          user: "AI Agent",
+          description: `WhatsApp reply from ${lead.name}: "${(m.body || "").slice(0, 160)}"`,
+          outcome: "Replied",
+          nextAction: lead.operatorInControl ? "You're in charge: reply personally" : "Review the drafted reply in Agent Approvals",
+        });
+        if (lead.operatorInControl) {
+          setTasks((prev) => [
+            {
+              id: `tsk_wa_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+              title: `Reply to ${lead.name} on WhatsApp — they wrote back`,
+              assignedUser: currentUser?.name || "Unassigned",
+              priority: "High" as const,
+              dueDate: today,
+              status: "To Do" as const,
+              notes: `You've taken charge of this lead, so no AI reply was drafted. They said: "${(m.body || "").slice(0, 200)}"`,
+            } as any,
+            ...prev,
+          ]);
+          continue;
+        }
+        const agent = getAgentForIndustry(lead.industry);
+        if (!agent || !agent.whatsappEnabled) continue;
+        const body = await draftWhatsAppReply(lead.id, "They just wrote to us on WhatsApp. Reply helpfully to exactly what they said and keep the conversation moving.");
+        if (!body) continue;
+        setAgentActions((prev) => [
+          {
+            id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `agt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+            industry: agent.industry,
+            actionType: "whatsapp_reply" as const,
+            leadId: lead.id,
+            recipientName: lead.name,
+            recipientEmail: "",
+            recipientPhone: phoneDigits(m.phone),
+            subject: "",
+            body,
+            reasoning: `WhatsApp reply: "${(m.body || "").slice(0, 160)}"`,
+            triggerSnippet: (m.body || "").slice(0, 300) || undefined,
+            status: "pending" as const,
+            triggerSource: "auto_reply" as const,
+            createdAt: new Date().toISOString(),
+          },
+          ...prev.map((p) =>
+            p.status === "pending" && p.actionType === "whatsapp_reply" && p.leadId === lead.id
+              ? { ...p, status: "rejected" as const, resolvedAt: new Date().toISOString(), resolvedBy: "Superseded by a newer message" }
+              : p
+          ),
+        ]);
+        try {
+          if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+            new Notification(`${lead.name} messaged on WhatsApp`, { body: "A reply is drafted in Agent Approvals." });
+          }
+        } catch {
+          // best-effort
+        }
+      }
+    })();
+  }, [whatsappMessages, activeTenant?.whatsappConfig?.isEnabled]);
+
+
+  // ---- WhatsApp follow-ups (agent-controlled, same cadence as email) ----
+  const waFollowUpsOn = (agent: IndustryAgent): boolean =>
+    !!agent.whatsappEnabled && (agent.preferredChannel === "WhatsApp" || agent.preferredChannel === "Mixed");
+  // Which channel carries this lead's follow-ups for this agent. Email-only
+  // agents never use WhatsApp for follow-ups; WhatsApp agents always do;
+  // Mixed agents email when there's an address and fall back to WhatsApp.
+  const followUpGoesToWhatsApp = (agent: IndustryAgent, lead: Lead): boolean => {
+    if (!waFollowUpsOn(agent) || !phoneDigits(lead.whatsapp || lead.phone)) return false;
+    return agent.preferredChannel === "WhatsApp" || !lead.email;
+  };
+
+  const renderWaTemplate = (agent: IndustryAgent, lead: Lead) => {
+    const tokens: Record<string, string> = {
+      first_name: (lead.name || "").split(" ")[0] || "there",
+      name: lead.name || "",
+      company: lead.company || "",
+      sender: currentUser?.name || "",
+    };
+    const params = (agent.whatsappTemplateParams || "")
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .map((p) => p.replace(/\{(\w+)\}/g, (_m, k) => tokens[k] ?? ""));
+    let text = agent.whatsappTemplateText || `[Template: ${agent.whatsappTemplateName}]`;
+    params.forEach((v, i) => {
+      text = text.split(`{{${i + 1}}}`).join(v);
+    });
+    return { params, text };
+  };
+
+  // One WhatsApp follow-up draft for one lead, or null when it can't be made
+  // (no number, or the 24h window is closed and the agent has no template).
+  const buildWaFollowUp = async (
+    lead: Lead,
+    agent: IndustryAgent,
+    goal: string,
+    triggerSource: "manual" | "auto_followup"
+  ): Promise<Omit<AgentAction, "id" | "createdAt" | "status"> | null> => {
+    const phone = phoneDigits(lead.whatsapp || lead.phone);
+    if (!phone) return null;
+    const base = {
+      industry: agent.industry,
+      actionType: "whatsapp_follow_up" as const,
+      leadId: lead.id,
+      recipientName: lead.name,
+      recipientEmail: "",
+      recipientPhone: phone,
+      subject: "",
+      triggerSource,
+    };
+    if (whatsAppWindowOpen(phone)) {
+      const body = await draftWhatsAppReply(lead.id, goal);
+      if (!body) return null;
+      return { ...base, body, reasoning: triggerSource === "manual" ? "WhatsApp follow-up requested from the agent card." : `No response in ${agent.followUpFrequencyDays}+ days (agent cadence for ${agent.industry}), on WhatsApp.` };
+    }
+    if (!agent.whatsappTemplateName?.trim()) return null;
+    const { params, text } = renderWaTemplate(agent, lead);
+    return {
+      ...base,
+      body: text,
+      templateName: agent.whatsappTemplateName.trim(),
+      templateLanguage: agent.whatsappTemplateLanguage?.trim() || "en_US",
+      templateParams: params,
+      reasoning: `They haven't written in the last 24 hours, so this goes as your approved template "${agent.whatsappTemplateName.trim()}".`,
+    };
   };
 
   // Take Charge helpers. Unsent AI drafts for a lead the operator takes over
@@ -3077,7 +3497,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // drafts at most MAX_PER_CLICK (each one is a real AI call), reporting how
   // many eligible leads are left so a second click can pick them up.
   const draftAgentFollowUpsNow = async (
-    agentId: string
+    agentId: string,
+    channel: "email" | "whatsapp" = "email"
   ): Promise<{ drafted: number; remaining: number; reason?: string }> => {
     const MAX_PER_CLICK = 10;
     const agent = industryAgents.find((a) => a.id === agentId);
@@ -3085,6 +3506,44 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!agent.isActive) return { drafted: 0, remaining: 0, reason: "Activate this agent first." };
     const industryLc = normalizeIndustry(agent.industry);
     const agentProduct = agent.productId ? products.find((p) => p.id === agent.productId) : undefined;
+
+    if (channel === "whatsapp") {
+      if (!agent.whatsappEnabled) return { drafted: 0, remaining: 0, reason: "Switch WhatsApp on for this agent first (edit the agent)." };
+      if (!activeTenant?.whatsappConfig?.isEnabled) return { drafted: 0, remaining: 0, reason: "WhatsApp isn't connected. Connect it in Settings → WhatsApp." };
+      const waEligible = leads.filter((l) => {
+        if (normalizeIndustry(l.industry) !== industryLc) return false;
+        if ((agent.excludedLeadIds || []).includes(l.id)) return false;
+        if (l.operatorInControl) return false;
+        if (l.status === "Converted" || l.status === "Lost") return false;
+        const phone = phoneDigits(l.whatsapp || l.phone);
+        if (phone.length < 7) return false;
+        return !agentActions.some(
+          (a) => a.status === "pending" && (a.actionType === "whatsapp_follow_up" || a.actionType === "whatsapp_reply") && phoneDigits(a.recipientPhone).slice(-9) === phone.slice(-9)
+        );
+      });
+      if (waEligible.length === 0) return { drafted: 0, remaining: 0, reason: "No leads with a phone number are waiting for a WhatsApp follow-up." };
+      const waBatch = waEligible.slice(0, MAX_PER_CLICK);
+      let waDrafted = 0;
+      let needTemplate = 0;
+      for (const lead of waBatch) {
+        try {
+          const draft = await buildWaFollowUp(lead, agent, "Send a short, friendly follow-up. The user asked for this now rather than waiting for the agent's normal cadence.", "manual");
+          if (!draft) {
+            if (!agent.whatsappTemplateName?.trim() && !whatsAppWindowOpen(lead.whatsapp || lead.phone)) needTemplate += 1;
+            continue;
+          }
+          addAgentAction(draft);
+          waDrafted += 1;
+        } catch (err) {
+          console.error("[instant whatsapp follow-ups] draft failed for lead", lead.id, err);
+        }
+      }
+      return {
+        drafted: waDrafted,
+        remaining: Math.max(0, waEligible.length - waBatch.length),
+        reason: waDrafted === 0 && needTemplate > 0 ? "WhatsApp only allows a template for people who haven't written in 24 hours. Add an approved template to this agent (edit the agent) and try again." : undefined,
+      };
+    }
 
     const eligible = leads.filter((l) => {
       if (normalizeIndustry(l.industry) !== industryLc) return false;
@@ -3155,11 +3614,17 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // (same live-SMTP send, same activity log, same "approved only if it truly
   // went out" guarantee), one at a time so a failure on one never blocks the
   // rest and the mailbox isn't hit with a burst of parallel connections.
-  const sendAgentDraftsNow = async (agentId: string): Promise<{ total: number; sent: number; failed: number }> => {
+  const sendAgentDraftsNow = async (
+    agentId: string,
+    channel: "email" | "whatsapp" = "email"
+  ): Promise<{ total: number; sent: number; failed: number }> => {
     const agent = industryAgents.find((a) => a.id === agentId);
     if (!agent) return { total: 0, sent: 0, failed: 0 };
     const industryLc = normalizeIndustry(agent.industry);
-    const waiting = agentActions.filter((a) => a.status === "pending" && normalizeIndustry(a.industry) === industryLc);
+    const isWaAction = (a: AgentAction) => a.actionType === "whatsapp_reply" || a.actionType === "whatsapp_follow_up";
+    const waiting = agentActions.filter(
+      (a) => a.status === "pending" && normalizeIndustry(a.industry) === industryLc && (channel === "whatsapp" ? isWaAction(a) : !isWaAction(a))
+    );
     let sent = 0;
     let failed = 0;
     for (const action of waiting) {
@@ -3638,6 +4103,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAgentNextEmailDirective,
         setLeadOperatorControl,
         setAgentOperatorControl,
+        whatsappMessages,
+        refreshWhatsApp,
+        sendWhatsApp,
+        whatsAppWindowOpen,
+        draftWhatsAppReply,
+        markWhatsAppRead,
+        whatsAppUnread,
+        whatsAppUnreadTotal,
         runAbicAudit,
         resolveAgentAction,
         deleteAgentAction,

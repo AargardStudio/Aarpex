@@ -32,6 +32,7 @@ import {
   Bot,
   FolderOpen,
   LifeBuoy,
+  MessageCircle,
 } from "lucide-react";
 import { ROLE_LABELS, UserRole } from "../../types";
 
@@ -64,6 +65,7 @@ export const Sidebar: React.FC = () => {
     industryAgents,
     agentActions,
     storedFiles,
+    whatsAppUnreadTotal,
     setCreateTenantModalOpen,
     setAuthPageOpen,
     setAuthPageMode,
@@ -126,6 +128,14 @@ export const Sidebar: React.FC = () => {
       icon: InboxIcon,
       badge: emailCampaigns.reduce((sum, c) => sum + c.audienceIds.filter((id) => !(c.repliedAudienceIds || []).includes(id)).length, 0) || undefined,
       badgeColor: "bg-[#252a36] text-amber-300 border border-[#3d4455] font-semibold",
+      category: "Marketing",
+    },
+
+    {
+      name: "WhatsApp",
+      icon: MessageCircle,
+      badge: whatsAppUnreadTotal || undefined,
+      badgeColor: "bg-emerald-950/80 text-emerald-300 border border-emerald-500/40",
       category: "Marketing",
     },
 

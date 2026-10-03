@@ -396,7 +396,7 @@ export const Header: React.FC = () => {
                           {act.recipientName}
                         </div>
                         <div className="text-[11px] text-slate-400 truncate">
-                          {act.subject}
+                          {act.subject || (act.actionType === "whatsapp_reply" || act.actionType === "whatsapp_follow_up" ? "WhatsApp message" : "")}
                         </div>
                       </div>
                     ))}

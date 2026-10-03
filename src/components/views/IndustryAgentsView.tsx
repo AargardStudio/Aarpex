@@ -16,6 +16,7 @@ import {
   Clock,
   Power,
   Bot,
+  MessageSquareReply,
   Percent,
   ShieldAlert,
   Package,
@@ -36,7 +37,7 @@ import {
   Loader2,
   ChevronLeft,
 } from "lucide-react";
-import { IndustryAgent, PreferredOutreachChannel, AgentAction, AIProvider, AgentNature, MBTIType } from "../../types";
+import { IndustryAgent, PreferredOutreachChannel, AgentAction, WhatsAppMessage, AIProvider, AgentNature, MBTIType } from "../../types";
 import { INDUSTRIES } from "../../data/industries";
 import { normalizeIndustry, sanitizeIndustryText, summarizeIndustryUsage, findCloseIndustryMatches, IndustryUsage } from "../../lib/industryMatch";
 import { AI_PROVIDER_MODELS, AI_PROVIDER_LABELS, defaultModelFor } from "../../lib/aiProviders";
@@ -82,6 +83,8 @@ const actionTypeLabel: Record<AgentAction["actionType"], string> = {
   follow_up: "Follow-up",
   email_reply: "Reply to inbound message",
   negotiation_offer: "Negotiation offer",
+  whatsapp_reply: "WhatsApp reply",
+  whatsapp_follow_up: "WhatsApp follow-up",
 };
 
 const emptyDraft = (): Omit<IndustryAgent, "id" | "createdAt" | "updatedAt" | "createdBy"> => ({
@@ -213,6 +216,11 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
           followUpFrequencyDays: editing.followUpFrequencyDays,
           followUpCount: editing.followUpCount,
           autoRunEnabled: editing.autoRunEnabled,
+          whatsappEnabled: !!editing.whatsappEnabled,
+          whatsappTemplateName: editing.whatsappTemplateName || "",
+          whatsappTemplateLanguage: editing.whatsappTemplateLanguage || "en_US",
+          whatsappTemplateText: editing.whatsappTemplateText || "",
+          whatsappTemplateParams: editing.whatsappTemplateParams || "{first_name}",
           frequencyMinutes: editing.frequencyMinutes || MIN_FREQUENCY_MINUTES,
           modelProvider: editing.modelProvider || "gemini",
           modelName: editing.modelName || defaultModelFor(editing.modelProvider || "gemini"),
@@ -1092,6 +1100,81 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
               you to review -- nothing is ever sent without your approval.
             </p>
 
+            <div className="pt-2 border-t border-[#2d323f]/80 space-y-2.5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-slate-300 font-semibold">WhatsApp</div>
+                  <p className="text-slate-500 mt-0.5">
+                    Works like email: this agent drafts WhatsApp replies and follow-ups for its leads into Agent Approvals,
+                    and nothing is sent without your approval. Set "Preferred outreach channel" above to WhatsApp to send
+                    follow-ups over WhatsApp, or Mixed to use WhatsApp for leads without an email. Replies to inbound
+                    messages are drafted whenever this is on. Leads you've taken charge of are skipped.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDraft((p) => ({ ...p, whatsappEnabled: !p.whatsappEnabled }))}
+                  className={`shrink-0 px-3 py-1.5 rounded-lg border font-bold transition-colors ${
+                    draft.whatsappEnabled ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300" : "bg-[#181b21] border-[#2d323f] text-slate-500"
+                  }`}
+                >
+                  {draft.whatsappEnabled ? "WhatsApp: On" : "WhatsApp: Off"}
+                </button>
+              </div>
+              {draft.whatsappEnabled && (
+                <div className="space-y-2.5 p-3 bg-[#181b21] rounded-lg border border-[#2d323f]">
+                  <p className="text-slate-400">
+                    WhatsApp only lets a business start a chat with an approved <span className="text-slate-200 font-semibold">template</span>.
+                    Add yours so follow-ups to people who haven't written in the last 24 hours can go out. Once someone replies, the agent
+                    writes normal chat messages.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="sm:col-span-2">
+                      <label className="block text-slate-400 font-semibold mb-1">Approved template name</label>
+                      <input
+                        type="text"
+                        value={draft.whatsappTemplateName || ""}
+                        onChange={(e) => setDraft((p) => ({ ...p, whatsappTemplateName: e.target.value }))}
+                        placeholder="consultation_followup"
+                        className="w-full px-2.5 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg font-mono focus:outline-none focus:border-emerald-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1">Language</label>
+                      <input
+                        type="text"
+                        value={draft.whatsappTemplateLanguage || ""}
+                        onChange={(e) => setDraft((p) => ({ ...p, whatsappTemplateLanguage: e.target.value }))}
+                        placeholder="en_US"
+                        className="w-full px-2.5 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg font-mono focus:outline-none focus:border-emerald-400"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 font-semibold mb-1">Template text (for your preview only)</label>
+                    <textarea
+                      rows={3}
+                      value={draft.whatsappTemplateText || ""}
+                      onChange={(e) => setDraft((p) => ({ ...p, whatsappTemplateText: e.target.value }))}
+                      placeholder="Hi {{1}}, thanks for your interest. Would you like to book a free consultation this week?"
+                      className="w-full px-2.5 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg resize-none focus:outline-none focus:border-emerald-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 font-semibold mb-1">Fill {"{{1}}"}, {"{{2}}"}… in order (comma-separated)</label>
+                    <input
+                      type="text"
+                      value={draft.whatsappTemplateParams || ""}
+                      onChange={(e) => setDraft((p) => ({ ...p, whatsappTemplateParams: e.target.value }))}
+                      placeholder="{first_name}, {company}"
+                      className="w-full px-2.5 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg font-mono focus:outline-none focus:border-emerald-400"
+                    />
+                    <p className="text-slate-500 mt-1">Available: {"{first_name} {name} {company} {sender}"}. The template must be Approved in WhatsApp Manager, with the same name and language.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="pt-2 border-t border-[#2d323f]/80 grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-slate-400 font-semibold mb-1">AI provider</label>
@@ -1226,7 +1309,7 @@ const AgentCard: React.FC<{
   const [isRunningNow, setIsRunningNow] = useState(false);
   // Which instant-control button is mid-flight ("send" | "followup"), plus a
   // short result line shown under the buttons (cleared on the next click).
-  const [instantBusy, setInstantBusy] = useState<"send" | "followup" | null>(null);
+  const [instantBusy, setInstantBusy] = useState<"send" | "followup" | "wasend" | "wafollowup" | null>(null);
   const [instantNotice, setInstantNotice] = useState<{ tone: "ok" | "warn"; text: string } | null>(null);
   const linkedProduct = agent.productId ? products.find((p: any) => p.id === agent.productId) : null;
   const ChannelIcon = channelIcon(agent.preferredChannel);
@@ -1238,6 +1321,9 @@ const AgentCard: React.FC<{
   const pendingCount = ((agentActions || []) as AgentAction[]).filter(
     (a) => a.industry === agent.industry && a.status === "pending"
   ).length;
+  const isWaType = (a: AgentAction) => a.actionType === "whatsapp_reply" || a.actionType === "whatsapp_follow_up";
+  const waPendingCount = ((agentActions || []) as AgentAction[]).filter((a) => a.industry === agent.industry && a.status === "pending" && isWaType(a)).length;
+  const emailPendingCount = pendingCount - waPendingCount;
   const operatorLeadCount = leads.filter((l: any) => normalizeIndustry(l.industry) === industryLc && l.operatorInControl).length;
   const handleBulkTakeCharge = () => {
     if (operatorLeadCount === 0) {
@@ -1274,10 +1360,10 @@ const AgentCard: React.FC<{
   };
 
   const handleSendNow = async () => {
-    if (instantBusy || pendingCount === 0) return;
+    if (instantBusy || emailPendingCount === 0) return;
     if (
       !confirm(
-        `Send ${pendingCount} waiting email${pendingCount === 1 ? "" : "s"} now?\n\nThese go out immediately from your connected mailbox to real recipients. Each one is logged to its lead's timeline and appears in Sent Items.`
+        `Send ${emailPendingCount} waiting email${emailPendingCount === 1 ? "" : "s"} now?\n\nThese go out immediately from your connected mailbox to real recipients. Each one is logged to its lead's timeline and appears in Sent Items.`
       )
     ) {
       return;
@@ -1311,6 +1397,42 @@ const AgentCard: React.FC<{
         setInstantNotice({
           tone: "ok",
           text: `Drafted ${r.drafted} follow-up${r.drafted === 1 ? "" : "s"} for your review in Agent Approvals.${r.remaining > 0 ? ` ${r.remaining} more lead${r.remaining === 1 ? "" : "s"} eligible -- click again to draft the next batch.` : ""}`,
+        });
+      }
+    } finally {
+      setInstantBusy(null);
+    }
+  };
+
+  const handleWaSendNow = async () => {
+    if (instantBusy || waPendingCount === 0) return;
+    if (!confirm(`Send ${waPendingCount} waiting WhatsApp message${waPendingCount === 1 ? "" : "s"} now?\n\nThese go out immediately from your WhatsApp Business number to real people. Each one is logged to its lead's timeline and appears in WhatsApp Sent Items.`)) return;
+    setInstantBusy("wasend");
+    setInstantNotice(null);
+    try {
+      const r = await sendAgentDraftsNow(agent.id, "whatsapp");
+      setInstantNotice(
+        r.failed === 0
+          ? { tone: "ok", text: `Sent ${r.sent} WhatsApp message${r.sent === 1 ? "" : "s"}. Find ${r.sent === 1 ? "it" : "them"} in the WhatsApp inbox.` }
+          : { tone: "warn", text: `Sent ${r.sent} of ${r.total}. ${r.failed} did not go out and ${r.failed === 1 ? "is" : "are"} still waiting in Agent Approvals with the reason noted.` }
+      );
+    } finally {
+      setInstantBusy(null);
+    }
+  };
+
+  const handleWaCreateFollowUps = async () => {
+    if (instantBusy || !agent.isActive) return;
+    setInstantBusy("wafollowup");
+    setInstantNotice(null);
+    try {
+      const r = await draftAgentFollowUpsNow(agent.id, "whatsapp");
+      if (r.drafted === 0) {
+        setInstantNotice({ tone: "warn", text: r.reason || "No WhatsApp follow-ups were drafted." });
+      } else {
+        setInstantNotice({
+          tone: "ok",
+          text: `Drafted ${r.drafted} WhatsApp follow-up${r.drafted === 1 ? "" : "s"} for your review in Agent Approvals.${r.remaining > 0 ? ` ${r.remaining} more lead${r.remaining === 1 ? "" : "s"} eligible -- click again for the next batch.` : ""}`,
         });
       }
     } finally {
@@ -1456,6 +1578,12 @@ const AgentCard: React.FC<{
             Monitoring on
           </span>
         )}
+        {agent.whatsappEnabled && (
+          <span className="flex items-center gap-1 text-emerald-300">
+            <MessageSquareReply className="w-3.5 h-3.5" />
+            WhatsApp on
+          </span>
+        )}
         {agent.maxDiscountPercent > 0 && (
           <span className="flex items-center gap-1 text-amber-300">
             <Percent className="w-3.5 h-3.5" />
@@ -1475,12 +1603,12 @@ const AgentCard: React.FC<{
           <button
             type="button"
             onClick={handleSendNow}
-            disabled={!!instantBusy || pendingCount === 0}
-            title={pendingCount === 0 ? "No drafts waiting for this agent -- use \"Create a follow-up email now\" first" : `Send the ${pendingCount} waiting draft${pendingCount === 1 ? "" : "s"} right now`}
+            disabled={!!instantBusy || emailPendingCount === 0}
+            title={emailPendingCount === 0 ? "No drafts waiting for this agent -- use \"Create a follow-up email now\" first" : `Send the ${emailPendingCount} waiting draft${emailPendingCount === 1 ? "" : "s"} right now`}
             className="px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 bg-teal-600 hover:bg-teal-500 text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-teal-600"
           >
             {instantBusy === "send" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-            {instantBusy === "send" ? "Sending..." : `Send email now${pendingCount > 0 ? ` (${pendingCount})` : ""}`}
+            {instantBusy === "send" ? "Sending..." : `Send email now${emailPendingCount > 0 ? ` (${emailPendingCount})` : ""}`}
           </button>
           <button
             type="button"
@@ -1528,6 +1656,49 @@ const AgentCard: React.FC<{
               {agent.nextEmailExtraProblems ? "More problems added to next email" : "Add more relevant problems and discuss them in the next email"}
             </span>
           </button>
+        </div>
+        <div className="pt-1 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400/80">WhatsApp</span>
+            {agent.whatsappEnabled ? (
+              <span className="text-[10px] text-emerald-300">
+                {agent.preferredChannel === "WhatsApp" ? "Follow-ups go by WhatsApp" : agent.preferredChannel === "Mixed" ? "Email first, WhatsApp when there's no email" : "Replies only (channel is Email)"}
+              </span>
+            ) : null}
+          </div>
+          {agent.whatsappEnabled ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleWaSendNow}
+                disabled={!!instantBusy || waPendingCount === 0}
+                title={waPendingCount === 0 ? "No WhatsApp drafts waiting for this agent" : `Send the ${waPendingCount} waiting WhatsApp draft${waPendingCount === 1 ? "" : "s"} right now`}
+                className="px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-emerald-600"
+              >
+                {instantBusy === "wasend" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                {instantBusy === "wasend" ? "Sending..." : `Send WhatsApp now${waPendingCount > 0 ? ` (${waPendingCount})` : ""}`}
+              </button>
+              <button
+                type="button"
+                onClick={handleWaCreateFollowUps}
+                disabled={!!instantBusy || !agent.isActive}
+                title={!agent.isActive ? "Activate this agent first" : "Draft a WhatsApp follow-up for this agent's leads right now, ignoring its normal schedule"}
+                className="px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 bg-[#252a36] hover:bg-[#2f3544] text-slate-100 border border-[#3d4455] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#252a36]"
+              >
+                {instantBusy === "wafollowup" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageSquareReply className="w-3.5 h-3.5 text-emerald-400" />}
+                {instantBusy === "wafollowup" ? "Drafting..." : "Create a WhatsApp follow-up now"}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => updateIndustryAgent(agent.id, { whatsappEnabled: true })}
+              className="w-full px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 bg-[#252a36] hover:bg-[#2f3544] text-slate-100 border border-[#3d4455]"
+            >
+              <MessageSquareReply className="w-3.5 h-3.5 text-emerald-400" />
+              Let this agent work leads on WhatsApp too
+            </button>
+          )}
         </div>
         <button
           type="button"
@@ -1640,6 +1811,191 @@ function mailGroupLabel(iso: string): string {
   return "Older";
 }
 
+
+// WhatsApp Sent Items -- what Industry Agents have actually sent over
+// WhatsApp (drafts you approved), inbox-style like the email Sent Items:
+// list on the left, the message and its delivery status on the right.
+// Source of truth is the WhatsApp message log (so delivered/read/failed is
+// real), filtered to messages that came from an approved agent draft.
+const WhatsAppSentPanel: React.FC = () => {
+  const { whatsappMessages, leads, industryAgents, setSelectedLeadId, setActiveNav } = useCRM() as any;
+  const [agentFilter, setAgentFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [mobileReading, setMobileReading] = useState(false);
+
+  const agentFor = React.useCallback(
+    (industry?: string): IndustryAgent | undefined => {
+      const n = normalizeIndustry(industry || "");
+      return n ? (industryAgents as IndustryAgent[]).find((p) => normalizeIndustry(p.industry) === n) : undefined;
+    },
+    [industryAgents]
+  );
+
+  const sent = React.useMemo(
+    () =>
+      ((whatsappMessages || []) as WhatsAppMessage[])
+        .filter((m) => m.direction === "out" && m.source === "agent_approved")
+        .map((m) => {
+          const lead = (leads || []).find((l: any) => l.id === m.leadId);
+          return { m, lead, agent: agentFor(lead?.industry) };
+        })
+        .sort((a, b) => (a.m.createdAt < b.m.createdAt ? 1 : -1)),
+    [whatsappMessages, leads, agentFor]
+  );
+
+  const counts = React.useMemo(() => {
+    const map = new Map<string, { id: string; label: string; count: number }>();
+    sent.forEach(({ agent }) => {
+      const key = agent ? agent.id : "__unmatched__";
+      const e = map.get(key);
+      if (e) e.count += 1;
+      else map.set(key, { id: key, label: agent ? agent.industry : "Unmatched / deleted agent", count: 1 });
+    });
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+  }, [sent]);
+
+  const filtered = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return sent.filter(({ m, lead, agent }) => {
+      if (agentFilter !== "all" && (agentFilter === "__unmatched__" ? !!agent : agent?.id !== agentFilter)) return false;
+      if (q && !`${m.body || ""} ${lead?.name || ""} ${lead?.company || ""} ${m.phone}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [sent, agentFilter, search]);
+
+  const selected = filtered.find((x) => x.m.id === selectedId) || filtered[0] || null;
+
+  if (sent.length === 0) {
+    return (
+      <div className="p-10 text-center bg-[#181b21] rounded-2xl border border-[#2d323f] text-slate-400 text-xs space-y-2">
+        <InboxIcon className="w-8 h-8 text-slate-600 mx-auto" />
+        <p className="text-slate-300 font-semibold text-sm">No WhatsApp messages sent by agents yet</p>
+        <p>Approved WhatsApp drafts show up here once they have gone out, with delivered and read status.</p>
+      </div>
+    );
+  }
+
+  const statusText = (st?: string) => (st === "read" ? "Read" : st === "delivered" ? "Delivered" : st === "failed" ? "Failed" : st === "sent" ? "Sent" : "Pending");
+  const statusColor = (st?: string) =>
+    st === "read" ? "text-sky-300" : st === "delivered" ? "text-emerald-300" : st === "failed" ? "text-rose-300" : "text-slate-400";
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setAgentFilter("all")}
+          className={`px-3 py-1.5 rounded-full border text-[11px] font-semibold flex items-center gap-1.5 transition-colors ${
+            agentFilter === "all" ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-200" : "bg-[#181b21] border-[#2d323f] text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          All sent <span className="font-bold">{sent.length}</span>
+        </button>
+        {counts.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => setAgentFilter(agentFilter === c.id ? "all" : c.id)}
+            className={`px-3 py-1.5 rounded-full border text-[11px] font-semibold flex items-center gap-1.5 transition-colors ${
+              agentFilter === c.id ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-200" : "bg-[#181b21] border-[#2d323f] text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            {c.label} <span className="font-bold">{c.count}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="rounded-2xl border border-[#2d323f] bg-[#181b21] overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(300px,390px)_1fr] lg:h-[calc(100vh-330px)] lg:min-h-[480px]">
+          <div className={`flex flex-col min-h-0 border-b lg:border-b-0 lg:border-r border-[#2d323f] ${mobileReading ? "hidden lg:flex" : "flex"}`}>
+            <div className="p-2.5 border-b border-[#2d323f] bg-[#121418]">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search sent WhatsApp"
+                  className="w-full pl-8 pr-3 py-2 bg-[#0f1115] border border-[#2d323f] rounded-lg text-xs text-slate-200 placeholder:text-slate-500"
+                />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto max-h-[70vh] lg:max-h-none">
+              {filtered.length === 0 && <div className="p-6 text-center text-xs text-slate-500">Nothing matches.</div>}
+              {filtered.map(({ m, lead }) => {
+                const av = avatarFor(lead?.name || m.phone);
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedId(m.id);
+                      setMobileReading(true);
+                    }}
+                    className={`w-full text-left px-3 py-2.5 border-b border-[#23262f] hover:bg-white/5 flex gap-2.5 ${selected?.m.id === m.id ? "bg-white/5" : ""}`}
+                  >
+                    <div className={`w-8 h-8 shrink-0 rounded-full border flex items-center justify-center text-[10px] font-bold ${av.color}`}>{av.initials}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-white truncate">{lead?.name || `+${m.phone}`}</span>
+                        <span className="text-[10px] text-slate-500 shrink-0">{mailTime(m.createdAt)}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 truncate">{m.body}</div>
+                      <div className={`text-[10px] font-semibold mt-0.5 ${statusColor(m.status)}`}>{statusText(m.status)}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className={`flex flex-col min-h-0 ${mobileReading ? "flex" : "hidden lg:flex"}`}>
+            {selected ? (
+              <div className="p-4 space-y-3 overflow-y-auto">
+                <button type="button" onClick={() => setMobileReading(false)} className="lg:hidden text-[11px] text-slate-400 underline">
+                  Back to list
+                </button>
+                <div>
+                  <div className="text-sm font-bold text-white">{selected.lead?.name || `+${selected.m.phone}`}</div>
+                  <div className="text-[11px] text-slate-500">
+                    {selected.lead?.company || "—"} · +{selected.m.phone} · {new Date(selected.m.createdAt).toLocaleString()}
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">
+                    Sent by {selected.agent ? `${selected.agent.industry} Agent` : "an agent"}, approved by {selected.m.sentBy || "you"}
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-br-md bg-emerald-700/80 text-white text-[13px] whitespace-pre-wrap leading-relaxed">
+                    {selected.m.templateName && <div className="text-[10px] uppercase tracking-wider text-emerald-200/80 mb-0.5">Template: {selected.m.templateName}</div>}
+                    {selected.m.body}
+                  </div>
+                </div>
+                <div className={`text-xs font-semibold ${statusColor(selected.m.status)}`}>
+                  {statusText(selected.m.status)}
+                  {selected.m.error ? ` — ${selected.m.error}` : ""}
+                </div>
+                <div className="flex gap-2 pt-1">
+                  {selected.lead && (
+                    <button onClick={() => setSelectedLeadId(selected.lead.id)} className="px-3 py-1.5 border border-[#3d4455] bg-[#252a36] text-slate-200 rounded-lg text-xs font-semibold">
+                      Open lead
+                    </button>
+                  )}
+                  <button onClick={() => setActiveNav("WhatsApp")} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold">
+                    Open conversation
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-8 text-center text-xs text-slate-500">Select a message.</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const SentItemsPanel: React.FC = () => {
   const { agentActions, industryAgents, setSelectedLeadId } = useCRM() as any;
 
@@ -1663,7 +2019,7 @@ const SentItemsPanel: React.FC = () => {
   const sent = React.useMemo(
     () =>
       ((agentActions || []) as AgentAction[])
-        .filter((a) => a.status === "approved")
+        .filter((a) => a.status === "approved" && a.actionType !== "whatsapp_reply" && a.actionType !== "whatsapp_follow_up")
         .sort((a, b) => new Date(b.resolvedAt || b.createdAt).getTime() - new Date(a.resolvedAt || a.createdAt).getTime()),
     [agentActions]
   );
@@ -1967,7 +2323,7 @@ export const IndustryAgentsView: React.FC = () => {
   const [editingAgent, setEditingAgent] = useState<IndustryAgent | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isCheckingAll, setIsCheckingAll] = useState(false);
-  const [activeSection, setActiveSection] = useState<"agents" | "sent">("agents");
+  const [activeSection, setActiveSection] = useState<"agents" | "sent" | "wasent">("agents");
 
   const activeAgentCount = industryAgents.filter((a: IndustryAgent) => a.isActive).length;
   const handleCheckAllNow = async () => {
@@ -2095,10 +2451,23 @@ export const IndustryAgentsView: React.FC = () => {
           <InboxIcon className="w-3.5 h-3.5" />
           Sent Items
         </button>
+        <button
+          onClick={() => setActiveSection("wasent")}
+          className={`px-3.5 py-2 text-xs font-bold flex items-center gap-1.5 border-b-2 -mb-px transition-colors ${
+            activeSection === "wasent"
+              ? "border-emerald-400 text-white"
+              : "border-transparent text-slate-400 hover:text-slate-200"
+          }`}
+        >
+          <MessageSquareReply className="w-3.5 h-3.5" />
+          WhatsApp Sent
+        </button>
       </div>
 
       {activeSection === "sent" ? (
         <SentItemsPanel />
+      ) : activeSection === "wasent" ? (
+        <WhatsAppSentPanel />
       ) : (
         <>
           <AgentsIntroBanner />

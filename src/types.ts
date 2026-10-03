@@ -446,6 +446,19 @@ export interface IndustryAgent {
   // Customisable ABIC audit: free-text focus plus yes/no questions answered
   // from each lead's website (e.g. "Do they sell honey?").
   auditFocus?: string;
+  // Let this agent work its leads over WhatsApp too: it drafts WhatsApp
+  // replies to inbound messages into Agent Approvals (never auto-sent).
+  whatsappEnabled?: boolean;
+  // First messages (follow-ups to people who haven't written in the last 24h)
+  // can only go out as an APPROVED WhatsApp template. Name/language must match
+  // the template in WhatsApp Manager exactly; `whatsappTemplateText` is the
+  // template's body (with {{1}}, {{2}} placeholders) so you can preview what
+  // will be sent; `whatsappTemplateParams` fills the placeholders in order,
+  // comma-separated, from {first_name} {name} {company} {sender}.
+  whatsappTemplateName?: string;
+  whatsappTemplateLanguage?: string;
+  whatsappTemplateText?: string;
+  whatsappTemplateParams?: string;
   auditChecks?: string[];
   // Follow-up cadence & channel defaults
   preferredChannel: PreferredOutreachChannel;
@@ -486,7 +499,22 @@ export interface IndustryAgent {
 // "Propose Offer" on a lead/contact) or by the periodic background scan for
 // industries with autoRunEnabled.
 // ----------------------------------------------------------------------------
-export type AgentActionType = "follow_up" | "email_reply" | "negotiation_offer";
+export type AgentActionType = "follow_up" | "email_reply" | "negotiation_offer" | "whatsapp_reply" | "whatsapp_follow_up";
+export interface WhatsAppMessage {
+  id: string;
+  leadId?: string;
+  phone: string; // digits only
+  direction: "in" | "out";
+  body?: string;
+  templateName?: string;
+  status?: "sent" | "delivered" | "read" | "failed" | "received";
+  error?: string;
+  source?: "manual" | "agent_approved" | "webhook";
+  sentBy?: string;
+  aiHandledAt?: string;
+  createdAt: string;
+}
+
 export type AgentActionStatus = "pending" | "approved" | "rejected";
 
 export interface AgentAction {
@@ -496,6 +524,14 @@ export interface AgentAction {
   leadId?: string;
   recipientName: string;
   recipientEmail: string;
+  // WhatsApp drafts (whatsapp_reply / whatsapp_follow_up): where it goes. Email
+  // and subject are left empty for those.
+  recipientPhone?: string;
+  // WhatsApp template sends (first contact / outside the 24h window): `body`
+  // holds the preview of what the template will say; these are what is sent.
+  templateName?: string;
+  templateLanguage?: string;
+  templateParams?: string[];
   subject: string;
   body: string;
   // Why the agent is proposing this -- shown to the user for context, e.g.

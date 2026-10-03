@@ -13,6 +13,17 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-10-04
+
+### Added
+- **WhatsApp inbox** (new "WhatsApp" page). Every WhatsApp conversation with your leads in an inbox layout: chat list with unread counts, Chats / Unread / Sent / AI drafts folders, search, message bubbles with sent / delivered / read / failed ticks, start a chat with any lead that has a phone number, and a composer that uses normal text inside WhatsApp's 24-hour window and an approved template outside it. "Draft with AI" writes a short chat-style reply. Take Charge works per conversation.
+- **Inbound messages.** New `/api/whatsapp/webhook` receives lead replies and delivery receipts from Meta, even when AarPex is closed. Requires `WHATSAPP_VERIFY_TOKEN` and `META_APP_SECRET` on the server and the webhook URL set in the Meta app. Requests are rejected unless Meta's signature matches.
+- **Industry Agents control WhatsApp like email.** Per agent: a WhatsApp switch, an approved template (name, language, preview text, variables) for first messages, "Create a WhatsApp follow-up now" and "Send WhatsApp now" buttons, and a "WhatsApp Sent" tab laid out like Sent Items. The agent drafts replies to inbound WhatsApp messages and, when the preferred channel is WhatsApp (or Mixed for leads with no email), follow-ups on the normal cadence. Everything lands in Agent Approvals; nothing is sent without your approval. Take Charge leads get a task instead of a draft.
+- Messages sent from the lead's "Send WhatsApp" window now appear in the inbox and the lead's timeline.
+- Migration `0026_whatsapp_inbox.sql` (new `whatsapp_messages` table and nullable columns on `agent_actions` and `industry_agents`).
+### Changed
+- Email "Sent Items" and "Send email now" no longer include WhatsApp drafts.
+
 ## [2.10.1] - 2026-10-03
 
 ### Added

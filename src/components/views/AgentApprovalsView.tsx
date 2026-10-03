@@ -18,19 +18,26 @@ const TYPE_LABEL: Record<AgentActionType, string> = {
   follow_up: "Follow-Up",
   email_reply: "Reply",
   negotiation_offer: "Negotiation Offer",
+  whatsapp_reply: "WhatsApp Reply",
+  whatsapp_follow_up: "WhatsApp Follow-Up",
 };
 
 const TYPE_ICON: Record<AgentActionType, typeof Mail> = {
   follow_up: Clock,
   email_reply: MessageSquareReply,
   negotiation_offer: Percent,
+  whatsapp_reply: MessageSquareReply,
+  whatsapp_follow_up: Clock,
 };
 
 const TYPE_COLOR: Record<AgentActionType, string> = {
   follow_up: "bg-sky-500/15 text-sky-300 border-sky-500/30",
   email_reply: "bg-violet-500/15 text-violet-300 border-violet-500/30",
   negotiation_offer: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  whatsapp_reply: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  whatsapp_follow_up: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
 };
+const isWa = (t: AgentActionType) => t === "whatsapp_reply" || t === "whatsapp_follow_up";
 
 const ActionCard: React.FC<{
   action: AgentAction;
@@ -100,7 +107,7 @@ const ActionCard: React.FC<{
           >
             {action.recipientName}
           </button>
-          <div className="text-[11px] text-slate-400">{action.recipientEmail}</div>
+          <div className="text-[11px] text-slate-400">{isWa(action.actionType) ? `WhatsApp · +${(action.recipientPhone || "").replace(/^\+/, "")}` : action.recipientEmail}</div>
           </div>
         </div>
         {action.actionType === "negotiation_offer" && typeof action.proposedDiscountPercent === "number" && (
@@ -123,12 +130,12 @@ const ActionCard: React.FC<{
       <div className="p-3 bg-[#121418] rounded-xl border border-[#2d323f] space-y-2">
         {isEditing ? (
           <>
-            <input
+            {!isWa(action.actionType) && <input
               type="text"
               value={subjectDraft}
               onChange={(e) => setSubjectDraft(e.target.value)}
               className="w-full px-2.5 py-1.5 bg-[#181b21] border border-[#2d323f] text-white rounded-lg text-xs font-semibold focus:outline-none focus:border-teal-400"
-            />
+            />}
             <textarea
               rows={6}
               value={bodyDraft}
@@ -138,17 +145,18 @@ const ActionCard: React.FC<{
           </>
         ) : (
           <>
-            <div className="text-xs font-bold text-white">{action.subject}</div>
+            {!isWa(action.actionType) && <div className="text-xs font-bold text-white">{action.subject}</div>}
+            {action.templateName && <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/80">Template: {action.templateName}</div>}
             <p className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">{action.body}</p>
           </>
         )}
       </div>
 
-      {sendError && <p className="text-[11px] text-rose-400">Couldn't send -- check your mailbox connection in Settings and try again.</p>}
+      {sendError && <p className="text-[11px] text-rose-400">Couldn't send -- {isWa(action.actionType) ? "check the WhatsApp connection in Settings (an expired token or a closed 24-hour window are the usual causes) and try again." : "check your mailbox connection in Settings and try again."}</p>}
 
       {action.status === "pending" && (
         <div className="flex items-center justify-end gap-2 pt-1">
-          {!isEditing ? (
+          {action.templateName ? null : !isEditing ? (
             <button
               onClick={() => setIsEditing(true)}
               className="px-3 py-1.5 bg-[#252a36] hover:bg-[#2f3544] text-slate-300 hover:text-white border border-[#3d4455] rounded-lg text-xs font-semibold flex items-center gap-1.5"
