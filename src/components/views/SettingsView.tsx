@@ -132,6 +132,35 @@ export const SettingsView: React.FC = () => {
   const [showWaToken, setShowWaToken] = useState(false);
   const [isVerifyingWa, setIsVerifyingWa] = useState(false);
   const [waVerifyResult, setWaVerifyResult] = useState<any>(null);
+  const [waTestTo, setWaTestTo] = useState("");
+  const [waTestTemplate, setWaTestTemplate] = useState("hello_world");
+  const [waTestLang, setWaTestLang] = useState("en_US");
+  const [waTestBusy, setWaTestBusy] = useState(false);
+  const [waTestResult, setWaTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const handleWaTestSend = async () => {
+    setWaTestBusy(true);
+    setWaTestResult(null);
+    try {
+      const res = await apiFetch("/api/whatsapp/send-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: "meta",
+          accessToken: waAccessToken.trim(),
+          phoneNumberId: waPhoneNumberId.trim(),
+          to: waTestTo.trim(),
+          templateName: waTestTemplate.trim(),
+          templateLanguage: waTestLang.trim() || "en_US",
+        }),
+      });
+      const d = await res.json();
+      setWaTestResult(d.success ? { ok: true, text: `Sent. Meta message id ${d.messageId || "n/a"}. Check that phone's WhatsApp.` } : { ok: false, text: d.error || "Send failed." });
+    } catch (e: any) {
+      setWaTestResult({ ok: false, text: e?.message || "Couldn't reach the server." });
+    } finally {
+      setWaTestBusy(false);
+    }
+  };
   const [waSaveSuccess, setWaSaveSuccess] = useState(false);
 
   // Webmail / Hostinger State (100% Customizable in Settings) -- a
@@ -1493,6 +1522,37 @@ export const SettingsView: React.FC = () => {
                   ) : (
                     <div className="font-bold">{waVerifyResult.error}</div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {waProvider === "meta" && (
+              <div className="rounded-xl border border-[#2d323f] bg-[#121418] p-4 space-y-3 text-xs">
+                <details>
+                  <summary className="cursor-pointer font-bold text-slate-200">How to connect your own business number (Meta Cloud API)</summary>
+                  <ol className="list-decimal pl-4 mt-2 space-y-1 text-slate-400 leading-relaxed">
+                    <li>In Meta Business Suite, confirm your business is verified (Business Settings &gt; Security Center).</li>
+                    <li>In developers.facebook.com create an app of type Business and add the WhatsApp product.</li>
+                    <li>WhatsApp &gt; API Setup &gt; Add phone number. Enter your number and its display name, then verify with the SMS or call code. The number must not be active on the WhatsApp or WhatsApp Business app, so delete that account first, or use a fresh number.</li>
+                    <li>Copy the Phone Number ID shown for that number (not the phone number, not the WhatsApp Business Account ID).</li>
+                    <li>In Business Settings &gt; Users &gt; System Users add a user, assign your app and WhatsApp account with full control, then Generate Token with whatsapp_business_messaging and whatsapp_business_management and no expiry. Paste it above.</li>
+                    <li>Add a payment method in WhatsApp Manager, otherwise sends outside the free tier are blocked.</li>
+                    <li>Click Verify connection, then use the test send below.</li>
+                  </ol>
+                  <p className="mt-2 text-slate-500">Messages to people who have not written to you in the last 24 hours must use an approved template. Create templates in WhatsApp Manager &gt; Message Templates.</p>
+                </details>
+                <div className="space-y-2 border-t border-[#2d323f] pt-3">
+                  <div className="font-bold text-slate-200">Test send</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <input value={waTestTo} onChange={(e) => setWaTestTo(e.target.value)} placeholder="Your own number, e.g. 923001234567" className="px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg font-mono sm:col-span-1" />
+                    <input value={waTestTemplate} onChange={(e) => setWaTestTemplate(e.target.value)} placeholder="Template name" className="px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg font-mono" />
+                    <input value={waTestLang} onChange={(e) => setWaTestLang(e.target.value)} placeholder="en_US" className="px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg font-mono" />
+                  </div>
+                  <button type="button" onClick={handleWaTestSend} disabled={waTestBusy || !waTestTo.trim() || !waAccessToken.trim() || !waPhoneNumberId.trim()} className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold rounded-lg">
+                    {waTestBusy ? "Sending…" : "Send test template"}
+                  </button>
+                  {waTestResult && <div className={waTestResult.ok ? "text-emerald-300" : "text-rose-300"}>{waTestResult.text}</div>}
+                  <p className="text-slate-500">hello_world is the default template Meta provides. Send it to your own phone first.</p>
                 </div>
               </div>
             )}

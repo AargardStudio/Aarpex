@@ -4583,6 +4583,37 @@ app.post("/api/supabase/verify", async (req, res) => {
 // ============================================================================
 
 const WHATSAPP_GRAPH_VERSION = "v21.0";
+// Plain-English fixes for the Meta WhatsApp Cloud API errors people hit most.
+function metaErrorHint(err: any, httpStatus?: number): string {
+  const code = Number(err?.code);
+  const sub = Number(err?.error_subcode);
+  const hints: Record<number, string> = {
+    190: "The access token is invalid or has expired. Temporary tokens last about 24 hours; create a System User token in Meta Business Settings that never expires and paste it again.",
+    10: "The token lacks permission. It needs whatsapp_business_messaging and whatsapp_business_management.",
+    200: "The token lacks permission. It needs whatsapp_business_messaging and whatsapp_business_management.",
+    100: "Meta rejected a value. Check the Phone Number ID (not the phone number or WhatsApp Business Account ID) and the recipient number format.",
+    131030: "Test mode: add this recipient to the allowed numbers list in the Meta app's WhatsApp > API Setup page, then confirm the code Meta sends them.",
+    131047: "More than 24 hours since the lead last wrote to you, so only an approved template can be sent. Switch to template mode.",
+    131026: "The recipient can't receive this message. Check the number has WhatsApp and has accepted the latest terms.",
+    131056: "Too many messages to this number too quickly. Wait a little and retry.",
+    131048: "Spam rate limit hit on this number. Slow down and review your message quality.",
+    132000: "Template variable count does not match the template. Check the parameters.",
+    132001: "Template not found in this language. Check the exact template name, language code and that it is Approved.",
+    132005: "Translated template text is too long.",
+    132007: "Template violates a WhatsApp content policy.",
+    132012: "Template parameter format is wrong. Check the values in order.",
+    132015: "This template is paused for low quality.",
+    132016: "This template was disabled for low quality.",
+    133010: "The sending phone number is not registered. Finish registering it in Meta's WhatsApp Manager.",
+    368: "Meta temporarily blocked this account for policy reasons. Check your Business Support Home.",
+    80007: "Meta rate limit reached. Wait and try again.",
+  };
+  const hint = hints[sub] || hints[code] || (httpStatus === 401 ? hints[190] : "");
+  const codeTxt = code ? ` (Meta code ${code}${sub ? `/${sub}` : ""})` : "";
+  return `${err?.message || `Meta API returned HTTP ${httpStatus}.`}${codeTxt}${hint ? ` Fix: ${hint}` : ""}`;
+}
+
+
 const TWILIO_API_VERSION = "2010-04-01";
 
 // 5. Verify a WhatsApp Business connection (Meta or Twilio)
@@ -4669,7 +4700,7 @@ app.post("/api/whatsapp/verify", async (req, res) => {
       const data: any = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        const metaError = data?.error?.message || `Meta API returned HTTP ${response.status}.`;
+        const metaError = metaErrorHint(data?.error, response.status);
         return res.json({
           success: false,
           status: "error",
@@ -4850,7 +4881,7 @@ app.post("/api/whatsapp/send-message", async (req, res) => {
         const outsideWindow = metaError.code === 131047 || metaError.error_subcode === 131047;
         return res.status(200).json({
           success: false,
-          error: metaError.message || `Meta API returned HTTP ${response.status}.`,
+          error: metaErrorHint(metaError, response.status),
           outsideWindow,
         });
       }

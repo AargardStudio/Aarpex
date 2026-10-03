@@ -13,6 +13,13 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.10.1] - 2026-10-03
+
+### Added
+- **WhatsApp (Meta) setup help in Settings:** a step-by-step guide for connecting your own business number, and a "Test send" box that sends an approved template (default `hello_world`) to your own phone.
+### Changed
+- Meta WhatsApp errors (verify and send) now say what went wrong and how to fix it: expired token, missing permissions, wrong Phone Number ID, test-mode recipient not allowed, template not found or not approved, 24-hour window, and rate limits.
+
 ## [2.10.0] - 2026-10-03
 
 ### Added
