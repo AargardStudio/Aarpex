@@ -27,7 +27,7 @@ import type { Lead, WhatsAppMessage } from "../../types";
 // Agent (when switched on for WhatsApp) drafts replies into Agent Approvals
 // -- nothing is sent unless you approve it or send it yourself here.
 
-type Folder = "chats" | "unread" | "sent" | "drafts";
+type Folder = "chats" | "unread" | "sent" | "agent" | "drafts";
 
 interface Thread {
   key: string; // last 9 digits
@@ -89,6 +89,8 @@ export const WhatsAppView: React.FC = () => {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [newChatQuery, setNewChatQuery] = useState("");
+  const [adhocPhone, setAdhocPhone] = useState("");
+  const [adhocNumber, setAdhocNumber] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
   const waCfg = activeTenant?.whatsappConfig;
@@ -128,6 +130,7 @@ export const WhatsAppView: React.FC = () => {
     () => (whatsappMessages as WhatsAppMessage[]).filter((m) => m.direction === "out").sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
     [whatsappMessages]
   );
+  const agentSentMessages = useMemo(() => sentMessages.filter((m) => m.source === "agent_approved"), [sentMessages]);
 
   const q = query.trim().toLowerCase();
   const matches = (t: Thread) =>
@@ -145,7 +148,10 @@ export const WhatsAppView: React.FC = () => {
 
   const selected = threads.find((t) => t.key === selectedKey) || (selectedKey ? undefined : undefined);
   const selectedLead: Lead | undefined = selected?.lead || (selectedKey ? leadByKey.get(selectedKey) : undefined);
-  const selectedPhone = selected?.phone || (selectedLead ? phoneDigits(selectedLead.whatsapp || selectedLead.phone) : "");
+  const selectedPhone =
+    selected?.phone ||
+    (selectedLead ? phoneDigits(selectedLead.whatsapp || selectedLead.phone) : "") ||
+    (selectedKey && phoneDigits(adhocPhone).slice(-9) === selectedKey ? phoneDigits(adhocPhone) : "");
 
   const open = (key: string) => {
     setSelectedKey(key);
@@ -279,6 +285,7 @@ export const WhatsAppView: React.FC = () => {
             ["chats", "Chats", threads.length],
             ["unread", "Unread", unreadTotal],
             ["sent", "Sent", sentMessages.length],
+            ["agent", "Sent by agents", agentSentMessages.length],
             ["drafts", "AI drafts", pendingDrafts.length],
           ] as Array<[Folder, string, number]>).map(([id, label, n]) => (
             <button
@@ -310,6 +317,27 @@ export const WhatsAppView: React.FC = () => {
             placeholder="Search leads with a phone number"
             className="w-full px-2.5 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg text-xs focus:outline-none focus:border-emerald-400"
           />
+          <div className="flex gap-2">
+            <input
+              value={adhocNumber}
+              onChange={(e) => setAdhocNumber(e.target.value)}
+              placeholder="Or any number, e.g. 923001234567 (yours, to test)"
+              className="flex-1 px-2.5 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg text-xs font-mono focus:outline-none focus:border-emerald-400"
+            />
+            <button
+              disabled={phoneDigits(adhocNumber).length < 7}
+              onClick={() => {
+                const d = phoneDigits(adhocNumber);
+                setAdhocPhone(d);
+                setSelectedKey(d.slice(-9));
+                setNewChatOpen(false);
+                setAdhocNumber("");
+              }}
+              className="px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-bold"
+            >
+              Chat
+            </button>
+          </div>
           <div className="max-h-48 overflow-y-auto divide-y divide-[#2d323f]">
             {chatCandidates.length === 0 && <div className="py-3 text-[11px] text-slate-500">No leads with a phone or WhatsApp number match.</div>}
             {chatCandidates.map((l) => (
@@ -323,11 +351,13 @@ export const WhatsAppView: React.FC = () => {
       )}
 
       <div className="flex-1 overflow-y-auto">
-        {folder === "sent" ? (
-          sentMessages.length === 0 ? (
-            <div className="p-6 text-center text-xs text-slate-500">Nothing sent over WhatsApp yet.</div>
+        {folder === "sent" || folder === "agent" ? (
+          (folder === "agent" ? agentSentMessages : sentMessages).length === 0 ? (
+            <div className="p-6 text-center text-xs text-slate-500">
+              {folder === "agent" ? "No messages sent by your Industry Agents yet. Approved agent drafts show up here." : "Nothing sent over WhatsApp yet."}
+            </div>
           ) : (
-            sentMessages
+            (folder === "agent" ? agentSentMessages : sentMessages)
               .filter((m) => {
                 if (!q) return true;
                 const lead = leadByKey.get(phoneDigits(m.phone).slice(-9));
@@ -340,7 +370,12 @@ export const WhatsAppView: React.FC = () => {
                 return (
                   <button key={m.id} onClick={() => open(key)} className="w-full text-left px-3 py-2.5 border-b border-[#23262f] hover:bg-white/5">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-white truncate">To {lead?.name || `+${m.phone}`}</span>
+                      <span className="text-xs font-semibold text-white truncate">
+                        To {lead?.name || `+${m.phone}`}
+                        <span className={`ml-1.5 align-middle text-[9px] font-bold px-1.5 py-0.5 rounded border ${m.source === "agent_approved" ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" : "bg-slate-500/15 text-slate-300 border-slate-500/30"}`}>
+                          {m.source === "agent_approved" ? "Agent" : "You"}
+                        </span>
+                      </span>
                       <span className="text-[10px] text-slate-500 shrink-0">{timeLabel(m.createdAt)}</span>
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">

@@ -13,6 +13,12 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.11.1] - 2026-10-04
+
+### Added
+- WhatsApp page: a "Sent by agents" folder showing what your Industry Agents sent (approved drafts), and an Agent / You tag on every sent message.
+- WhatsApp page: "New chat" can start a conversation with any number, not only leads, so you can message your own number to test.
+
 ## [2.11.0] - 2026-10-04
 
 ### Added
