@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { X, Check, Plus, Trash2 } from "lucide-react";
 import { useCRM } from "../../context/CRMContext";
+import IndustryPicker from "../common/IndustryPicker";
 import { sanitizeIndustryText } from "../../lib/industryMatch";
-import { INDUSTRIES, CLIENT_CATEGORIES } from "../../data/industries";
+import { CLIENT_CATEGORIES } from "../../data/industries";
 import type { Lead, LeadStatus, SocialLink, TaskPriority } from "../../types";
 
 // Full "Edit details" form for a lead, opened from the Overview and 360°
@@ -158,12 +159,14 @@ export const LeadDetailsEditor: React.FC<{ lead: Lead; onClose: () => void }> = 
             <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Business</h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="Industry (matches an Industry Agent)">
-                <input list="lde-industries" className={inputCls} value={d.industry} onChange={(e) => set({ industry: e.target.value })} />
-                <datalist id="lde-industries">{INDUSTRIES.map((i) => <option key={i} value={i} />)}</datalist>
+                <IndustryPicker className={inputCls} value={d.industry} onChange={(v) => set({ industry: v })} />
               </Field>
               <Field label="Client category">
-                <input list="lde-categories" className={inputCls} value={d.clientCategory} onChange={(e) => set({ clientCategory: e.target.value })} />
-                <datalist id="lde-categories">{CLIENT_CATEGORIES.map((c) => <option key={c} value={c} />)}</datalist>
+                <select className={inputCls} value={d.clientCategory} onChange={(e) => set({ clientCategory: e.target.value })}>
+                  <option value="">Select…</option>
+                  {d.clientCategory && !CLIENT_CATEGORIES.includes(d.clientCategory) && <option value={d.clientCategory}>{d.clientCategory}</option>}
+                  {CLIENT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
               </Field>
               <Field label="Source">
                 <input className={inputCls} value={d.source} onChange={(e) => set({ source: e.target.value })} />

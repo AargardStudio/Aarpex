@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.11.2]
+
+### Fixed
+- Industry assign/change/select dropdowns: the lead Details editor and the lead drawer's inline industry edit used native type-ahead lists that only showed entries matching the text already typed, so a lead with an industry set showed almost no choices. Replaced with a real dropdown (all industries always listed, plus "Other" to type your own); Client category is now a dropdown too. The industry edit pencil is always visible.
+
 ## [2.11.1] - 2026-10-04
 
 ### Added

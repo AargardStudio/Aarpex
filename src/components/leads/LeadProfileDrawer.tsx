@@ -44,7 +44,7 @@ import {
 } from "lucide-react";
 import { apiFetch } from "../../lib/apiClient";
 import { sanitizeIndustryText } from "../../lib/industryMatch";
-import { INDUSTRIES } from "../../data/industries";
+import IndustryPicker from "../common/IndustryPicker";
 import type { SocialLink, TaskPriority } from "../../types";
 
 interface AnalysisResult {
@@ -1253,24 +1253,12 @@ export const LeadProfileDrawer: React.FC = () => {
                     <span className="text-slate-400 block text-[11px]">Industry</span>
                     {isEditingIndustry ? (
                       <div className="flex items-center gap-1 mt-0.5">
-                        <input
-                          type="text"
-                          list="lead-industry-suggestions"
+                        <IndustryPicker
                           autoFocus
                           value={industryDraft}
-                          onChange={(e) => setIndustryDraft(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleSaveIndustry();
-                            if (e.key === "Escape") setIsEditingIndustry(false);
-                          }}
-                          placeholder="e.g. Healthcare & Wellness"
-                          className="w-36 px-1.5 py-0.5 border border-indigo-300 rounded text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          onChange={setIndustryDraft}
+                          className="w-44 px-1.5 py-0.5 border border-indigo-300 rounded text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                         />
-                        <datalist id="lead-industry-suggestions">
-                          {INDUSTRIES.map((ind) => (
-                            <option key={ind} value={ind} />
-                          ))}
-                        </datalist>
                         <button
                           onClick={handleSaveIndustry}
                           className="p-1 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
@@ -1291,7 +1279,7 @@ export const LeadProfileDrawer: React.FC = () => {
                         {lead.industry || "—"}
                         <button
                           onClick={handleStartEditIndustry}
-                          className="opacity-0 group-hover/industry:opacity-100 text-slate-400 hover:text-indigo-600 transition-opacity"
+                          className="opacity-60 group-hover/industry:opacity-100 text-slate-400 hover:text-indigo-600 transition-opacity"
                           title="Edit industry -- match this to an Industry Agent to include this lead in its AI agent"
                         >
                           <Pencil className="w-3 h-3" />
