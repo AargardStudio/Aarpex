@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useCRM } from "../../context/CRMContext";
 import { Building2, X, Plus, Sparkles, Check, Globe, Shield } from "lucide-react";
 import { PLATFORM_PLAN, PLATFORM_TRIAL_DAYS, FOUNDER_EMAIL } from "../../data/subscriptionPlans";
@@ -15,12 +15,32 @@ export interface WorkspaceModalProps {
 export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({ mandatory = false }) => {
   const { isCreateTenantModalOpen, setCreateTenantModalOpen, createTenant, currentUser, signOut } = useCRM();
 
-  const [name, setName] = useState("");
-  const [industry, setIndustry] = useState("Enterprise SaaS");
-  const [currency, setCurrency] = useState("USD");
+  // Details typed at sign-up (kept across the email-confirmation round trip).
+  const pending = (() => {
+    try {
+      const raw = localStorage.getItem("aarpex_pending_workspace_v1");
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      if (p?.email && (currentUser.email || "").trim().toLowerCase() !== p.email) return null;
+      return p as { name?: string; industry?: string; currency?: string };
+    } catch {
+      return null;
+    }
+  })();
+  const [name, setName] = useState(pending?.name || "");
+  const [industry, setIndustry] = useState(pending?.industry || "Enterprise SaaS");
+  const [currency, setCurrency] = useState(
+    (pending?.currency || "USD").includes("EUR") ? "EUR" : (pending?.currency || "").includes("GBP") ? "GBP" : (pending?.currency || "").includes("CAD") ? "CAD" : (pending?.currency || "").includes("AUD") ? "AUD" : "USD"
+  );
   // AarPex is a flat-rate product — every new workspace is provisioned on the single platform plan.
   const plan: "Starter" | "Growth" | "Pro" | "Enterprise" = PLATFORM_PLAN.id;
   const [companyName, setCompanyName] = useState("");
+  // The user profile can finish loading after this mounts; pre-fill once it has.
+  useEffect(() => {
+    if (name || !pending?.name) return;
+    setName(pending.name);
+    if (pending.industry) setIndustry(pending.industry);
+  }, [currentUser.email]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
 
@@ -47,6 +67,7 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({ mandatory = fals
         plan,
         companyName: companyName.trim() || name.trim(),
       });
+      try { localStorage.removeItem("aarpex_pending_workspace_v1"); } catch {}
       setCreateTenantModalOpen(false);
       setName("");
       setCompanyName("");
@@ -115,6 +136,9 @@ export const WorkspaceModal: React.FC<WorkspaceModalProps> = ({ mandatory = fals
                 onChange={(e) => setIndustry(e.target.value)}
                 className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
               >
+                {industry && !["Enterprise SaaS","Fintech & Banking","Healthcare & BioTech","Cybersecurity","E-Commerce & Retail","Consulting & Agency"].includes(industry) && (
+                  <option value={industry}>{industry}</option>
+                )}
                 <option value="Enterprise SaaS">Enterprise SaaS</option>
                 <option value="Fintech & Banking">Fintech & Banking</option>
                 <option value="Healthcare & BioTech">Healthcare & BioTech</option>

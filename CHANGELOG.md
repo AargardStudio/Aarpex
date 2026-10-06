@@ -13,6 +13,14 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.12.0]
+
+### Changed
+- Sign-up: confirmation email link now returns to `/app` (explicit `emailRedirectTo`) instead of whatever Supabase's Site URL is set to.
+- Workspace name/industry/currency typed at sign-up now survive the email-confirmation round trip and pre-fill the first-login "create workspace" screen.
+- Added "Resend confirmation email" (after sign-up, and when sign-in says the email isn't confirmed).
+- Friendlier auth errors (already registered, unconfirmed email, wrong password, rate limit); minimum password is now 8 characters; simpler terms wording.
+
 ## [2.11.2]
 
 ### Fixed

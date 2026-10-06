@@ -38,6 +38,25 @@ interface AuthPageProps {
 // this is how the app remembers what to provision once the card is confirmed.
 const PENDING_SIGNUP_KEY = "crm_pending_signup_v1";
 
+// Workspace details typed at sign-up, kept across the email-confirmation round
+// trip so the first-login "create workspace" screen can pre-fill them.
+export const PENDING_WORKSPACE_KEY = "aarpex_pending_workspace_v1";
+
+const AUTH_REDIRECT_URL = typeof window !== "undefined" ? `${window.location.origin}/app` : undefined;
+
+const friendlyAuthError = (msg: string | undefined, fallback: string): string => {
+  const m = (msg || "").toLowerCase();
+  if (m.includes("already registered") || m.includes("already been registered"))
+    return "An account with this email already exists. Use the Sign In tab instead, or reset your password.";
+  if (m.includes("email not confirmed"))
+    return "Your email isn't confirmed yet. Click the link in the confirmation email we sent, or resend it below.";
+  if (m.includes("invalid login credentials")) return "Incorrect email or password. Please try again.";
+  if (m.includes("rate limit") || m.includes("too many"))
+    return "Too many attempts. Please wait a minute and try again.";
+  if (m.includes("password") && m.includes("characters")) return "Please choose a longer password (at least 8 characters).";
+  return msg || fallback;
+};
+
 interface PendingSignup {
   email: string;
   name: string;
@@ -82,14 +101,39 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [resendEmail, setResendEmail] = useState<string | null>(null);
+  const [resendBusy, setResendBusy] = useState(false);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
 
   const authNotConfiguredMessage =
     "Sign-in isn't available yet — this deployment has no Supabase project connected. Contact your administrator.";
 
+  const handleResendConfirmation = async () => {
+    if (!resendEmail) return;
+    setResendBusy(true);
+    try {
+      const supabase = getSupabaseAuthClient();
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: resendEmail,
+        options: { emailRedirectTo: AUTH_REDIRECT_URL },
+      });
+      if (error) setErrorMessage(friendlyAuthError(error.message, "Couldn't resend the email."));
+      else {
+        setErrorMessage(null);
+        setSuccessNotice(`Confirmation email re-sent to ${resendEmail}. Check your inbox and spam folder.`);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || "Couldn't resend the email.");
+    } finally {
+      setResendBusy(false);
+    }
+  };
+
   const handleSignInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setResendEmail(null);
 
     if (!isSupabaseAuthConfigured()) {
       setErrorMessage(authNotConfiguredMessage);
@@ -110,7 +154,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       });
 
       if (error) {
-        setErrorMessage(error.message || "Invalid email or password.");
+        setErrorMessage(friendlyAuthError(error.message, "Invalid email or password."));
+        if ((error.message || "").toLowerCase().includes("email not confirmed")) setResendEmail(signInEmail.trim());
         setIsLoading(false);
         return;
       }
@@ -261,8 +306,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       return;
     }
 
-    if (!signUpPassword.trim() || signUpPassword.trim().length < 6) {
-      setErrorMessage("Please choose a password of at least 6 characters.");
+    if (!signUpPassword.trim() || signUpPassword.length < 8) {
+      setErrorMessage("Please choose a password of at least 8 characters.");
       return;
     }
 
@@ -284,11 +329,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         password: signUpPassword,
         options: {
           data: { full_name: signUpName.trim() },
+          emailRedirectTo: AUTH_REDIRECT_URL,
         },
       });
 
       if (error) {
-        setErrorMessage(error.message || "Unable to create your account.");
+        setErrorMessage(friendlyAuthError(error.message, "Unable to create your account."));
         setIsLoading(false);
         return;
       }
@@ -298,8 +344,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         // there's no session yet, so the new workspace can't be created
         // (and won't pass RLS) until the user confirms and signs in.
         setIsLoading(false);
+        try {
+          localStorage.setItem(
+            PENDING_WORKSPACE_KEY,
+            JSON.stringify({ email: signUpEmail.trim().toLowerCase(), name: newOrgName.trim(), industry: newOrgIndustry, currency: newOrgCurrency })
+          );
+        } catch {}
+        setResendEmail(signUpEmail.trim());
         setSuccessNotice(
-          `Account created for ${signUpEmail.trim()}! Check your email to confirm your address, then sign in to finish setting up "${newOrgName.trim()}".`
+          `Account created for ${signUpEmail.trim()}! Check your email (and spam folder) and click the confirmation link, then sign in — "${newOrgName.trim()}" will be set up with the details you entered.`
         );
         return;
       }
@@ -422,6 +475,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           <div className="p-3 mx-6 mt-4 rounded-xl bg-teal-950/50 border border-teal-800 text-teal-200 text-xs font-semibold flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
             <span>{successNotice}</span>
+          </div>
+        )}
+
+        {resendEmail && (
+          <div className="mx-6 mt-2 text-[11px] text-slate-400 flex items-center gap-2">
+            <span>Didn't get the email?</span>
+            <button
+              type="button"
+              onClick={handleResendConfirmation}
+              disabled={resendBusy}
+              className="text-teal-400 hover:text-teal-300 font-semibold disabled:opacity-50"
+            >
+              {resendBusy ? "Sending…" : "Resend confirmation email"}
+            </button>
           </div>
         )}
 
@@ -554,7 +621,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     required
                     value={signUpPassword}
                     onChange={(e) => setSignUpPassword(e.target.value)}
-                    placeholder="Create a strong password"
+                    placeholder="At least 8 characters"
                     className="w-full px-3 pr-10 py-1.5 bg-[#101217] border border-[#2d323f] text-white rounded-xl text-xs focus:outline-none focus:border-teal-400"
                   />
                   <button
@@ -647,7 +714,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     className="mt-0.5 rounded border-[#2d323f] bg-[#101217] text-teal-500 focus:ring-0"
                   />
                   <span className="text-[11px]">
-                    I agree to the Enterprise Multi-Tenant Terms of Service and Scoped Data Security Policy.
+                    I agree to the Terms of Service and Data Security Policy.
                   </span>
                 </label>
               </div>
