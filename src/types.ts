@@ -591,6 +591,22 @@ export interface EmailStep {
   deliveryResults?: EmailStepDeliveryResult[];
 }
 
+// Writing/sending options chosen in the campaign maker.
+export interface CampaignOptions {
+  tone?: string; // e.g. "Professional", "Friendly"
+  length?: "Short" | "Medium" | "Detailed";
+  language?: string;
+  cta?: string; // call-to-action type, e.g. "Book a call"
+  ctaLink?: string;
+  subjectStyle?: string; // e.g. "Curiosity", "Benefit-led"
+  goal?: string; // what the campaign should achieve
+  extraInstructions?: string; // free-text guidance for the AI
+  signature?: string; // appended to every email
+  includePS?: boolean;
+  useEmoji?: boolean;
+  skipWeekends?: boolean; // follow-ups never fall on Sat/Sun
+}
+
 export interface EmailCampaign {
   id: string;
   name: string;
@@ -619,6 +635,7 @@ export interface EmailCampaign {
   // emails and is scanned for its replies. Unset falls back to the
   // tenant's default mailbox (see Tenant.webmailConfigs).
   mailboxId?: string;
+  options?: CampaignOptions;
 }
 
 export interface Deal {

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useCRM } from "../../context/CRMContext";
-import { EmailCampaign, EmailFrequency, EmailCampaignTechnique, EmailStep, EmailStepDeliveryResult, SalesTechnique } from "../../types";
+import { EmailCampaign, EmailFrequency, EmailCampaignTechnique, EmailStep, EmailStepDeliveryResult, SalesTechnique, CampaignOptions } from "../../types";
 import { apiFetch } from "../../lib/apiClient";
 import { computeProductMatches } from "../../lib/productMatching";
 import { getMailboxById, mailboxLabel } from "../../lib/webmail";
@@ -70,6 +70,33 @@ function addDaysToToday(days: number): string {
   d.setDate(d.getDate() + days);
   return d.toISOString().split("T")[0];
 }
+
+// Rolls a yyyy-mm-dd date forward off Saturday/Sunday to the next Monday.
+function skipWeekend(iso: string): string {
+  const d = new Date(`${iso}T12:00:00`);
+  const day = d.getDay();
+  if (day === 6) d.setDate(d.getDate() + 2);
+  else if (day === 0) d.setDate(d.getDate() + 1);
+  return d.toISOString().split("T")[0];
+}
+
+const TONES = ["Professional", "Friendly", "Direct & concise", "Formal", "Casual", "Persuasive", "Empathetic", "Confident", "Playful"];
+const LENGTHS: { id: NonNullable<CampaignOptions["length"]>; label: string; hint: string }[] = [
+  { id: "Short", label: "Short", hint: "~50-80 words" },
+  { id: "Medium", label: "Medium", hint: "~90-140 words" },
+  { id: "Detailed", label: "Detailed", hint: "~150-220 words" },
+];
+const LANGUAGES = ["English", "Urdu (Roman script)", "Arabic", "French", "Spanish", "German", "Hindi (Roman script)", "Portuguese"];
+const CTAS = ["Book a call", "Reply to this email", "Book a demo", "Get a free audit", "Request a quote", "Visit our website", "Download a resource", "Start a free trial"];
+const SUBJECT_STYLES = ["Curiosity", "Benefit-led", "Question", "Personalized (company name)", "Short & plain", "Urgency"];
+const REWRITE_ACTIONS = [
+  "Make it shorter",
+  "Make it friendlier",
+  "Make it more formal",
+  "Stronger call-to-action",
+  "Add urgency",
+  "Simplify the language",
+];
 
 function mergeTags(template: string, vars: { firstName: string; company: string; jobTitle: string }): string {
   return (template || "")
@@ -384,6 +411,28 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   const [generatedSteps, setGeneratedSteps] = useState<EmailStep[]>([]);
   const [activeStepTab, setActiveStepTab] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+  const [opts, setOpts] = useState<CampaignOptions>({
+    tone: "Professional",
+    length: "Medium",
+    language: "English",
+    cta: "Book a call",
+    ctaLink: "",
+    subjectStyle: "Benefit-led",
+    goal: "",
+    extraInstructions: "",
+    signature: "",
+    includePS: false,
+    useEmoji: false,
+    skipWeekends: true,
+  });
+  const setOpt = (patch: Partial<CampaignOptions>) => setOpts((p) => ({ ...p, ...patch }));
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [rewriteBusy, setRewriteBusy] = useState(false);
+  const [rewriteNote, setRewriteNote] = useState("");
+  const [customRewrite, setCustomRewrite] = useState("");
+  const [testBusy, setTestBusy] = useState(false);
+  const [testNote, setTestNote] = useState("");
+  const [showPreview, setShowPreview] = useState(false);
 
   const frequencyDays = frequency === "Custom" ? Math.max(1, customDays) : FREQUENCY_DAYS[frequency];
 
@@ -441,6 +490,7 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           frequencyDays,
           senderName: currentUser?.name,
           senderCompany: activeTenant?.companyName || activeTenant?.name,
+          options: opts,
           productName: selectedProduct?.name,
           productPitch: selectedProduct?.pitch,
           agent: selectedAgent
@@ -476,6 +526,91 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
 
   const updateGeneratedStep = (idx: number, updates: Partial<EmailStep>) => {
     setGeneratedSteps((prev) => prev.map((s, i) => (i === idx ? { ...s, ...updates } : s)));
+  };
+
+  const addBlankStep = () => {
+    setGeneratedSteps((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}_n${prev.length}`,
+        stepNumber: prev.length + 1,
+        delayDays: frequencyDays,
+        technique: "Need-Based" as const,
+        subject: "Following up",
+        body: "Hi {{firstName}},\n\n\n\nBest regards,\n" + (currentUser?.name || ""),
+        status: "Draft" as const,
+      },
+    ]);
+    setActiveStepTab(generatedSteps.length);
+  };
+  const duplicateStep = (idx: number) => {
+    setGeneratedSteps((prev) => {
+      const copy = { ...prev[idx], id: `${Date.now()}_d${idx}`, status: "Draft" as const };
+      const next = [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)];
+      return next.map((st, i) => ({ ...st, stepNumber: i + 1, delayDays: i === 0 ? 0 : st.delayDays || frequencyDays }));
+    });
+    setActiveStepTab(idx + 1);
+  };
+  const removeStep = (idx: number) => {
+    if (generatedSteps.length <= 1) return;
+    setGeneratedSteps((prev) =>
+      prev.filter((_, i) => i !== idx).map((st, i) => ({ ...st, stepNumber: i + 1, delayDays: i === 0 ? 0 : st.delayDays || frequencyDays }))
+    );
+    setActiveStepTab((t) => Math.max(0, Math.min(t, generatedSteps.length - 2)));
+  };
+  const insertTag = (tag: string) => {
+    const cur = generatedSteps[activeStepTab];
+    if (cur) updateGeneratedStep(activeStepTab, { body: `${cur.body}${cur.body.endsWith(" ") || cur.body.endsWith("\n") ? "" : " "}${tag}` });
+  };
+  const rewriteStep = async (instruction: string) => {
+    const cur = generatedSteps[activeStepTab];
+    if (!cur || !instruction.trim()) return;
+    setRewriteBusy(true);
+    setRewriteNote("");
+    try {
+      const res = await apiFetch("/api/ai/rewrite-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject: cur.subject, body: cur.body, instruction, options: opts }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Rewrite failed");
+      updateGeneratedStep(activeStepTab, { subject: data.subject || cur.subject, body: data.body });
+      setRewriteNote(`Done: "${instruction}". Edit freely, or run another change.`);
+      setCustomRewrite("");
+    } catch (err: any) {
+      setRewriteNote(err.message || "Rewrite failed. Try again.");
+    } finally {
+      setRewriteBusy(false);
+    }
+  };
+  const sampleRecipient = (): Recipient => {
+    const r = buildRecipients()[0];
+    return r || { id: "sample", email: currentUser?.email || "", firstName: "Alex", company: "Acme Co", jobTitle: "Operations Manager" };
+  };
+  const sendTestToMe = async () => {
+    const cur = generatedSteps[activeStepTab];
+    const to = currentUser?.email;
+    if (!cur || !to) {
+      setTestNote("No email address found on your profile.");
+      return;
+    }
+    setTestBusy(true);
+    setTestNote("");
+    try {
+      const sample = sampleRecipient();
+      const result = await sendCampaignEmail(
+        getMailboxById(activeTenant, selectedMailboxId),
+        currentUser,
+        activeTenant,
+        { ...sample, email: to },
+        `[TEST] ${mergeTags(cur.subject, sample)}`,
+        mergeTags(cur.body, sample)
+      );
+      setTestNote(result.success ? `Test email sent to ${to}.` : `Test failed: ${result.error || "check your mailbox settings"}`);
+    } finally {
+      setTestBusy(false);
+    }
   };
 
   const handleSave = async (activate: boolean) => {
@@ -530,7 +665,7 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           // never got to.
           if (succeeded === 0) return s;
           const cumulativeDelay = steps.slice(1, i + 1).reduce((sum, st) => sum + (st.delayDays || frequencyDays), 0);
-          return { ...s, status: "Scheduled" as const, scheduledDate: addDaysToToday(cumulativeDelay) };
+          return { ...s, status: "Scheduled" as const, scheduledDate: opts.skipWeekends ? skipWeekend(addDaysToToday(cumulativeDelay)) : addDaysToToday(cumulativeDelay) };
         });
       }
 
@@ -548,6 +683,7 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
         startDate: activate ? new Date().toISOString().split("T")[0] : undefined,
         salesperson: currentUser?.name || "",
         mailboxId: selectedMailboxId || undefined,
+        options: opts,
       });
 
       onClose();
@@ -571,7 +707,7 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
               <h2 className="text-sm font-bold text-white">New Email Campaign</h2>
               <p className="text-[11px] text-slate-400">
                 Step {step} of 4 &bull;{" "}
-                {step === 1 ? "Name & Audience" : step === 2 ? "Cadence" : step === 3 ? "Sales Technique" : "Customize Emails"}
+                {step === 1 ? "Name & Audience" : step === 2 ? "Cadence" : step === 3 ? "Technique & Style" : "Customize Emails"}
               </p>
             </div>
           </div>
@@ -789,6 +925,24 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                   </span>
                 </div>
               </div>
+
+              <label className="flex items-start gap-2.5 p-3 rounded-lg bg-[#121418] border border-[#2d323f] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!opts.skipWeekends}
+                  onChange={(e) => setOpt({ skipWeekends: e.target.checked })}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="block text-white font-semibold">Skip weekends</span>
+                  <span className="block text-[11px] text-slate-400">
+                    Follow-ups that would land on a Saturday or Sunday move to Monday.
+                  </span>
+                </span>
+              </label>
+              <p className="text-[11px] text-slate-500">
+                Follow-ups for anyone who replies are paused automatically once you check replies in the campaign.
+              </p>
             </div>
           )}
 
@@ -831,6 +985,136 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                 {technique === "Mixed" && <Check className="w-4 h-4 text-teal-400 ml-auto shrink-0" />}
               </button>
 
+              <div className="pt-3 mt-1 border-t border-[#2d323f] space-y-3">
+                <div className="text-slate-300 font-semibold">Style &amp; content options</div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Tone of voice</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {TONES.map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setOpt({ tone: t })}
+                        className={`px-2.5 py-1 rounded-full border text-[11px] font-medium ${
+                          opts.tone === t
+                            ? "bg-teal-500/15 border-teal-500/50 text-teal-300"
+                            : "bg-[#121418] border-[#2d323f] text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Email length</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {LENGTHS.map((l) => (
+                      <button
+                        key={l.id}
+                        type="button"
+                        onClick={() => setOpt({ length: l.id })}
+                        className={`px-2 py-2 rounded-lg border text-center ${
+                          opts.length === l.id
+                            ? "bg-teal-500/10 border-teal-500/50 text-teal-300"
+                            : "bg-[#121418] border-[#2d323f] text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        <span className="block font-semibold">{l.label}</span>
+                        <span className="block text-[10px] opacity-70">{l.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-400 mb-1">Call-to-action</label>
+                    <select value={opts.cta} onChange={(e) => setOpt({ cta: e.target.value })} className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400">
+                      {CTAS.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Subject line style</label>
+                    <select value={opts.subjectStyle} onChange={(e) => setOpt({ subjectStyle: e.target.value })} className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400">
+                      {SUBJECT_STYLES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Link for the call-to-action (optional)</label>
+                  <input
+                    type="url"
+                    value={opts.ctaLink || ""}
+                    onChange={(e) => setOpt({ ctaLink: e.target.value })}
+                    placeholder="https://calendly.com/you/intro-call"
+                    className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced((v) => !v)}
+                  className="text-teal-400 hover:text-teal-300 font-semibold"
+                >
+                  {showAdvanced ? "Hide more options" : "More options (language, goal, signature, P.S., emoji)"}
+                </button>
+
+                {showAdvanced && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-slate-400 mb-1">Language</label>
+                      <select value={opts.language} onChange={(e) => setOpt({ language: e.target.value })} className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400">
+                        {LANGUAGES.map((c) => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">Campaign goal</label>
+                      <input
+                        type="text"
+                        value={opts.goal || ""}
+                        onChange={(e) => setOpt({ goal: e.target.value })}
+                        placeholder="e.g. Book 10 discovery calls with clinic owners this month"
+                        className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">Extra instructions for the AI</label>
+                      <textarea
+                        rows={2}
+                        value={opts.extraInstructions || ""}
+                        onChange={(e) => setOpt({ extraInstructions: e.target.value })}
+                        placeholder="e.g. Mention our 30-day money-back guarantee. Never mention pricing."
+                        className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400 resize-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">Signature (added to every email)</label>
+                      <textarea
+                        rows={3}
+                        value={opts.signature || ""}
+                        onChange={(e) => setOpt({ signature: e.target.value })}
+                        placeholder={"Best regards,\n" + (currentUser?.name || "Your name") + "\n" + (activeTenant?.companyName || activeTenant?.name || "")}
+                        className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400 resize-none"
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={!!opts.includePS} onChange={(e) => setOpt({ includePS: e.target.checked })} />
+                        <span>Add a P.S. to the first email</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={!!opts.useEmoji} onChange={(e) => setOpt({ useEmoji: e.target.checked })} />
+                        <span>Allow emojis</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {generateError && (
                 <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-300">
                   {generateError}
@@ -858,10 +1142,65 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                 ))}
               </div>
 
+              <div className="flex items-center gap-2 flex-wrap">
+                <button type="button" onClick={addBlankStep} className="px-2.5 py-1 rounded-lg bg-[#252a36] hover:bg-[#2f3544] text-slate-200 font-semibold">
+                  + Add follow-up
+                </button>
+                {generatedSteps[activeStepTab] && (
+                  <>
+                    <button type="button" onClick={() => duplicateStep(activeStepTab)} className="px-2.5 py-1 rounded-lg bg-[#252a36] hover:bg-[#2f3544] text-slate-200 font-semibold">
+                      Duplicate
+                    </button>
+                    {generatedSteps.length > 1 && (
+                      <button type="button" onClick={() => removeStep(activeStepTab)} className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-semibold">
+                        Delete this email
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+
               {generatedSteps[activeStepTab] && (
                 <div className="space-y-2.5">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Technique</label>
+                      <select
+                        value={generatedSteps[activeStepTab].technique}
+                        onChange={(e) => updateGeneratedStep(activeStepTab, { technique: e.target.value as SalesTechnique })}
+                        className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+                      >
+                        <option value="Need-Based">Need-Based</option>
+                        <option value="Emotional">Emotional</option>
+                        <option value="Problem-Solution">Problem-Solution</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">
+                        {activeStepTab === 0 ? "Sends" : "Days after previous email"}
+                      </label>
+                      {activeStepTab === 0 ? (
+                        <div className="px-3 py-2 bg-[#121418] border border-[#2d323f] text-slate-400 rounded-lg">Immediately on launch</div>
+                      ) : (
+                        <input
+                          type="number"
+                          min={1}
+                          max={90}
+                          value={generatedSteps[activeStepTab].delayDays}
+                          onChange={(e) => updateGeneratedStep(activeStepTab, { delayDays: Math.max(1, Number(e.target.value) || 1) })}
+                          className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+                        />
+                      )}
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Subject</label>
+                    <div className="flex items-center justify-between">
+                      <label className="block text-slate-300 font-semibold mb-1">Subject</label>
+                      <span className={`text-[10px] ${generatedSteps[activeStepTab].subject.length > 60 ? "text-amber-400" : "text-slate-500"}`}>
+                        {generatedSteps[activeStepTab].subject.length} characters{generatedSteps[activeStepTab].subject.length > 60 ? " (long -- may be cut off on phones)" : ""}
+                      </span>
+                    </div>
                     <input
                       type="text"
                       value={generatedSteps[activeStepTab].subject}
@@ -870,20 +1209,101 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                     />
                   </div>
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Body</label>
+                    <div className="flex items-center justify-between flex-wrap gap-1">
+                      <label className="block text-slate-300 font-semibold mb-1">Body</label>
+                      <span className="text-[10px] text-slate-500">
+                        {generatedSteps[activeStepTab].body.trim().split(/\s+/).filter(Boolean).length} words
+                      </span>
+                    </div>
                     <textarea
                       rows={9}
                       value={generatedSteps[activeStepTab].body}
                       onChange={(e) => updateGeneratedStep(activeStepTab, { body: e.target.value })}
                       className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400 resize-none"
                     />
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      Use <code className="text-teal-400">{"{{firstName}}"}</code>,{" "}
-                      <code className="text-teal-400">{"{{company}}"}</code>, and{" "}
-                      <code className="text-teal-400">{"{{jobTitle}}"}</code> — each recipient gets their own version
-                      automatically.
-                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                      <span className="text-[10px] text-slate-500">Insert:</span>
+                      {["{{firstName}}", "{{company}}", "{{jobTitle}}"].map((tg) => (
+                        <button key={tg} type="button" onClick={() => insertTag(tg)} className="px-2 py-0.5 rounded bg-[#252a36] hover:bg-[#2f3544] text-teal-300 text-[10px] font-mono">
+                          {tg}
+                        </button>
+                      ))}
+                      <span className="text-[10px] text-slate-500">each recipient gets their own version.</span>
+                    </div>
                   </div>
+
+                  <div className="p-3 rounded-lg bg-[#121418] border border-[#2d323f] space-y-2">
+                    <div className="text-slate-300 font-semibold flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-teal-400" /> Improve this email with AI
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {REWRITE_ACTIONS.map((a) => (
+                        <button
+                          key={a}
+                          type="button"
+                          disabled={rewriteBusy}
+                          onClick={() => rewriteStep(a)}
+                          className="px-2.5 py-1 rounded-full bg-[#252a36] hover:bg-[#2f3544] disabled:opacity-50 text-slate-200 text-[11px]"
+                        >
+                          {a}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={customRewrite}
+                        onChange={(e) => setCustomRewrite(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") rewriteStep(customRewrite); }}
+                        placeholder="Or tell the AI what to change..."
+                        className="w-full px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+                      />
+                      <button
+                        type="button"
+                        disabled={rewriteBusy || !customRewrite.trim()}
+                        onClick={() => rewriteStep(customRewrite)}
+                        className="px-3 rounded-lg bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white font-semibold flex items-center gap-1.5"
+                      >
+                        {rewriteBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                        Apply
+                      </button>
+                    </div>
+                    {rewriteNote && <p className="text-[11px] text-slate-400">{rewriteNote}</p>}
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setShowPreview((v) => !v)}
+                      className="px-3 py-1.5 rounded-lg bg-[#252a36] hover:bg-[#2f3544] text-slate-200 font-semibold"
+                    >
+                      {showPreview ? "Hide preview" : "Preview as a recipient"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={testBusy}
+                      onClick={sendTestToMe}
+                      className="px-3 py-1.5 rounded-lg bg-[#252a36] hover:bg-[#2f3544] disabled:opacity-50 text-slate-200 font-semibold flex items-center gap-1.5"
+                    >
+                      {testBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                      Send a test to me
+                    </button>
+                    {testNote && <span className="text-[11px] text-slate-400">{testNote}</span>}
+                  </div>
+
+                  {showPreview && (() => {
+                    const sample = sampleRecipient();
+                    const cur = generatedSteps[activeStepTab];
+                    return (
+                      <div className="rounded-lg border border-[#2d323f] bg-white text-slate-800 p-4 space-y-2">
+                        <div className="text-[10px] text-slate-500">
+                          Preview for {sample.firstName} at {sample.company}
+                        </div>
+                        <div className="font-bold text-sm">{mergeTags(cur.subject, sample)}</div>
+                        <div className="whitespace-pre-wrap text-xs leading-relaxed">{mergeTags(cur.body, sample)}</div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>

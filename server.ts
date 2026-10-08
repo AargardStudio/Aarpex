@@ -807,6 +807,60 @@ Return pure valid JSON only.`;
 // for a whole audience of selected leads/contacts at once, using merge tags
 // ({{firstName}}, {{company}}, {{jobTitle}}) instead of one AI call per
 // recipient -- the frontend substitutes those per-recipient at send time.
+
+// ---- Campaign maker options -> prompt text / signature ----------------------
+function campaignOptionsPrompt(o: any): string {
+  if (!o || typeof o !== "object") return "";
+  const lines: string[] = [];
+  if (o.tone) lines.push(`- Tone of voice: ${o.tone}`);
+  if (o.length === "Short") lines.push("- Length: SHORT -- 50 to 80 words per email");
+  else if (o.length === "Detailed") lines.push("- Length: DETAILED -- 150 to 220 words per email, with a little more proof and context");
+  else if (o.length === "Medium") lines.push("- Length: MEDIUM -- 90 to 140 words per email");
+  if (o.language && !/^english/i.test(o.language)) lines.push(`- Write the emails in ${o.language}. Keep the merge tags exactly as written.`);
+  if (o.cta) lines.push(`- Call-to-action type: ${o.cta}${o.ctaLink ? ` (use this link: ${o.ctaLink})` : ""}`);
+  else if (o.ctaLink) lines.push(`- Include this link in the call-to-action: ${o.ctaLink}`);
+  if (o.subjectStyle) lines.push(`- Subject line style: ${o.subjectStyle}`);
+  if (o.goal) lines.push(`- Campaign goal: ${o.goal}`);
+  lines.push(o.useEmoji ? "- A tasteful emoji or two is fine." : "- Do not use emojis.");
+  if (o.includePS) lines.push("- Add a short, relevant P.S. line at the end of the initial email.");
+  if (o.extraInstructions) lines.push(`- Extra instructions from the sender: ${o.extraInstructions}`);
+  if (o.signature) lines.push("- Do NOT write a sign-off or signature block; one is appended automatically.");
+  return lines.length ? `\n\nWriting style options chosen by the sender (follow them closely):\n${lines.join("\n")}` : "";
+}
+
+function applyCampaignSignature(steps: any[], o: any): any[] {
+  const sig = o && typeof o.signature === "string" ? o.signature.trim() : "";
+  if (!sig) return steps;
+  return steps.map((s) => ({ ...s, body: `${String(s.body || "").replace(/\s+$/, "")}\n\n${sig}` }));
+}
+
+// Rewrites one email (subject + body) according to a short instruction.
+app.post("/api/ai/rewrite-email", async (req, res) => {
+  try {
+    const { subject, body, instruction, options } = req.body || {};
+    if (!body || !instruction) return res.status(400).json({ error: "body and instruction are required" });
+    const prompt = `Rewrite the email below according to this instruction: "${String(instruction).slice(0, 400)}".
+Keep the merge tags {{firstName}}, {{company}}, {{jobTitle}} exactly as written. Keep the meaning, keep any link, and keep the existing sign-off.${campaignOptionsPrompt(options)}
+
+Current subject: ${subject || ""}
+Current body:
+${body}
+
+Return pure JSON only, no markdown fences: { "subject": "...", "body": "..." }`;
+    const raw = await callGeminiSafe(prompt);
+    if (!raw) return res.status(503).json({ error: "AI is unavailable right now. Check the AI key in Settings and try again." });
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed.body) throw new Error("empty");
+      return res.json({ subject: parsed.subject || subject || "", body: parsed.body });
+    } catch {
+      return res.status(502).json({ error: "The AI reply could not be read. Try again." });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || "Rewrite failed" });
+  }
+});
+
 app.post("/api/ai/email-campaign", async (req, res) => {
   try {
     const {
@@ -822,6 +876,7 @@ app.post("/api/ai/email-campaign", async (req, res) => {
       productName, // optional: the specific product/service this campaign is pitching
       productPitch, // optional: that product's marketing pitch, to seed the email copy
       agent, // optional: IndustryAgent fields for the audience's industry -- see src/types.ts
+      options, // optional: CampaignOptions (tone, length, language, CTA, ...)
     } = req.body;
 
     const totalSteps = 1 + Math.max(0, Number(followUpCount) || 0);
@@ -878,10 +933,11 @@ ${agent.objectionNotes ? `- Objection handling notes: ${agent.objectionNotes}` :
 ${agent.customInstructions ? `- Additional instructions: ${agent.customInstructions}` : ""}${agentPersonalityLine(agent)}`
       : "";
 
+    const optionsLine = campaignOptionsPrompt(options);
     const prompt = `You are a world-class B2B email marketing strategist writing an outbound email SEQUENCE for ${senderCompany || "a B2B company"}.
 
 Audience: ${audienceCount || (audienceSample || []).length || "several"} ${audienceType === "Contacts" ? "existing contacts" : "sales leads"}.
-Sample of who's in this audience: ${sampleLine}${productLine}${agentLine}
+Sample of who's in this audience: ${sampleLine}${productLine}${agentLine}${optionsLine}
 
 Write a sequence of exactly ${totalSteps} email(s): step 1 is the initial outreach, steps 2+ are follow-ups spaced ${cadenceDays} day(s) apart (cadence: ${frequency || "Weekly"}).
 
@@ -893,7 +949,7 @@ Sales technique to use per step: ${
 
 Where "Need-Based" foregrounds a concrete operational/business need, "Emotional" foregrounds urgency, aspiration, or the cost of inaction, and "Problem-Solution" foregrounds a specific pain point paired with a specific fix.
 
-Every email MUST use the merge tags {{firstName}} and {{company}} (and {{jobTitle}} where natural) instead of real names, so the same template can personalize per recipient at send time. Keep each email under 150 words, end with a clear single call-to-action, and make follow-ups reference that this is a follow-up without being repetitive of earlier steps.
+Every email MUST use the merge tags {{firstName}} and {{company}} (and {{jobTitle}} where natural) instead of real names, so the same template can personalize per recipient at send time. Unless the style options above say otherwise, keep each email under 150 words, end with a clear single call-to-action, and make follow-ups reference that this is a follow-up without being repetitive of earlier steps.
 
 Return pure JSON only, no markdown fences, in this exact shape:
 {
@@ -918,14 +974,14 @@ Return pure JSON only, no markdown fences, in this exact shape:
           while (steps.length < totalSteps) {
             steps.push(fallbackSteps[steps.length]);
           }
-          return res.json({ steps, source: "gemini" });
+          return res.json({ steps: applyCampaignSignature(steps, options), source: "gemini" });
         }
       } catch {
         // fall through to heuristic
       }
     }
 
-    return res.json({ steps: fallbackSteps, source: "heuristic" });
+    return res.json({ steps: applyCampaignSignature(fallbackSteps, options), source: "heuristic" });
   } catch {
     return res.json({
       steps: [

@@ -13,6 +13,13 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.13.0]
+
+### Added
+- Campaign maker: tone, email length, language, call-to-action (+ link), subject style, goal, extra AI instructions, signature, P.S., emoji and "skip weekends" options (stored in new `email_campaigns.options` jsonb column, migration 0027 — applied live).
+- Email editor: per-email technique and delay, add/duplicate/delete follow-ups, merge-tag insert buttons, word/subject counters, recipient preview, "send a test to me", and AI rewrite actions (`/api/ai/rewrite-email`).
+- Docs & Guides page (Instructions view): search, grouped setup guides (sign-up, mailbox, campaign options, WhatsApp, Supabase SMTP/redirects) and troubleshooting; `docs` nav alias.
+
 ## [2.12.0]
 
 ### Changed

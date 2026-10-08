@@ -19,6 +19,11 @@ import {
   Bell,
   Settings,
   Rocket,
+  Search,
+  MessageCircle,
+  KeyRound,
+  Wrench,
+  Megaphone,
 } from "lucide-react";
 
 interface Section {
@@ -26,9 +31,104 @@ interface Section {
   title: string;
   body: string[];
   steps?: string[];
+  group?: string;
 }
 
 const SECTIONS: Section[] = [
+  {
+    icon: KeyRound,
+    group: "Setup guides",
+    title: "Sign up and confirm your email",
+    body: [
+      "Creating an account takes about a minute. Your workspace name, industry and currency are remembered, so you won't be asked again after you confirm your email.",
+    ],
+    steps: [
+      "Open the sign-up page and enter your name, work email, a password (at least 8 characters) and your workspace name.",
+      "Click \"Create Account\". AarPex emails you a confirmation link from support@aargard.com.",
+      "Open the email (check Spam or Promotions if it isn't in your inbox) and click the confirmation link. It brings you back to AarPex.",
+      "Sign in. Your workspace is created with the details you entered -- just check them and click create.",
+      "Didn't get the email? Use \"Resend confirmation email\" on the sign-in or sign-up screen.",
+    ],
+  },
+  {
+    icon: Mail,
+    group: "Setup guides",
+    title: "Connect your sending mailbox (Hostinger and others)",
+    body: [
+      "AarPex sends campaign emails and reads replies through your own mailbox, so messages come from your real address. Add it in Settings -> Mailboxes.",
+      "Hostinger settings: sending (SMTP) host smtp.hostinger.com port 465 (SSL); receiving (IMAP) host imap.hostinger.com port 993 (SSL). The username is the full email address and the password is that mailbox's password.",
+    ],
+    steps: [
+      "Create or confirm the mailbox in your email host (for Hostinger: hPanel -> Emails) and check you can open it in webmail.",
+      "In AarPex go to Settings and add a mailbox: email address, display name, password, SMTP host and port.",
+      "Click the test/verify button. If it fails, re-check the password and that port 465 (or 587) matches your host.",
+      "Make it the default mailbox, or pick it per campaign in the campaign maker (\"Send From\").",
+      "Ask your email host to set SPF, DKIM and DMARC for your domain. Without them, emails often land in spam.",
+    ],
+  },
+  {
+    icon: Megaphone,
+    group: "Setup guides",
+    title: "Email campaign maker -- all options",
+    body: [
+      "Email Marketing -> New Campaign walks you through 4 steps. Everything you choose is saved with the campaign.",
+    ],
+    steps: [
+      "Name & Audience: name the campaign, choose Send From, optionally a Product and an Industry Agent, then tick the leads to include.",
+      "Cadence: pick how often follow-ups go out (Daily, Weekly, Biweekly, Monthly or a custom number of days) and how many follow-ups (0 to 6). \"Skip weekends\" moves anything that would land on Saturday or Sunday to Monday.",
+      "Technique & Style: choose a sales technique (or Mixed), a tone of voice, length (Short, Medium, Detailed), the call-to-action and optional link, and the subject-line style. \"More options\" adds language, campaign goal, extra instructions for the AI, a signature added to every email, an optional P.S. and emoji.",
+      "Click \"Execute AI\" to write the whole sequence.",
+      "Customize Emails: edit any email. You can change its technique and delay, insert {{firstName}} / {{company}} / {{jobTitle}} tags, add, duplicate or delete follow-ups, see word and subject-length counts, and preview exactly what a recipient sees.",
+      "\"Improve this email with AI\": one-click changes (shorter, friendlier, more formal, stronger call-to-action, add urgency, simpler) or type your own instruction.",
+      "\"Send a test to me\" emails the current email to your own address so you can check it before launch.",
+      "Save as Draft to come back later, or Save & Send Now to send the first email and schedule the follow-ups.",
+    ],
+  },
+  {
+    icon: MessageCircle,
+    group: "Setup guides",
+    title: "WhatsApp (Meta Cloud API) setup",
+    body: [
+      "AarPex uses Meta's official WhatsApp Business Cloud API. Nothing is sent to a prospect without your approval.",
+    ],
+    steps: [
+      "In Meta for Developers, create an app with the WhatsApp product and open WhatsApp -> API Setup.",
+      "Copy the Phone number ID and a permanent access token into AarPex Settings -> WhatsApp, then click verify.",
+      "While your number is in test mode, add each recipient under \"To\" in API Setup first, otherwise Meta returns error #131030.",
+      "Use Settings -> WhatsApp -> Test send with the template hello_world to confirm it works.",
+      "To receive replies, add the webhook callback https://aarpex.aarbook.com/api/whatsapp/webhook and your verify token in Meta, and subscribe to \"messages\".",
+      "Outside the 24-hour reply window you can only send an approved template (error #131047). Inside it, normal messages work.",
+      "Open the WhatsApp page to see chats, an unread folder, the \"Sent by agents\" folder, and to message any number.",
+    ],
+  },
+  {
+    icon: Wrench,
+    group: "Admin (workspace owner)",
+    title: "Sign-up emails: SMTP and redirect URLs",
+    body: [
+      "These are one-time settings in your Supabase project (Authentication). They control the confirmation email people get when they sign up.",
+    ],
+    steps: [
+      "Authentication -> URL Configuration: set Site URL to https://aarpex.aarbook.com and add https://aarpex.aarbook.com/app and https://aarpex.aarbook.com/** to Redirect URLs.",
+      "Authentication -> Emails -> SMTP Settings: enable custom SMTP. Sender email support@aargard.com, sender name AarPex, host smtp.hostinger.com, port 465, username support@aargard.com, and that mailbox's password.",
+      "Raise Authentication -> Rate Limits if you expect many sign-ups per hour (custom SMTP starts at a low default).",
+      "Make sure aargard.com has SPF, DKIM and DMARC records so confirmation emails reach the inbox.",
+      "Test by signing up with a fresh email address and checking the email arrives and the link opens AarPex.",
+    ],
+  },
+  {
+    icon: Wrench,
+    group: "Troubleshooting",
+    title: "Common problems and fixes",
+    body: [
+      "Confirmation email didn't arrive: check Spam, use Resend confirmation email, and ask your admin to confirm custom SMTP is on.",
+      "Confirmation link opens the wrong website: the Site URL in Supabase is wrong -- see \"Sign-up emails: SMTP and redirect URLs\".",
+      "A lead isn't picked up by an Industry Agent: the lead's industry must match the agent's industry. Open the lead -> Edit details and choose the industry from the dropdown.",
+      "Campaign emails fail to send: re-test the mailbox in Settings, and check the password and SMTP port.",
+      "WhatsApp error #131030: the recipient isn't on your allowed list yet. Error #131047: the 24-hour window has closed -- use an approved template.",
+      "AI writing fails or is blank: check the AI key under Settings, then try again; the campaign maker falls back to built-in templates if AI is unavailable.",
+    ],
+  },
   {
     icon: Rocket,
     title: "Getting Started (baby steps)",
@@ -187,8 +287,21 @@ const SECTIONS: Section[] = [
   },
 ];
 
+const GROUP_ORDER = ["Using AarPex", "Setup guides", "Admin (workspace owner)", "Troubleshooting"];
+SECTIONS.forEach((sec) => {
+  if (!sec.group) sec.group = "Using AarPex";
+});
+
 export const InstructionsView: React.FC = () => {
-  const [openIndex, setOpenIndex] = useState<number | null>(0);
+  const [openIndex, setOpenIndex] = useState<number | null>(() => Math.max(0, SECTIONS.findIndex((x) => x.title.startsWith("Getting Started"))));
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const visible = SECTIONS.map((section, idx) => ({ section, idx }))
+    .sort((a, b) => GROUP_ORDER.indexOf(a.section.group!) - GROUP_ORDER.indexOf(b.section.group!) || a.idx - b.idx)
+    .filter(({ section }) =>
+    !q ||
+    [section.title, ...section.body, ...(section.steps || [])].join(" ").toLowerCase().includes(q)
+  );
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200 text-slate-100">
@@ -199,21 +312,44 @@ export const InstructionsView: React.FC = () => {
           </span>
           <div>
             <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-white">
-              How AarPex Works
+              Docs &amp; Guides
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              A plain-language guide to every section of your workspace. Click any topic to expand it.
+              Setup instructions, how-tos and troubleshooting for every part of AarPex. Search, or click any topic to expand it.
             </p>
           </div>
         </div>
       </div>
 
+      <div className="relative">
+        <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search the docs (e.g. SMTP, WhatsApp, campaign, industry)…"
+          className="w-full pl-9 pr-3 py-2.5 bg-[#181b21] border border-[#2d323f] text-white rounded-xl text-xs focus:outline-none focus:border-teal-400"
+        />
+      </div>
+
+      {visible.length === 0 && (
+        <div className="bg-[#181b21] rounded-2xl border border-[#2d323f] p-6 text-center text-xs text-slate-400">
+          Nothing matches "{query}". Try a simpler word, or ask the chat bubble in the bottom-right corner.
+        </div>
+      )}
+
       <div className="bg-[#181b21] rounded-2xl border border-[#2d323f] shadow-lg divide-y divide-[#2d323f] overflow-hidden">
-        {SECTIONS.map((section, idx) => {
+        {visible.map(({ section, idx }, vi) => {
           const Icon = section.icon;
-          const isOpen = openIndex === idx;
+          const isOpen = q ? true : openIndex === idx;
+          const prevGroup = vi > 0 ? visible[vi - 1].section.group : undefined;
           return (
             <div key={section.title}>
+              {section.group && section.group !== prevGroup && (
+                <div className="px-4 py-2 bg-[#14171d] text-[10px] font-bold uppercase tracking-wider text-teal-400/80">
+                  {section.group}
+                </div>
+              )}
               <button
                 onClick={() => setOpenIndex(isOpen ? null : idx)}
                 className="w-full flex items-center justify-between gap-3 p-4 hover:bg-[#1c2027] transition-colors text-left"

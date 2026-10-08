@@ -96,6 +96,7 @@ const CRMMainContent: React.FC = () => {
     switch (key) {
       case "dashboard":
         return <DashboardView />;
+      case "docs":
       case "instructions":
         return <InstructionsView />;
       case "leads":

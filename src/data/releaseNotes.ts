@@ -23,6 +23,19 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.13.0",
+    date: "2026-10-08",
+    headline: "More control over every campaign email",
+    tagline: "Tone, length, language, call-to-action, signature -- plus a rebuilt Docs page and a smoother sign-up.",
+    highlights: [
+      { title: "Campaign style options", description: "Choose tone of voice, email length, language, call-to-action and link, subject-line style, goal, signature, P.S. and emoji before the AI writes your sequence." },
+      { title: "Smarter email editor", description: "Edit each email's technique and timing, add, duplicate or delete follow-ups, preview as a recipient, send yourself a test, and improve any email with one-click AI rewrites." },
+      { title: "Skip weekends", description: "Follow-ups that would land on a Saturday or Sunday move to Monday." },
+      { title: "Docs & Guides", description: "A searchable docs page with setup guides for sign-up, your mailbox, campaigns, WhatsApp and admin settings, plus troubleshooting." },
+      { title: "Easier sign-up", description: "The confirmation link returns to AarPex, your workspace details are remembered, and you can resend the confirmation email." },
+    ],
+  },
+  {
     version: "2.11.0",
     date: "2026-10-04",
     headline: "WhatsApp, run by your Industry Agents",
