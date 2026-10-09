@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useCRM } from "../../context/CRMContext";
+import { GroupPicker, GroupChip } from "../leads/LeadGroupsModal";
 import {
   BookMarked,
   Hand,
@@ -39,7 +40,7 @@ import {
 } from "lucide-react";
 import { IndustryAgent, PreferredOutreachChannel, AgentAction, WhatsAppMessage, AIProvider, AgentNature, MBTIType } from "../../types";
 import { INDUSTRIES } from "../../data/industries";
-import { normalizeIndustry, sanitizeIndustryText, summarizeIndustryUsage, findCloseIndustryMatches, IndustryUsage } from "../../lib/industryMatch";
+import { agentMatchesLead, normalizeIndustry, sanitizeIndustryText, summarizeIndustryUsage, findCloseIndustryMatches, IndustryUsage } from "../../lib/industryMatch";
 import { AI_PROVIDER_MODELS, AI_PROVIDER_LABELS, defaultModelFor } from "../../lib/aiProviders";
 import { AGENT_NATURES, AGENT_NATURE_DESCRIPTIONS, MBTI_TYPES, MBTI_INFO } from "../../lib/agentPersonality";
 
@@ -92,6 +93,8 @@ const emptyDraft = (): Omit<IndustryAgent, "id" | "createdAt" | "updatedAt" | "c
   isActive: true,
   productId: undefined,
   excludedLeadIds: [],
+  groupIds: [],
+  groupsOnly: false,
   tone: "",
   talkingPoints: [],
   painPoints: [],
@@ -202,6 +205,8 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
           isActive: editing.isActive,
           productId: editing.productId,
           excludedLeadIds: editing.excludedLeadIds || [],
+          groupIds: editing.groupIds || [],
+          groupsOnly: !!editing.groupsOnly,
           tone: editing.tone,
           talkingPoints: editing.talkingPoints,
           painPoints: editing.painPoints,
@@ -255,6 +260,7 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
 
   const duplicateIndustry =
     !editing &&
+    !(draft.groupsOnly && (draft.groupIds || []).length > 0) &&
     industryAgents.some((p) => normalizeIndustry(p.industry) === normalizeIndustry(draft.industry));
 
   // "Matching Businesses" -- every agent already applies to every
@@ -263,7 +269,9 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
   // Industry field above is edited) and lets specific businesses be opted
   // back out via a checkbox, without touching their Industry field.
   const industryLc = normalizeIndustry(draft.industry);
-  const matchingLeads = industryLc ? (leads || []).filter((l: any) => normalizeIndustry(l.industry) === industryLc) : [];
+  const matchingLeads = (leads || []).filter((l: any) =>
+    (industryLc || (draft.groupIds || []).length > 0) ? agentMatchesLead({ industry: draft.industry, groupIds: draft.groupIds, groupsOnly: draft.groupsOnly }, l) : false
+  );
   const matchingCompanies = industryLc ? (rawCompanies || []).filter((c: any) => normalizeIndustry(c.industry) === industryLc) : [];
   const excludedLeadIds = draft.excludedLeadIds || [];
   // Companies no longer exist as an entity; matchingCompanies is always
@@ -520,6 +528,36 @@ const AgentFormModal: React.FC<{ editing: IndustryAgent | null; onClose: () => v
               </button>
               {!draft.isActive && (
                 <p className="text-slate-500 mt-1">This Agent is not generating new actions.</p>
+              )}
+            </div>
+
+            <div className="sm:col-span-2 p-3 rounded-xl bg-[#121418] border border-[#2d323f] space-y-2">
+              <label className="block text-slate-300 font-semibold flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-teal-400" />
+                Deploy to groups <span className="text-slate-500 font-normal">(optional)</span>
+              </label>
+              <p className="text-slate-500">
+                This agent will also work every lead in the groups you pick below, even if their industry is different.
+              </p>
+              <GroupPicker
+                value={draft.groupIds || []}
+                onChange={(ids) => setDraft((p) => ({ ...p, groupIds: ids }))}
+              />
+              {(draft.groupIds || []).length > 0 && (
+                <label className="flex items-start gap-2 cursor-pointer pt-1">
+                  <input
+                    type="checkbox"
+                    checked={!!draft.groupsOnly}
+                    onChange={(e) => setDraft((p) => ({ ...p, groupsOnly: e.target.checked }))}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="block text-white font-semibold">Only work these groups</span>
+                    <span className="block text-slate-500">
+                      Ignore industry matching: leads outside the selected groups are not touched by this agent.
+                    </span>
+                  </span>
+                </label>
               )}
             </div>
 
@@ -1312,9 +1350,10 @@ const AgentCard: React.FC<{
   const [instantBusy, setInstantBusy] = useState<"send" | "followup" | "wasend" | "wafollowup" | null>(null);
   const [instantNotice, setInstantNotice] = useState<{ tone: "ok" | "warn"; text: string } | null>(null);
   const linkedProduct = agent.productId ? products.find((p: any) => p.id === agent.productId) : null;
+  const { leadGroups: leadGroupsAll } = useCRM() as any;
   const ChannelIcon = channelIcon(agent.preferredChannel);
   const industryLc = normalizeIndustry(agent.industry);
-  const matchingLeadCount = leads.filter((l: any) => normalizeIndustry(l.industry) === industryLc).length;
+  const matchingLeadCount = leads.filter((l: any) => agentMatchesLead(agent, l)).length;
   const matchingCompanyCount = (rawCompanies || []).filter((c: any) => normalizeIndustry(c.industry) === industryLc).length;
   const excludedCount = (agent.excludedLeadIds || []).length;
   const matchCount = matchingLeadCount + matchingCompanyCount - excludedCount;
@@ -1324,7 +1363,7 @@ const AgentCard: React.FC<{
   const isWaType = (a: AgentAction) => a.actionType === "whatsapp_reply" || a.actionType === "whatsapp_follow_up";
   const waPendingCount = ((agentActions || []) as AgentAction[]).filter((a) => a.industry === agent.industry && a.status === "pending" && isWaType(a)).length;
   const emailPendingCount = pendingCount - waPendingCount;
-  const operatorLeadCount = leads.filter((l: any) => normalizeIndustry(l.industry) === industryLc && l.operatorInControl).length;
+  const operatorLeadCount = leads.filter((l: any) => agentMatchesLead(agent, l) && l.operatorInControl).length;
   const handleBulkTakeCharge = () => {
     if (operatorLeadCount === 0) {
       const ok = window.confirm(
@@ -1464,6 +1503,15 @@ const AgentCard: React.FC<{
           <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-sm font-bold text-white truncate">{agent.industry}</h3>
+            {(agent.groupIds || []).length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {(agent.groupIds || []).map((gid: string) => {
+                  const g = (leadGroupsAll || []).find((x: any) => x.id === gid);
+                  return g ? <GroupChip key={gid} name={g.name} color={g.color} /> : null;
+                })}
+                {agent.groupsOnly && <span className="text-[10px] text-slate-500">groups only</span>}
+              </div>
+            )}
             <span
               className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                 agent.isActive

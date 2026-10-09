@@ -98,7 +98,7 @@ export const LeadProfileDrawer: React.FC = () => {
     addKnowledgeBaseEntry,
     updateKnowledgeBaseEntry,
     deleteKnowledgeBaseEntry,
-    getAgentForIndustry,
+    getAgentForLead,
     products,
     addAgentAction,
     setLeadOperatorControl,
@@ -174,7 +174,7 @@ export const LeadProfileDrawer: React.FC = () => {
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const latestNextAction = leadActivities.find((a) => a.nextAction)?.nextAction || lead.nextFollowUp;
   const rating = getLeadRating(lead.leadScore);
-  const agent = getAgentForIndustry(lead.industry);
+  const agent = getAgentForLead(lead);
 
   // 360deg Profile tab data -- aggregates what's already scattered across
   // Deals/Tasks/Invoices/Activities/Agent Approvals/Knowledge Base for this

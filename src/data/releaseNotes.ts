@@ -23,6 +23,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.14.0",
+    date: "2026-10-09",
+    headline: "Groups: organize leads, deploy agents by group",
+    tagline: "Put leads and businesses into named groups, then point an Industry Agent at a whole group.",
+    highlights: [
+      { title: "Lead groups", description: "Create groups, add leads in bulk from the Leads page, put imports straight into a group, and filter by group." },
+      { title: "Deploy agents to groups", description: "An Industry Agent can now work every lead in the groups you choose -- or only those groups -- regardless of industry. Approvals still apply to every draft." },
+      { title: "Campaigns by group", description: "Add a whole group to a campaign's audience in one click." },
+    ],
+  },
+  {
     version: "2.13.0",
     date: "2026-10-08",
     headline: "More control over every campaign email",

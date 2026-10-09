@@ -346,7 +346,7 @@ const CampaignCard: React.FC<{
 // New Campaign Wizard
 // ----------------------------------------------------------------------------
 const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const { leads, products, industryAgents, getAgentForIndustry, activeTenant, currentUser, addEmailCampaign, addActivity } = useCRM();
+  const { leads, leadGroups, products, industryAgents, getAgentForIndustry, activeTenant, currentUser, addEmailCampaign, addActivity } = useCRM();
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [name, setName] = useState("");
@@ -826,6 +826,28 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
 
               <div>
                 <label className="block text-slate-300 font-semibold mb-1.5">Audience</label>
+
+                {leadGroups.length > 0 && (
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <span className="text-slate-400">Add a whole group:</span>
+                    {leadGroups.map((g) => {
+                      const ids = leads.filter((l) => (l.groupIds || []).includes(g.id) && l.email).map((l) => l.id);
+                      return (
+                        <button
+                          key={g.id}
+                          type="button"
+                          disabled={ids.length === 0}
+                          onClick={() => setSelectedIds((prev) => Array.from(new Set([...prev, ...ids])))}
+                          className="px-2 py-1 rounded-full border text-[11px] font-semibold disabled:opacity-40"
+                          style={{ color: g.color, borderColor: `${g.color}66`, backgroundColor: `${g.color}1f` }}
+                          title={`${ids.length} lead(s) with an email`}
+                        >
+                          + {g.name} ({ids.length})
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
                 <div className="relative mb-2">
                   <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />

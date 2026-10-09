@@ -177,6 +177,15 @@ export interface SocialLink {
   url: string;
 }
 
+// A named group ("list") of leads/businesses, e.g. "Dubai clinics - Oct import".
+export interface LeadGroup {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  createdDate: string;
+}
+
 export interface Lead {
   id: string;
   name: string;
@@ -210,6 +219,8 @@ export interface Lead {
   // "Take Charge": when true the operator handles this lead personally --
   // Industry Agents stop drafting follow-ups/replies for it and only notify.
   operatorInControl?: boolean;
+  // Groups this lead/business belongs to (LeadGroup ids).
+  groupIds?: string[];
   // Identifier of the last inbound reply the agent already learned from, so
   // the same email is never processed twice.
   lastReplyKey?: string;
@@ -415,6 +426,11 @@ export interface IndustryAgent {
   // the agent and uncheck specific businesses you don't want the agent
   // touching, without having to change their industry.
   excludedLeadIds?: string[];
+  // Groups this agent is deployed to. Leads in these groups are worked by
+  // this agent even if their industry differs (unless groupsOnly is set, in
+  // which case ONLY these groups are worked).
+  groupIds?: string[];
+  groupsOnly?: boolean;
   // Which AI provider/model drafts this agent's messages. modelName is a
   // value from AI_PROVIDER_MODELS[modelProvider] (src/lib/aiProviders.ts).
   modelProvider: AIProvider;

@@ -79,7 +79,7 @@ export const WhatsAppView: React.FC = () => {
     resolveAgentAction,
     setLeadOperatorControl,
     setSelectedLeadId,
-    getAgentForIndustry,
+    getAgentForLead,
     setActiveNav,
     setSettingsDeepLinkTab,
   } = useCRM() as any;
@@ -256,7 +256,7 @@ export const WhatsAppView: React.FC = () => {
     setActiveNav("Settings");
   };
 
-  const agent = selectedLead ? getAgentForIndustry(selectedLead.industry) : undefined;
+  const agent = selectedLead ? getAgentForLead(selectedLead) : undefined;
   const showList = !selectedKey;
 
   // ---------------- render ----------------

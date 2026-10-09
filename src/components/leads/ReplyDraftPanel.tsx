@@ -20,7 +20,7 @@ const STYLES: { id: string; label: string; goal: string }[] = [
 ];
 
 export const ReplyDraftPanel: React.FC<{ lead: Lead }> = ({ lead }) => {
-  const { activeTenant, currentUser, activities, knowledgeBase, products, agentActions, addAgentAction, resolveAgentAction, getAgentForIndustry } =
+  const { activeTenant, currentUser, activities, knowledgeBase, products, agentActions, addAgentAction, resolveAgentAction, getAgentForLead } =
     useCRM() as any;
   const [style, setStyle] = useState("natural");
   const [extra, setExtra] = useState("");
@@ -83,7 +83,7 @@ export const ReplyDraftPanel: React.FC<{ lead: Lead }> = ({ lead }) => {
         subj = got.subject;
       }
       setBusy("draft");
-      const agent = getAgentForIndustry?.(lead.industry);
+      const agent = getAgentForLead?.(lead);
       const product = agent?.productId ? products.find((p: any) => p.id === agent.productId) : undefined;
       const knowledge = (knowledgeBase || [])
         .filter((k: any) => (k.linkedLeadIds || []).includes(lead.id))

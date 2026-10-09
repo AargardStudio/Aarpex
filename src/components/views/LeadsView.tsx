@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { LeadConvertModal } from "../modals/LeadConvertModal";
 import { LeadImportModal } from "../leads/LeadImportModal";
+import { LeadGroupsModal, GroupChip } from "../leads/LeadGroupsModal";
 
 // Lead has no standalone "rating" field — temperature is derived from the
 // real leadScore (0-100) it does have, rather than a separate value that
@@ -64,6 +65,9 @@ export const LeadsView: React.FC = () => {
     setSelectedLeadId,
     convertingLeadId,
     setConvertingLeadId,
+    leadGroups,
+    addLeadGroup,
+    setLeadsInGroup,
   } = useCRM();
 
   const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
@@ -73,6 +77,8 @@ export const LeadsView: React.FC = () => {
   const [ratingFilter, setRatingFilter] = useState<string>("All");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<string>("");
+  const [groupFilter, setGroupFilter] = useState<string>("All");
+  const [isGroupsOpen, setGroupsOpen] = useState(false);
   const convertingLead = leads.find((l) => l.id === convertingLeadId) || null;
 
   const statuses: Array<Lead["status"]> = [
@@ -91,7 +97,10 @@ export const LeadsView: React.FC = () => {
       lead.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "All" || lead.status === statusFilter;
     const matchesRating = ratingFilter === "All" || getLeadRating(lead) === ratingFilter;
-    return matchesSearch && matchesStatus && matchesRating;
+    const matchesGroup =
+      groupFilter === "All" ||
+      (groupFilter === "__none__" ? (lead.groupIds || []).length === 0 : (lead.groupIds || []).includes(groupFilter));
+    return matchesSearch && matchesStatus && matchesRating && matchesGroup;
   });
 
   const filteredLeadIds = React.useMemo(() => new Set(filteredLeads.map((l) => l.id)), [filteredLeads]);
@@ -193,6 +202,26 @@ export const LeadsView: React.FC = () => {
             <option value="Warm">Warm</option>
             <option value="Cold">Cold</option>
           </select>
+          <select
+            value={groupFilter}
+            onChange={(e) => setGroupFilter(e.target.value)}
+            className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white"
+            title="Filter by group"
+          >
+            <option value="All">All groups</option>
+            <option value="__none__">Not in a group</option>
+            {leadGroups.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => setGroupsOpen(true)}
+            className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Groups
+          </button>
         </div>
 
         <div className="flex items-center gap-2 self-end sm:self-auto">
@@ -279,6 +308,43 @@ export const LeadsView: React.FC = () => {
               </option>
             ))}
           </select>
+          <select
+            value=""
+            onChange={(e) => {
+              const v = e.target.value;
+              if (!v) return;
+              let gid = v;
+              if (v === "__new__") {
+                const nm = prompt("Name for the new group:");
+                if (!nm || !nm.trim()) return;
+                gid = addLeadGroup({ name: nm }).id;
+              }
+              setLeadsInGroup(Array.from(selectedIds), gid, true);
+            }}
+            className="px-2.5 py-1.5 bg-[#252a36] border border-[#3d4455] rounded-lg text-xs text-slate-200 focus:outline-none"
+          >
+            <option value="">Add to group...</option>
+            {leadGroups.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+            <option value="__new__">+ New group...</option>
+          </select>
+          {leadGroups.length > 0 && (
+            <select
+              value=""
+              onChange={(e) => e.target.value && setLeadsInGroup(Array.from(selectedIds), e.target.value, false)}
+              className="px-2.5 py-1.5 bg-[#252a36] border border-[#3d4455] rounded-lg text-xs text-slate-200 focus:outline-none"
+            >
+              <option value="">Remove from group...</option>
+              {leadGroups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          )}
           <button
             onClick={handleBulkDelete}
             className="px-3 py-1.5 bg-[#252a36] hover:bg-rose-950/40 text-slate-300 hover:text-rose-300 border border-[#3d4455] hover:border-rose-500/40 rounded-lg text-xs font-semibold flex items-center gap-1.5"
@@ -547,6 +613,14 @@ export const LeadsView: React.FC = () => {
                     >
                       {lead.name}
                     </button>
+                    {(lead.groupIds || []).length > 0 && (
+                      <div className="flex flex-wrap gap-1 my-0.5">
+                        {(lead.groupIds || []).map((gid) => {
+                          const g = leadGroups.find((x) => x.id === gid);
+                          return g ? <GroupChip key={gid} name={g.name} color={g.color} /> : null;
+                        })}
+                      </div>
+                    )}
                     <div className="text-slate-500 text-[11px] flex items-center gap-1.5">
                       <span>{lead.company} • {lead.jobTitle}</span>
                       {lead.convertedDealId && (
@@ -663,6 +737,7 @@ export const LeadsView: React.FC = () => {
       )}
 
       {/* Excel / Google Sheets Import Modal */}
+      {isGroupsOpen && <LeadGroupsModal onClose={() => setGroupsOpen(false)} />}
       <LeadImportModal
         isOpen={isImportOpen}
         onClose={() => setImportOpen(false)}

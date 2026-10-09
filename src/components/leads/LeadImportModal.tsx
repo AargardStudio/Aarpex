@@ -25,7 +25,10 @@ export const LeadImportModal: React.FC<LeadImportModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { importLeadsFromSpreadsheet, currentUser, canPerform } = useCRM();
+  const { importLeadsFromSpreadsheet, currentUser, canPerform, leadGroups, addLeadGroup } = useCRM();
+  // Optional: put every imported lead into a group (existing, or a new one).
+  const [importGroupId, setImportGroupId] = useState<string>("");
+  const [importNewGroup, setImportNewGroup] = useState<string>("");
 
   const [activeTab, setActiveTab] = useState<"file" | "sheets">("file");
   const [file, setFile] = useState<File | null>(null);
@@ -259,7 +262,10 @@ export const LeadImportModal: React.FC<LeadImportModalProps> = ({
       };
     });
 
-    const count = importLeadsFromSpreadsheet(leadsToImport);
+    let targetGroup = importGroupId;
+    if (importGroupId === "__new__" && importNewGroup.trim()) targetGroup = addLeadGroup({ name: importNewGroup }).id;
+    const withGroup = targetGroup && targetGroup !== "__new__" ? leadsToImport.map((l) => ({ ...l, groupIds: [targetGroup] })) : leadsToImport;
+    const count = importLeadsFromSpreadsheet(withGroup);
     setImportSuccessCount(count);
   };
 
@@ -545,6 +551,33 @@ export const LeadImportModal: React.FC<LeadImportModalProps> = ({
                       </tbody>
                     </table>
                   </div>
+                </div>
+
+                {/* Group */}
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-slate-300 font-semibold">Put these leads in a group:</span>
+                  <select
+                    value={importGroupId}
+                    onChange={(e) => setImportGroupId(e.target.value)}
+                    className="px-2.5 py-1.5 bg-[#252a36] border border-[#3d4455] rounded-lg text-slate-200"
+                  >
+                    <option value="">No group</option>
+                    {leadGroups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                    <option value="__new__">+ New group...</option>
+                  </select>
+                  {importGroupId === "__new__" && (
+                    <input
+                      type="text"
+                      value={importNewGroup}
+                      onChange={(e) => setImportNewGroup(e.target.value)}
+                      placeholder="New group name"
+                      className="px-2.5 py-1.5 bg-[#252a36] border border-[#3d4455] rounded-lg text-slate-200"
+                    />
+                  )}
                 </div>
 
                 {/* Submit Action */}

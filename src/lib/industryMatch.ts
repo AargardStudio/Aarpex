@@ -121,3 +121,18 @@ export function findCloseIndustryMatches(target: string, usages: IndustryUsage[]
     return levenshtein(n, targetNorm) <= 2;
   });
 }
+
+// ---- Group-aware agent matching ---------------------------------------------
+// An Industry Agent works a lead when:
+//   - the lead's industry matches the agent's industry (default), OR
+//   - the lead is in one of the groups the agent is deployed to.
+// With "groups only" on, ONLY the deployed groups count (industry is ignored).
+export function agentMatchesLead(
+  agent: { industry: string; groupIds?: string[]; groupsOnly?: boolean },
+  lead: { industry?: string; groupIds?: string[] }
+): boolean {
+  const agentGroups = agent.groupIds || [];
+  const inGroup = agentGroups.length > 0 && (lead.groupIds || []).some((g) => agentGroups.includes(g));
+  if (agent.groupsOnly && agentGroups.length > 0) return inGroup;
+  return inGroup || normalizeIndustry(lead.industry) === normalizeIndustry(agent.industry);
+}

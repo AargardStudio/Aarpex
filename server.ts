@@ -1318,6 +1318,17 @@ app.post("/api/ai/personalized-email", async (req, res) => {
 // than compared with a plain trim/lowercase, which is the exact class of
 // bug that file's comments describe.
 const INVISIBLE_CHARS_RE = /[​-‏‪-‮⁠-⁩﻿­]/g;
+// Mirror of src/lib/industryMatch.ts agentMatchesLead for DB rows: a lead is
+// worked by an agent if it matches the agent's industry OR is in one of the
+// groups the agent is deployed to (groups_only => groups only).
+function serverAgentMatchesLead(agentRow: any, leadRow: any, industryNorm: string): boolean {
+  const agentGroups: string[] = Array.isArray(agentRow.group_ids) ? agentRow.group_ids : [];
+  const leadGroups: string[] = Array.isArray(leadRow.group_ids) ? leadRow.group_ids : [];
+  const inGroup = agentGroups.length > 0 && leadGroups.some((g) => agentGroups.includes(g));
+  if (agentRow.groups_only && agentGroups.length > 0) return inGroup;
+  return inGroup || normalizeIndustryServer(leadRow.industry) === industryNorm;
+}
+
 function normalizeIndustryServer(value: string | null | undefined): string {
   return (value || "")
     .normalize("NFKC")
@@ -1397,7 +1408,7 @@ const handleCronAgentScan = async (req: express.Request, res: express.Response) 
         // not Converted/Lost, and cadence has actually elapsed since last
         // contact (or creation, if never contacted).
         const dueLeads = (leadRows || []).filter((l: any) => {
-          if (normalizeIndustryServer(l.industry) !== industryNorm) return false;
+          if (!serverAgentMatchesLead(row, l, industryNorm)) return false;
           if (excluded.has(l.id)) return false;
           if (l.operator_in_control) return false; // Take Charge: the operator handles this lead personally
           if (!l.email) return false;
@@ -1531,7 +1542,7 @@ const handleCronAgentScan = async (req: express.Request, res: express.Response) 
         for (const lead of auditLeads || []) {
           try {
             const auditAgent = (agentRows || []).find(
-              (a: any) => a.tenant_id === lead.tenant_id && normalizeIndustryServer(a.industry) === normalizeIndustryServer(lead.industry)
+              (a: any) => a.tenant_id === lead.tenant_id && serverAgentMatchesLead(a, lead, normalizeIndustryServer(a.industry))
             ) as any;
             const result = await runAbicAuditCore({
               customChecks: auditAgent?.audit_checks || [],

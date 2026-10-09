@@ -67,6 +67,24 @@ const SECTIONS: Section[] = [
     ],
   },
   {
+    icon: Users,
+    group: "Setup guides",
+    title: "Groups: organize leads and deploy agents by group",
+    body: [
+      "A group is a named list of leads or businesses, like \"Dubai clinics\" or \"October import\". A lead can be in several groups. Groups are separate from industry, so you can organize by anything: city, campaign, source, or how warm they are.",
+    ],
+    steps: [
+      "Leads -> Groups: create a group (name and optional description). Rename, recolor or delete it any time; deleting a group never deletes the leads.",
+      "Add leads: tick leads on the Leads page, then choose \"Add to group...\" (or \"+ New group...\"). \"Remove from group...\" takes them out again.",
+      "Import: when you import a spreadsheet, choose a group at the bottom to put every imported lead straight into it.",
+      "One lead: open the lead -> Edit details -> Groups to tick the groups it belongs to.",
+      "Find them: use the group filter at the top of the Leads page (or \"Not in a group\").",
+      "Campaigns: in the campaign maker's audience step, click \"+ group name\" to add everyone in a group who has an email.",
+      "Industry Agents: open an agent -> \"Deploy to groups\" and tick the groups. The agent then works every lead in those groups, even if their industry is different. Tick \"Only work these groups\" to make a dedicated agent that ignores industry matching and only touches those groups.",
+      "Nothing changes about approvals: whatever a group-deployed agent drafts still waits in Agent Approvals until you approve it.",
+    ],
+  },
+  {
     icon: Megaphone,
     group: "Setup guides",
     title: "Email campaign maker -- all options",

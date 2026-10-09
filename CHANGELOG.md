@@ -13,6 +13,13 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.14.0]
+
+### Added
+- Lead groups: new `lead_groups` table + `leads.group_ids`; create/rename/recolor/delete groups (Leads → Groups), bulk add/remove from the Leads toolbar, group filter, group chips, per-lead group editing, import-into-group, and "add a whole group" in the campaign audience step.
+- Industry Agents can be deployed to groups (`industry_agents.group_ids`, `groups_only`): an agent works leads in its groups in addition to (or, with "only these groups", instead of) its industry match. Applied in the browser scan, the server cron scan/ABIC audit, bulk actions, and every lead-level agent lookup (`getAgentForLead`, `agentMatchesLead`). A groups-only agent may share an industry with another agent.
+- Migration 0028 (applied live). Docs: new "Groups" guide.
+
 ## [2.13.0]
 
 ### Added

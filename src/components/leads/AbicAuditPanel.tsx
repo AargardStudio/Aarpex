@@ -22,8 +22,8 @@ const Tag: React.FC<{ tag?: AbicEvidenceTag | string }> = ({ tag }) =>
   ) : null;
 
 export const AbicAuditPanel: React.FC<{ lead: Lead }> = ({ lead }) => {
-  const { runAbicAudit, getAgentForIndustry } = useCRM() as any;
-  const agent = getAgentForIndustry?.(lead.industry);
+  const { runAbicAudit, getAgentForLead } = useCRM() as any;
+  const agent = getAgentForLead?.(lead);
   const savedChecks: string[] = agent?.auditChecks || [];
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);

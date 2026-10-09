@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { X, Check, Plus, Trash2 } from "lucide-react";
 import { useCRM } from "../../context/CRMContext";
 import IndustryPicker from "../common/IndustryPicker";
+import { GroupPicker } from "./LeadGroupsModal";
 import { sanitizeIndustryText } from "../../lib/industryMatch";
 import { CLIENT_CATEGORIES } from "../../data/industries";
 import type { Lead, LeadStatus, SocialLink, TaskPriority } from "../../types";
@@ -52,6 +53,7 @@ export const LeadDetailsEditor: React.FC<{ lead: Lead; onClose: () => void }> = 
     notes: lead.notes || "",
     tags: lead.tags || [],
     socialLinks: (lead.socialLinks || []) as SocialLink[],
+    groupIds: (lead.groupIds || []) as string[],
   }));
   const [tagText, setTagText] = useState("");
   const set = (patch: Partial<typeof d>) => setD((p) => ({ ...p, ...patch }));
@@ -94,6 +96,7 @@ export const LeadDetailsEditor: React.FC<{ lead: Lead; onClose: () => void }> = 
       nextFollowUp: d.nextFollowUp,
       notes: d.notes,
       tags: d.tags,
+      groupIds: d.groupIds,
       socialLinks: d.socialLinks.filter((s) => s.url.trim()),
     };
     if (d.industry.trim()) updates.industry = sanitizeIndustryText(d.industry);
@@ -171,6 +174,10 @@ export const LeadDetailsEditor: React.FC<{ lead: Lead; onClose: () => void }> = 
               <Field label="Source">
                 <input className={inputCls} value={d.source} onChange={(e) => set({ source: e.target.value })} />
               </Field>
+            </div>
+            <div>
+              <div className="text-[11px] font-semibold text-slate-600 mb-1">Groups</div>
+              <GroupPicker value={d.groupIds} onChange={(ids) => set({ groupIds: ids })} />
             </div>
           </section>
 

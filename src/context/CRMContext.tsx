@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from "react";
-import {
+import { LeadGroup,
   Lead,
   Deal,
   Pipeline,
@@ -68,7 +68,7 @@ import { defaultTenants } from "../data/tenantData";
 import { PLATFORM_PLAN, PLATFORM_TRIAL_DAYS, FOUNDER_EMAIL } from "../data/subscriptionPlans";
 import { apiFetch } from "../lib/apiClient";
 import { abicAuditDue, abicLeadPatch, callAbicAudit, upsertAbicKnowledge, parseAbicSnapshot } from "../lib/abic";
-import { normalizeIndustry } from "../lib/industryMatch";
+import { normalizeIndustry, agentMatchesLead } from "../lib/industryMatch";
 
 // Local key for an in-progress "add another workspace" request (from
 // WorkspaceModal) that survives the full-page redirect to Stripe Checkout
@@ -226,6 +226,12 @@ interface CRMContextType {
   comments: Comment[];
   emailCampaigns: EmailCampaign[];
   products: Product[];
+  leadGroups: LeadGroup[];
+  addLeadGroup: (data: { name: string; description?: string; color?: string }) => LeadGroup;
+  updateLeadGroup: (id: string, updates: Partial<LeadGroup>) => void;
+  deleteLeadGroup: (id: string) => void;
+  // Add (add=true) or remove (add=false) the given leads to/from a group.
+  setLeadsInGroup: (leadIds: string[], groupId: string, add: boolean) => void;
 
   // Data Actions
   addLead: (lead: Omit<Lead, "id" | "createdDate">) => Lead;
@@ -308,6 +314,7 @@ interface CRMContextType {
   bulkSetIndustryAgentActive: (ids: string[], isActive: boolean) => void;
   bulkDeleteIndustryAgents: (ids: string[]) => void;
   getAgentForIndustry: (industry: string | undefined) => IndustryAgent | undefined;
+  getAgentForLead: (lead: { industry?: string; groupIds?: string[] } | undefined) => IndustryAgent | undefined;
   // Honest status for the autonomous scan (see runAgentScanForAgents below): when it
   // last actually ran in this browser tab, and whether one is running right
   // now. There is no server-side scheduler, so this is the ONLY source of
@@ -642,6 +649,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadTenantEntity("products", [] as Product[])
   );
 
+  const [leadGroups, setLeadGroups] = useState<LeadGroup[]>(() =>
+    loadTenantEntity("leadGroups", [] as LeadGroup[])
+  );
+
   const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeBaseEntry[]>(() =>
     loadTenantEntity("knowledgeBase", [] as KnowledgeBaseEntry[])
   );
@@ -756,6 +767,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [products, activeTenantId]);
 
   useEffect(() => {
+    localStorage.setItem(`crm_tenant_${activeTenantId}_leadGroups`, JSON.stringify(leadGroups));
+    if (shouldSyncToSupabase) syncTenantTable("lead_groups", activeTenantId, leadGroups);
+  }, [leadGroups, activeTenantId]);
+
+  useEffect(() => {
     localStorage.setItem(`crm_tenant_${activeTenantId}_knowledgeBase`, JSON.stringify(knowledgeBase));
     if (shouldSyncToSupabase) syncTenantTable("knowledge_base", activeTenantId, knowledgeBase);
   }, [knowledgeBase, activeTenantId]);
@@ -772,6 +788,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     localStorage.setItem(`crm_tenant_${activeTenantId}_storedFiles`, JSON.stringify(storedFiles));
+    localStorage.setItem(`crm_tenant_${activeTenantId}_leadGroups`, JSON.stringify(leadGroups));
     if (shouldSyncToSupabase) syncTenantTable("stored_files", activeTenantId, storedFiles);
   }, [storedFiles, activeTenantId]);
 
@@ -909,7 +926,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const auditCandidates = curLeads
           .filter(
             (l) =>
-              normalizeIndustry(l.industry) === industryLc &&
+              agentMatchesLead(agent, l) &&
               !(agent.excludedLeadIds || []).includes(l.id) &&
               !abicTextByLead.has(l.id) &&
               abicAuditDue(l)
@@ -927,7 +944,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         // Follow-up due: leads
         const dueLeads = curLeads.filter((l) => {
-          if (normalizeIndustry(l.industry) !== industryLc) return false;
+          if (!agentMatchesLead(agent, l)) return false;
           if ((agent.excludedLeadIds || []).includes(l.id)) return false;
           if (l.operatorInControl) return false; // Take Charge: operator handles this lead
           if (!l.email) return false;
@@ -944,7 +961,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const waDueLeads = !waFollowUpsOn(agent) || !curTenant?.whatsappConfig?.isEnabled
           ? []
           : curLeads.filter((l) => {
-              if (normalizeIndustry(l.industry) !== industryLc) return false;
+              if (!agentMatchesLead(agent, l)) return false;
               if ((agent.excludedLeadIds || []).includes(l.id)) return false;
               if (l.operatorInControl) return false;
               if (!followUpGoesToWhatsApp(agent, l)) return false;
@@ -973,7 +990,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // plus anything this same scan has already queued, so a lead never
         // gets two summaries in one pass).
         const leadsNeedingSummary = curLeads.filter((l) => {
-          if (normalizeIndustry(l.industry) !== industryLc) return false;
+          if (!agentMatchesLead(agent, l)) return false;
           if ((agent.excludedLeadIds || []).includes(l.id)) return false;
           if (curKnowledge.some((k) => k.tags.includes("AI-Generated") && (k.linkedLeadIds || []).includes(l.id))) return false;
           return !kbUpserts.some((k) => (k.linkedLeadIds || []).includes(l.id));
@@ -1064,7 +1081,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (mailCfg?.email && mailCfg?.password && mailCfg?.imapHost) {
           const candidateLeads = curLeads.filter(
             (l) =>
-              normalizeIndustry(l.industry) === industryLc &&
+              agentMatchesLead(agent, l) &&
               !(agent.excludedLeadIds || []).includes(l.id) &&
               l.email &&
               l.status !== "Converted" &&
@@ -1462,6 +1479,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         industryAgentsRes,
         agentActionsRes,
         storedFilesRes,
+        leadGroupsRes,
       ] = await Promise.all([
         fetchTenantTable<Lead>("leads", activeTenantId),
         fetchTenantTable<Deal>("deals", activeTenantId),
@@ -1477,6 +1495,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetchTenantTable<IndustryAgent>("industry_agents", activeTenantId),
         fetchTenantTable<AgentAction>("agent_actions", activeTenantId),
         fetchTenantTable<StoredFile>("stored_files", activeTenantId),
+        fetchTenantTable<LeadGroup>("lead_groups", activeTenantId),
       ]);
       if (cancelled) return;
       if (leadsRes) setLeads(leadsRes);
@@ -1493,6 +1512,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (industryAgentsRes) setIndustryAgents(industryAgentsRes);
       if (agentActionsRes) setAgentActions(agentActionsRes);
       if (storedFilesRes) setStoredFiles(storedFilesRes);
+      if (leadGroupsRes) setLeadGroups(leadGroupsRes);
       setIsHydratingTenantData(false);
     })();
     return () => {
@@ -1545,6 +1565,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setComments(loadTarget("comments", initialComments));
     setEmailCampaigns(loadTarget("emailCampaigns", [] as EmailCampaign[]));
     setProducts(loadTarget("products", [] as Product[]));
+    setLeadGroups(loadTarget("leadGroups", [] as LeadGroup[]));
     setKnowledgeBase(loadTarget("knowledgeBase", [] as KnowledgeBaseEntry[]));
     setIndustryAgents(loadTarget("industryAgents", [] as IndustryAgent[]));
     setAgentActions(loadTarget("agentActions", [] as AgentAction[]));
@@ -2746,6 +2767,42 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
   };
 
+  const GROUP_COLORS = ["#14b8a6", "#6366f1", "#f59e0b", "#ec4899", "#22c55e", "#0ea5e9", "#ef4444", "#a855f7"];
+  const addLeadGroup = (data: { name: string; description?: string; color?: string }): LeadGroup => {
+    const newId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `grp_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const group: LeadGroup = {
+      id: newId,
+      name: data.name.trim(),
+      description: data.description?.trim() || undefined,
+      color: data.color || GROUP_COLORS[leadGroups.length % GROUP_COLORS.length],
+      createdDate: new Date().toISOString(),
+    };
+    setLeadGroups((prev) => [...prev, group]);
+    return group;
+  };
+  const updateLeadGroup = (id: string, updates: Partial<LeadGroup>) => {
+    setLeadGroups((prev) => prev.map((g) => (g.id === id ? { ...g, ...updates } : g)));
+  };
+  const deleteLeadGroup = (id: string) => {
+    setLeadGroups((prev) => prev.filter((g) => g.id !== id));
+    setLeads((prev) => prev.map((l) => ((l.groupIds || []).includes(id) ? { ...l, groupIds: (l.groupIds || []).filter((g) => g !== id) } : l)));
+    setIndustryAgents((prev) => prev.map((a) => ((a.groupIds || []).includes(id) ? { ...a, groupIds: (a.groupIds || []).filter((g) => g !== id) } : a)));
+  };
+  const setLeadsInGroup = (leadIds: string[], groupId: string, add: boolean) => {
+    const idSet = new Set(leadIds);
+    setLeads((prev) =>
+      prev.map((l) => {
+        if (!idSet.has(l.id)) return l;
+        const cur = l.groupIds || [];
+        const next = add ? (cur.includes(groupId) ? cur : [...cur, groupId]) : cur.filter((g) => g !== groupId);
+        return next.length === cur.length && next.every((g, i) => g === cur[i]) ? l : { ...l, groupIds: next };
+      })
+    );
+  };
+
   const deleteProduct = (id: string) => {
     setProducts((prev) => prev.filter((p) => p.id !== id));
   };
@@ -2848,7 +2905,17 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!industry) return undefined;
     const normalized = normalizeIndustry(industry);
     if (!normalized) return undefined;
-    return industryAgents.find((p) => p.isActive && normalizeIndustry(p.industry) === normalized);
+    return industryAgents.find((p) => p.isActive && !p.groupsOnly && normalizeIndustry(p.industry) === normalized);
+  };
+
+  // Group-aware lookup: an agent deployed to one of the lead's groups wins,
+  // then the industry-matched agent.
+  const getAgentForLead = (lead: { industry?: string; groupIds?: string[] } | undefined): IndustryAgent | undefined => {
+    if (!lead) return undefined;
+    const active = industryAgents.filter((p) => p.isActive);
+    const viaGroup = active.find((p) => (p.groupIds || []).length > 0 && agentMatchesLead(p, lead) && (lead.groupIds || []).some((g) => (p.groupIds || []).includes(g)));
+    if (viaGroup) return viaGroup;
+    return active.find((p) => !p.groupsOnly && normalizeIndustry(p.industry) === normalizeIndustry(lead.industry));
   };
 
   // Agent Approvals ------------------------------------------------------
@@ -2882,7 +2949,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const lead = leads.find((l) => l.id === leadId);
     if (!lead || !lead.email) return false;
     if (lead.operatorInControl) return false; // Take Charge: operator handles this lead
-    const agent = getAgentForIndustry(lead.industry);
+    const agent = getAgentForLead(lead);
     if (!agent) return false;
     const agentProduct = agent.productId ? products.find((p) => p.id === agent.productId) : undefined;
     try {
@@ -3201,7 +3268,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .slice(0, 10)
       .reverse();
     const latestIn = [...history].reverse().find((m) => m.direction === "in");
-    const agent = getAgentForIndustry(lead.industry);
+    const agent = getAgentForLead(lead);
     const product = agent?.productId ? products.find((p) => p.id === agent.productId) : undefined;
     try {
       const res = await apiFetch("/api/ai/whatsapp-reply", {
@@ -3286,7 +3353,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ]);
           continue;
         }
-        const agent = getAgentForIndustry(lead.industry);
+        const agent = getAgentForLead(lead);
         if (!agent || !agent.whatsappEnabled) continue;
         const body = await draftWhatsAppReply(lead.id, "They just wrote to us on WhatsApp. Reply helpfully to exactly what they said and keep the conversation moving.");
         if (!body) continue;
@@ -3434,7 +3501,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ): Promise<{ status: "ok" | "insufficient_data" | "ai_unavailable"; message?: string }> => {
     const lead = leads.find((l) => l.id === leadId);
     if (!lead) return { status: "ai_unavailable", message: "Lead not found." };
-    const agent = getAgentForIndustry(lead.industry);
+    const agent = getAgentForLead(lead);
     const checks = Array.from(new Set([...(agent?.auditChecks || []), ...(options?.extraChecks || [])]));
     const focus = [agent?.auditFocus, options?.focus].filter(Boolean).join(". ");
     const result = await callAbicAudit(lead, { checks, focus: focus || undefined });
@@ -3460,7 +3527,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const agent = industryAgents.find((a) => a.id === agentId);
     if (!agent) return { changed: 0, withdrawn: 0 };
     const industryLc = normalizeIndustry(agent.industry);
-    const targets = leads.filter((l) => normalizeIndustry(l.industry) === industryLc && !!l.operatorInControl !== inControl);
+    const targets = leads.filter((l) => agentMatchesLead(agent, l) && !!l.operatorInControl !== inControl);
     if (targets.length === 0) return { changed: 0, withdrawn: 0 };
     const ids = new Set(targets.map((l) => l.id));
     setLeads((prev) => prev.map((l) => (ids.has(l.id) ? { ...l, operatorInControl: inControl } : l)));
@@ -3511,7 +3578,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!agent.whatsappEnabled) return { drafted: 0, remaining: 0, reason: "Switch WhatsApp on for this agent first (edit the agent)." };
       if (!activeTenant?.whatsappConfig?.isEnabled) return { drafted: 0, remaining: 0, reason: "WhatsApp isn't connected. Connect it in Settings → WhatsApp." };
       const waEligible = leads.filter((l) => {
-        if (normalizeIndustry(l.industry) !== industryLc) return false;
+        if (!agentMatchesLead(agent, l)) return false;
         if ((agent.excludedLeadIds || []).includes(l.id)) return false;
         if (l.operatorInControl) return false;
         if (l.status === "Converted" || l.status === "Lost") return false;
@@ -3546,7 +3613,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const eligible = leads.filter((l) => {
-      if (normalizeIndustry(l.industry) !== industryLc) return false;
+      if (!agentMatchesLead(agent, l)) return false;
       if ((agent.excludedLeadIds || []).includes(l.id)) return false;
       if (l.operatorInControl) return false; // Take Charge: operator handles this lead
       if (!l.email) return false;
@@ -4026,6 +4093,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         comments,
         emailCampaigns,
         products,
+        leadGroups,
+        addLeadGroup,
+        updateLeadGroup,
+        deleteLeadGroup,
+        setLeadsInGroup,
 
         addLead,
         updateLead,
@@ -4091,6 +4163,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         bulkSetIndustryAgentActive,
         bulkDeleteIndustryAgents,
         getAgentForIndustry,
+        getAgentForLead,
         lastAgentScanAt,
         isAgentScanRunning,
         runAgentScanNow,
