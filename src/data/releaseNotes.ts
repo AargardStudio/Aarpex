@@ -23,6 +23,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.15.0",
+    date: "2026-10-09",
+    headline: "Connect AarPex to the Aargard Founder's Dashboard",
+    tagline: "One secure key lets your command center see and manage this workspace -- and you stay in control.",
+    highlights: [
+      { title: "Settings -> Integrations", description: "Create a one-time setup token, see connection status, rotate the key or disconnect instantly." },
+      { title: "Full visibility and control", description: "The Dashboard can read deals, leads, tasks, activities and pipelines, and edit, move, assign, complete or delete them. Deletes always need explicit confirmation." },
+      { title: "Live events and an audit trail", description: "Signed webhooks announce new leads, deals and wins, and every change the Dashboard makes is logged with who and when." },
+    ],
+  },
+  {
     version: "2.14.0",
     date: "2026-10-09",
     headline: "Groups: organize leads, deploy agents by group",

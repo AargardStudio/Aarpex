@@ -140,6 +140,11 @@ export function syncTenantTable(table: TenantTable, tenantId: string, rows: Arra
  * right away by "Sign out") actually lands instead of silently racing the
  * session invalidation and getting rejected by RLS.
  */
+/** True while any debounced table/tenant write has not been sent yet. */
+export function hasPendingSyncs(): boolean {
+  return pendingSyncs.size > 0;
+}
+
 export async function flushAllPendingSyncs(): Promise<void> {
   const pending = [...pendingSyncs.values(), ...pendingTenantRowSyncs.values()];
   for (const p of pending) clearTimeout(p.timeoutId);

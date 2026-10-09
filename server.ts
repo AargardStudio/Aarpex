@@ -8,6 +8,7 @@ import nodemailer from "nodemailer";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { createClient } from "@supabase/supabase-js";
+import { registerIntegrationApi } from "./integrationApi";
 
 dotenv.config();
 
@@ -136,10 +137,14 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
 app.use((req, res, next) => {
   if (req.path === "/api/health") return next();
   if (req.path === "/api/cron/agent-scan") return next();
+  if (req.path.startsWith("/api/aargard-integration/")) return next(); // Founder's Dashboard API: authenticates itself with a per-connection API key (integrationApi.ts)
   if (req.path === "/api/whatsapp/webhook") return next(); // Meta calls this; it authenticates itself (verify token + HMAC signature)
   if (!req.path.startsWith("/api/")) return next();
   return requireAuth(req, res, next);
 });
+
+// Founder's Dashboard integration (machine API + admin endpoints)
+registerIntegrationApi(app, getServerSupabase);
 
 // Lazy Stripe client supporting per-user and per-tenant custom secret keys
 const customStripeClients = new Map<string, Stripe>();

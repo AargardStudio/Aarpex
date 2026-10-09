@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "2.14.0",
+  "version": "2.15.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -35,7 +35,7 @@
     "@types/archiver": "^8.0.0",
     "@types/express": "^4.17.21",
     "@types/mailparser": "^3.9.0",
-    "@types/node": "^22.14.0",
+    "@types/node": "^22.15.0",
     "@types/nodemailer": "^8.0.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

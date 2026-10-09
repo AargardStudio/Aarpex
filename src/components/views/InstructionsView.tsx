@@ -122,6 +122,22 @@ const SECTIONS: Section[] = [
   {
     icon: Wrench,
     group: "Admin (workspace owner)",
+    title: "Connect the Aargard Founder's Dashboard",
+    body: [
+      "The Founder's Dashboard can read this workspace (deals, leads, tasks, activity) and make changes through a secret key that only you can create. It never touches your database directly, and you can disconnect it at any time. Only workspace admins see this page.",
+    ],
+    steps: [
+      "Go to Settings -> Integrations and click \"Create setup token\".",
+      "Copy the Base URL and the Setup token that appear and send them to the Dashboard team through a private channel. The token works once and expires in 24 hours.",
+      "The Dashboard exchanges the token for its own API key. This page then shows \"Connected\" with the last-verified and last-request times.",
+      "Everything the Dashboard changes is listed under \"Recent changes made by the Dashboard\" with who and when. Deletes and removing users always need an explicit confirmation from the Dashboard.",
+      "\"Rotate key\" gives a fresh key (the old one stops working immediately). \"Disconnect\" revokes access at once.",
+      "Changes made by the Dashboard appear in an open AarPex tab within about 30 seconds.",
+    ],
+  },
+  {
+    icon: Wrench,
+    group: "Admin (workspace owner)",
     title: "Sign-up emails: SMTP and redirect URLs",
     body: [
       "These are one-time settings in your Supabase project (Authentication). They control the confirmation email people get when they sign up.",

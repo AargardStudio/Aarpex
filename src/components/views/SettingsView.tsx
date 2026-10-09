@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useCRM } from "../../context/CRMContext";
+import { FounderDashboardCard } from "../settings/FounderDashboardCard";
 import {
+  Link2,
   Building,
   Building2,
   Save,
@@ -43,7 +45,7 @@ import {
 import { apiFetch } from "../../lib/apiClient";
 import { getMailboxById, mailboxLabel } from "../../lib/webmail";
 
-type SettingsTab = "workspaces" | "subscription" | "stripe" | "webmail" | "whatsapp" | "company" | "security" | "database";
+type SettingsTab = "workspaces" | "subscription" | "stripe" | "webmail" | "whatsapp" | "company" | "security" | "database" | "integrations";
 
 export const SettingsView: React.FC = () => {
   const {
@@ -780,6 +782,18 @@ export const SettingsView: React.FC = () => {
         >
           <ShieldCheck className="w-3.5 h-3.5" />
           <span>Access & Roles</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("integrations")}
+          className={`px-3.5 py-2 rounded-lg font-bold flex items-center gap-2 transition-all whitespace-nowrap ${
+            activeTab === "integrations"
+              ? "bg-teal-600 text-white shadow-sm"
+              : "text-slate-400 hover:text-white hover:bg-[#1e232d]"
+          }`}
+        >
+          <Link2 className="w-3.5 h-3.5 text-teal-400" />
+          <span>Integrations</span>
         </button>
 
         <button
@@ -2149,6 +2163,12 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* TAB 6: WORKSPACE DATA CONTROLS */}
+      {activeTab === "integrations" && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          <FounderDashboardCard />
+        </div>
+      )}
+
       {activeTab === "database" && (
         <div className="space-y-5 animate-in fade-in duration-150">
           {/* Local State Controls */}

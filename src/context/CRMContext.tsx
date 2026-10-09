@@ -52,6 +52,7 @@ import {
   hasPendingTenantCreations,
   flushPendingTenantCreations,
   flushAllPendingSyncs,
+  hasPendingSyncs,
   onSyncFailure,
 } from "../lib/tenantDataSync";
 import {
@@ -708,6 +709,66 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // switch too.
   const shouldSyncToSupabase =
     isSupabaseAuthConfigured() && Boolean(activeTenantId) && !isBootstrapping && !isHydratingTenantData;
+
+  // Founder's Dashboard integration -------------------------------------
+  // (1) Push: tell the server about notable events so it can forward them,
+  //     signed, to a connected Dashboard. Fire-and-forget; the Dashboard also
+  //     polls /activity, so a dropped event is never lost for good.
+  const emitIntegrationEvent = (event: string, data: Record<string, any>) => {
+    if (!isSupabaseAuthConfigured() || !activeTenantId) return;
+    void apiFetch("/api/integration-admin/emit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tenantId: activeTenantId, event, data }),
+    }).catch(() => {});
+  };
+
+  // (2) Pull: when the Dashboard edits data through the API, the server bumps
+  //     tenants.integration_changed_at. If this tab is idle (no unsent local
+  //     edits), re-read the affected tables so the change shows up here --
+  //     and so a stale tab can't overwrite it with old data.
+  useEffect(() => {
+    if (!shouldSyncToSupabase || !activeTenantId) return;
+    let cancelled = false;
+    let lastSeen: string | null = null;
+    const check = async () => {
+      if (cancelled || document.visibilityState !== "visible" || hasPendingSyncs()) return;
+      try {
+        const { data } = await getSupabaseAuthClient().from("tenants").select("integration_changed_at").eq("id", activeTenantId).maybeSingle();
+        const v: string = (data as any)?.integration_changed_at ?? "";
+        if (lastSeen === null) {
+          lastSeen = v; // first look just sets the baseline
+          return;
+        }
+        if (v === lastSeen) return;
+        const [l, d, p, t, a, g] = await Promise.all([
+          fetchTenantTable<Lead>("leads", activeTenantId),
+          fetchTenantTable<Deal>("deals", activeTenantId),
+          fetchTenantTable<Pipeline>("pipelines", activeTenantId),
+          fetchTenantTable<Task>("tasks", activeTenantId),
+          fetchTenantTable<Activity>("activities", activeTenantId),
+          fetchTenantTable<LeadGroup>("lead_groups", activeTenantId),
+        ]);
+        // Don't clobber anything the user typed while we were fetching.
+        if (cancelled || hasPendingSyncs() || !l || !d || !p || !t || !a || !g) return;
+        lastSeen = v;
+        setLeads(l);
+        setDeals(d);
+        if (p.length > 0) setPipelines(p);
+        setTasks(t);
+        setActivities(a);
+        setLeadGroups(g);
+      } catch {
+        /* try again next tick */
+      }
+    };
+    const timer = setInterval(check, 30000);
+    void check();
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [shouldSyncToSupabase, activeTenantId]);
 
   // The tenant row itself (plan, Stripe config, webmail config, etc.) mirrors
   // to Supabase the same way the CRM record tables do above.
@@ -2165,6 +2226,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       tags: leadData.tags || [],
     };
     setLeads((prev) => [newLead, ...prev]);
+    emitIntegrationEvent("aarpex.lead.created", { id: newLead.id, name: newLead.name, company: newLead.company, email: newLead.email, estimated_value: newLead.estimatedValue, source: newLead.source });
     return newLead;
   };
 
@@ -2278,6 +2340,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       nextActivity: dealData.nextActivity || "Follow up on proposal",
     };
     setDeals((prev) => [newDeal, ...prev]);
+    emitIntegrationEvent("aarpex.deal.created", { id: newDeal.id, name: newDeal.name, deal_value: newDeal.dealValue, currency: newDeal.currency, status: newDeal.status });
 
     // Log activity
     addActivity({
@@ -2315,6 +2378,15 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const moveDealStage = (dealId: string, newStageId: string, newPipelineId?: string) => {
+    {
+      const cur = deals.find((d) => d.id === dealId);
+      const stage = pipelines.find((p) => p.id === (newPipelineId || cur?.pipelineId))?.stages.find((s) => s.id === newStageId);
+      if (cur && cur.stageId !== newStageId) {
+        const next = stage?.isWon ? "Won" : stage?.isLost ? "Lost" : "Open";
+        const ev = next === "Won" && cur.status !== "Won" ? "aarpex.deal.won" : next === "Lost" && cur.status !== "Lost" ? "aarpex.deal.lost" : "aarpex.deal.stage_changed";
+        emitIntegrationEvent(ev, { id: cur.id, name: cur.name, from_stage_id: cur.stageId, stage_id: newStageId, status: next, deal_value: cur.dealValue, currency: cur.currency });
+      }
+    }
     setDeals((prev) =>
       prev.map((d) => {
         if (d.id === dealId) {
@@ -2612,6 +2684,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const toggleTaskStatus = (id: string) => {
+    const curTask = tasks.find((t) => t.id === id);
+    if (curTask && curTask.status !== "Completed") emitIntegrationEvent("aarpex.task.completed", { id: curTask.id, title: curTask.title });
     setTasks((prev) =>
       prev.map((t) => {
         if (t.id === id) {

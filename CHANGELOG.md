@@ -13,6 +13,14 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.15.0]
+
+### Added
+- Founder's Dashboard integration API (`integrationApi.ts`, mounted under `/api/aargard-integration/v1`): health, connection lifecycle (single-use setup token → API key, verify, rotate, revoke), `/summary`, `/activity`, full list/detail for deals, leads (`/contacts` alias), pipelines, pipeline stages, tasks, activities, groups, industry agents, agent approvals; control endpoints (create/edit/delete with `confirm`, deal move/assign/bulk-update, task complete, user list/invite/role/remove); 60 req/min limit; API keys stored hashed; signed outbound webhooks (`X-Aargard-Signature`), SSRF-guarded webhook URLs; full audit trail.
+- Settings → Integrations tab (admins): create setup token, status, rotate, disconnect, recent changes.
+- Browser forwards lead/deal/task events for webhooks; open tabs refresh within ~30s after the API changes data (`tenants.integration_changed_at`).
+- Migration 0029 (applied live): `integration_connections` (RLS on, no policies → server-only), `integration_audit`, `tenants.integration_changed_at`. Hand-back doc: `docs/FOUNDERS_DASHBOARD_INTEGRATION.md`.
+
 ## [2.14.0]
 
 ### Added
