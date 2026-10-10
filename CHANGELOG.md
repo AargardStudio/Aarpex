@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.15.1]
+
+### Fixed
+- New campaign: the "Add a whole group" chips are now clear, working toggles. Click to add a group's leads, click again to remove them; the chip fills in when the whole group is selected. Groups whose leads have no email are no longer silently greyed out: the chip explains why, and shows "with email / total" counts.
+
 ## [2.15.0]
 
 ### Added

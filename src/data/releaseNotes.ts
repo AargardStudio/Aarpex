@@ -23,6 +23,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.15.1",
+    date: "2026-10-10",
+    headline: "Group picking in campaigns just works",
+    tagline: "Add or remove a whole group from a campaign audience with one click.",
+    highlights: [
+      { title: "Toggle groups", description: "Click a group chip to add its leads, click again to remove them. Selected groups light up." },
+      { title: "Clear email counts", description: "Chips show how many leads have an email, and explain when a group has none." },
+    ],
+  },
+  {
     version: "2.15.0",
     date: "2026-10-09",
     headline: "Connect AarPex to the Aargard Founder's Dashboard",

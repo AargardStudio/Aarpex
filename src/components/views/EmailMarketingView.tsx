@@ -831,18 +831,37 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <span className="text-slate-400">Add a whole group:</span>
                     {leadGroups.map((g) => {
-                      const ids = leads.filter((l) => (l.groupIds || []).includes(g.id) && l.email).map((l) => l.id);
+                      const members = leads.filter((l) => (l.groupIds || []).includes(g.id));
+                      const ids = members.filter((l) => l.email).map((l) => l.id);
+                      const noEmail = members.length - ids.length;
+                      const allIn = ids.length > 0 && ids.every((id) => selectedIds.includes(id));
+                      const color = g.color || "#14b8a6";
                       return (
                         <button
                           key={g.id}
                           type="button"
-                          disabled={ids.length === 0}
-                          onClick={() => setSelectedIds((prev) => Array.from(new Set([...prev, ...ids])))}
-                          className="px-2 py-1 rounded-full border text-[11px] font-semibold disabled:opacity-40"
-                          style={{ color: g.color, borderColor: `${g.color}66`, backgroundColor: `${g.color}1f` }}
-                          title={`${ids.length} lead(s) with an email`}
+                          onClick={() =>
+                            setSelectedIds((prev) =>
+                              allIn ? prev.filter((x) => !ids.includes(x)) : Array.from(new Set([...prev, ...ids]))
+                            )
+                          }
+                          className="px-2.5 py-1 rounded-full border text-[11px] font-semibold cursor-pointer transition-opacity hover:opacity-80"
+                          style={{
+                            color: allIn ? "#0b0d11" : color,
+                            borderColor: `${color}99`,
+                            backgroundColor: allIn ? color : `${color}1f`,
+                          }}
+                          title={
+                            ids.length === 0
+                              ? members.length === 0
+                                ? "This group has no leads yet"
+                                : "None of this group's leads have an email address"
+                              : `${allIn ? "Click to remove" : "Click to add"} ${ids.length} lead(s) with an email${noEmail ? ` (${noEmail} without email skipped)` : ""}`
+                          }
                         >
-                          + {g.name} ({ids.length})
+                          {allIn ? "✓ " : "+ "}
+                          {g.name} ({ids.length}
+                          {noEmail ? `/${members.length}` : ""})
                         </button>
                       );
                     })}
