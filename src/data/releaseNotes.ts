@@ -23,6 +23,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.15.2",
+    date: "2026-10-11",
+    headline: "Founder's Dashboard connects from the browser",
+    tagline: "Fixes the connection error when linking AarPex from the Dashboard.",
+    highlights: [
+      { title: "Browser access allowed", description: "The integration API now accepts requests from the Founder's Dashboard, so Connect Aarpex completes." },
+    ],
+  },
+  {
     version: "2.15.1",
     date: "2026-10-10",
     headline: "Group picking in campaigns just works",

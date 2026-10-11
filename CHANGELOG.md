@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.15.2]
+
+### Fixed
+- Founder's Dashboard could not connect from the browser ("Failed to fetch" / CORS). The integration API now answers preflight requests and allows the Dashboard origin (https://foundersdashboard.aargard.com). Extra origins can be added with the optional `INTEGRATION_ALLOWED_ORIGINS` env var (comma-separated).
+
 ## [2.15.1]
 
 ### Fixed

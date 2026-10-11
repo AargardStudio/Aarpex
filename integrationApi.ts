@@ -179,6 +179,32 @@ export function registerIntegrationApi(app: express.Express, getSupabase: () => 
     return s;
   };
 
+  // ---- CORS ---------------------------------------------------------------
+  // The Founder's Dashboard calls this API straight from the browser, so the
+  // browser needs permission. Only listed origins are allowed (the API is still
+  // protected by its bearer key / single-use setup token either way).
+  const allowedOrigins = new Set(
+    [
+      "https://foundersdashboard.aargard.com",
+      ...String(process.env.INTEGRATION_ALLOWED_ORIGINS || "")
+        .split(",")
+        .map((o) => o.trim().replace(/\/+$/, ""))
+        .filter(Boolean),
+    ].map((o) => o.toLowerCase())
+  );
+  app.use("/api/aargard-integration", (req: any, res: any, next: any) => {
+    const origin = String(req.headers.origin || "").toLowerCase();
+    if (origin && allowedOrigins.has(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", req.headers.origin);
+      res.setHeader("Vary", "Origin");
+      res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Requested-With");
+      res.setHeader("Access-Control-Max-Age", "86400");
+    }
+    if (req.method === "OPTIONS") return res.status(204).end();
+    next();
+  });
+
   // ---- outbound webhooks (push) -------------------------------------------
   async function emitEvent(tenantId: string, event: string, data: any): Promise<void> {
     try {
