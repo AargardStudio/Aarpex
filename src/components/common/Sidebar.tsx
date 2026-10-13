@@ -33,6 +33,7 @@ import {
   FolderOpen,
   LifeBuoy,
   MessageCircle,
+  Lock,
 } from "lucide-react";
 import { ROLE_LABELS, UserRole } from "../../types";
 
@@ -58,6 +59,7 @@ export const Sidebar: React.FC = () => {
     signOut,
     tenants,
     activeTenant,
+    hasIntelligence,
     activeTenantId,
     switchTenant,
     products,
@@ -354,7 +356,14 @@ export const Sidebar: React.FC = () => {
                       <span className="truncate">{item.name}</span>
                     </div>
 
-                    {item.badge !== undefined && (
+                    {!hasIntelligence && ["AI Insights", "Industry Agents", "Agent Approvals"].includes(item.name) ? (
+                      <span
+                        className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#181b21] text-amber-300 border border-amber-500/40 font-semibold flex items-center gap-1"
+                        title="Part of AarPex Pro"
+                      >
+                        <Lock className="w-2.5 h-2.5" /> Pro
+                      </span>
+                    ) : item.badge !== undefined && (
                       <span
                         className={`text-[10px] px-1.5 py-0.5 rounded-full ${
                           item.badgeColor ||

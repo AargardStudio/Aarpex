@@ -14,6 +14,18 @@
  */
 import { getSupabaseAuthClient, isSupabaseAuthConfigured } from "../config/supabaseAuthClient";
 
+// The workspace the user is currently in. The server needs it to check that
+// workspace's plan before running Intelligence features (Pro tier), so every
+// request carries it as X-Tenant-Id. CRMContext keeps this up to date.
+let currentTenantId = "";
+export function setApiTenantId(id: string | undefined | null) {
+  currentTenantId = id || "";
+}
+
+/** Fired when the server refuses a feature because the workspace is on the
+ * Growth plan; the app shell listens and shows the "Upgrade to Pro" modal. */
+export const UPGRADE_REQUIRED_EVENT = "aarpex:upgrade-required";
+
 export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers || {});
 
@@ -32,5 +44,18 @@ export async function apiFetch(input: string, init: RequestInit = {}): Promise<R
     }
   }
 
-  return fetch(input, { ...init, headers });
+  if (currentTenantId && !headers.has("X-Tenant-Id")) headers.set("X-Tenant-Id", currentTenantId);
+
+  const res = await fetch(input, { ...init, headers });
+  if (res.status === 402) {
+    try {
+      const body = await res.clone().json();
+      if (body?.code === "pro_required" && typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent(UPGRADE_REQUIRED_EVENT, { detail: { feature: body.feature || "" } }));
+      }
+    } catch {
+      /* not JSON -- ignore */
+    }
+  }
+  return res;
 }

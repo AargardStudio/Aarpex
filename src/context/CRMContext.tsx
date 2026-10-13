@@ -66,8 +66,8 @@ import {
   initialComments,
 } from "../data/mockData";
 import { defaultTenants } from "../data/tenantData";
-import { PLATFORM_PLAN, PLATFORM_TRIAL_DAYS, FOUNDER_EMAIL } from "../data/subscriptionPlans";
-import { apiFetch } from "../lib/apiClient";
+import { PLATFORM_PLAN, PLATFORM_TRIAL_DAYS, FOUNDER_EMAIL, planHasIntelligence, PENDING_UPGRADE_KEY, SUBSCRIPTION_PLANS } from "../data/subscriptionPlans";
+import { apiFetch, setApiTenantId } from "../lib/apiClient";
 import { abicAuditDue, abicLeadPatch, callAbicAudit, upsertAbicKnowledge, parseAbicSnapshot } from "../lib/abic";
 import { normalizeIndustry, agentMatchesLead } from "../lib/industryMatch";
 
@@ -157,6 +157,8 @@ interface CRMContextType {
   tenants: Tenant[];
   activeTenantId: string;
   activeTenant: Tenant;
+  /** True when this workspace's plan includes the Intelligence suite (Pro). */
+  hasIntelligence: boolean;
   switchTenant: (tenantId: string) => void;
   createTenant: (tenantData: Partial<Tenant>) => Tenant;
   loadSampleData: () => void;
@@ -585,6 +587,13 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const activeTenant = useMemo(() => {
     return tenants.find((t) => t.id === activeTenantId) || tenants[0];
   }, [tenants, activeTenantId]);
+
+  // Intelligence suite (Industry Agents, AI Copilot, AI writing) = Pro tier.
+  const hasIntelligence = planHasIntelligence(activeTenant?.plan, activeTenant?.ownerEmail);
+  const hasIntelligenceRef = useRef(hasIntelligence);
+  hasIntelligenceRef.current = hasIntelligence;
+  // Tell the API client which workspace we're in so the server can check its plan.
+  setApiTenantId(activeTenant?.id || activeTenantId);
 
   useEffect(() => {
     localStorage.setItem("crm_tenants_v3", JSON.stringify(tenants));
@@ -1447,6 +1456,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!activeTenantId) return;
 
     const runAutoScan = () => {
+      if (!hasIntelligenceRef.current) return; // Industry Agents are a Pro feature
       const { industryAgents: curAgents } = agentScanStateRef.current;
       const autoAgents = curAgents.filter((p) => p.isActive && p.autoRunEnabled);
       void runAgentScanForAgents(autoAgents);
@@ -1469,6 +1479,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // overlapping two scans.
   const runAgentScanNow = React.useCallback(
     async (agentId?: string): Promise<boolean> => {
+      if (!hasIntelligenceRef.current) {
+        window.dispatchEvent(new CustomEvent("aarpex:upgrade-required", { detail: { feature: "industry-agents" } }));
+        return false;
+      }
       if (isAgentScanRunningRef.current) return false;
       const { industryAgents: curAgents } = agentScanStateRef.current;
 
@@ -1934,6 +1948,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // localStorage right before the redirect are what let this finish the
   // job. Waits for session bootstrap to finish first so currentUser/tenants
   // are populated before creating the new one, and only ever runs once.
+  const SUBSCRIPTION_PLAN_LOOKUP: Record<string, (typeof SUBSCRIPTION_PLANS)[number]> = Object.fromEntries(SUBSCRIPTION_PLANS.map((p) => [p.id, p]));
   const hasProcessedWorkspaceRedirectRef = useRef(false);
   useEffect(() => {
     if (isBootstrapping || hasProcessedWorkspaceRedirectRef.current) return;
@@ -2006,6 +2021,65 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       switchTenant(created.id);
       localStorage.removeItem(PENDING_WORKSPACE_KEY);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBootstrapping]);
+
+  // Return trip from Stripe for an *existing* workspace changing plan
+  // (Growth -> Pro). The plan is applied only now, after payment, never
+  // before. If the server has Stripe configured and the session_id doesn't
+  // verify as paid, the upgrade is refused.
+  const hasProcessedUpgradeRedirectRef = useRef(false);
+  useEffect(() => {
+    if (isBootstrapping || hasProcessedUpgradeRedirectRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const subscriptionParam = params.get("subscription");
+    if (!subscriptionParam) return;
+    if (localStorage.getItem(PENDING_WORKSPACE_KEY)) return; // new-workspace flow owns this redirect
+    const raw = localStorage.getItem(PENDING_UPGRADE_KEY);
+    if (!raw) return;
+
+    hasProcessedUpgradeRedirectRef.current = true;
+    window.history.replaceState({}, "", window.location.pathname);
+    localStorage.removeItem(PENDING_UPGRADE_KEY);
+    if (subscriptionParam !== "success") return;
+
+    let pending: { tenantId: string; plan: string; at?: number };
+    try {
+      pending = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (!pending?.tenantId || !pending?.plan) return;
+    if (pending.at && Date.now() - pending.at > 6 * 60 * 60 * 1000) return; // stale
+
+    const sessionId = params.get("session_id");
+    (async () => {
+      let customerId: string | undefined;
+      let subscriptionId: string | undefined;
+      if (sessionId) {
+        try {
+          const r = await apiFetch("/api/subscriptions/verify-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId }),
+          });
+          const d = await r.json().catch(() => ({}));
+          if (r.status === 402) return; // Stripe says it wasn't paid
+          customerId = d.customerId || undefined;
+          subscriptionId = d.subscriptionId || undefined;
+        } catch {
+          /* Stripe lookup unavailable -- the Payment Link itself already took the card */
+        }
+      }
+      const target = SUBSCRIPTION_PLAN_LOOKUP[pending.plan];
+      updateTenant(pending.tenantId, {
+        plan: pending.plan as any,
+        subscriptionStatus: "active",
+        ...(target ? { subscriptionPrice: target.monthlyPrice, seatsAllocated: target.seats } : {}),
+        ...(customerId ? { stripeCustomerId: customerId } : {}),
+        ...(subscriptionId ? { subscriptionId } : {}),
+      });
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isBootstrapping]);
@@ -4128,6 +4202,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         tenants,
         activeTenantId,
         activeTenant,
+        hasIntelligence,
         switchTenant,
         createTenant,
         loadSampleData,

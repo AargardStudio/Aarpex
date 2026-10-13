@@ -16,6 +16,9 @@ import {
 } from "lucide-react";
 import {
   VISIBLE_SUBSCRIPTION_PLANS,
+  beginPaidUpgrade,
+  PENDING_UPGRADE_KEY,
+  FOUNDER_EMAIL,
   SubscriptionPlan,
   PLATFORM_TRIAL_DAYS,
   buildPlatformPaymentLinkUrl,
@@ -67,9 +70,9 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, on
       // whichever it's switching to) collects a real card the same way
       // sign-up does, rather than faking activation locally.
       if (!activeTenant?.stripeCustomerId) {
-        window.location.href = buildPlatformPaymentLinkUrl(
-          activeTenant?.ownerEmail || "billing@aarpex.com",
+        beginPaidUpgrade(
           activeTenant?.id || `tenant_${Date.now()}`,
+          activeTenant?.ownerEmail || "billing@aarpex.com",
           targetPlan.id
         );
         return;
@@ -98,7 +101,20 @@ export const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ isOpen, on
 
       if (checkoutUrl) {
         // Real Stripe Checkout is available — hand off to Stripe to collect payment.
+        try {
+          localStorage.setItem(PENDING_UPGRADE_KEY, JSON.stringify({ tenantId: activeTenant.id, plan: targetPlan.id, at: Date.now() }));
+        } catch {
+          /* ignore */
+        }
         window.location.href = checkoutUrl;
+        return;
+      }
+
+      // No Checkout available. A move up to Pro must still be paid for -- never
+      // activate it locally (Pro unlocks the Intelligence suite). Founder exempt.
+      const isFounderOwner = (activeTenant.ownerEmail || "").trim().toLowerCase() === FOUNDER_EMAIL.toLowerCase();
+      if (targetPlan.id === "Pro" && activeTenant.plan !== "Pro" && !isFounderOwner) {
+        beginPaidUpgrade(activeTenant.id, activeTenant.ownerEmail || "billing@aarpex.com", "Pro");
         return;
       }
 

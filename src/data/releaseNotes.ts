@@ -23,6 +23,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.16.0",
+    date: "2026-10-13",
+    headline: "Growth and Pro: two clear tiers",
+    tagline: "Growth ($29) is the complete CRM. Pro ($99) adds the full Intelligence suite.",
+    highlights: [
+      { title: "Intelligence = Pro", description: "Industry Agents, Agent Approvals, the AI Copilot, AI Insights, smart search, briefings and AI writing are included with Pro." },
+      { title: "Upgrade in two clicks", description: "Locked screens explain what Pro adds and take you straight to secure Stripe checkout; Pro unlocks when you return." },
+      { title: "Growth keeps everything else", description: "Leads, deals, pipelines, invoicing, email campaigns, WhatsApp messaging and groups stay fully available." },
+    ],
+  },
+  {
     version: "2.15.2",
     date: "2026-10-11",
     headline: "Founder's Dashboard connects from the browser",

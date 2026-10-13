@@ -49,6 +49,7 @@ export const DashboardView: React.FC = () => {
     setQuickCreateType,
     loadSampleData,
     agentActions,
+    hasIntelligence,
     approveAndSendAgentAction,
     resolveAgentAction,
   } = useCRM();
@@ -176,6 +177,16 @@ export const DashboardView: React.FC = () => {
 
   const fetchDailyBriefing = async () => {
     setIsBriefingLoading(true);
+    // The AI daily briefing is part of the Pro (Intelligence) tier. Growth
+    // workspaces get a plain, non-AI status line and never call the endpoint.
+    if (!hasIntelligence) {
+      setBriefing({
+        headline: `$${(pipelineValue / 1000).toFixed(0)}k in active pipeline, $${(wonRevenue / 1000).toFixed(0)}k closed, ${overdueInvoicesList.length} overdue invoice(s). Upgrade to Pro for AI-written daily briefings.`,
+        priorityAlerts: [],
+      });
+      setIsBriefingLoading(false);
+      return;
+    }
     try {
       const res = await apiFetch("/api/ai/daily-briefing", {
         method: "POST",
@@ -188,6 +199,7 @@ export const DashboardView: React.FC = () => {
           pendingTasks: tasks.filter((t) => t.status !== "Completed").length,
         }),
       });
+      if (!res.ok) throw new Error("briefing unavailable");
       const data = await res.json();
       setBriefing(data);
     } catch {

@@ -13,6 +13,15 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.16.0]
+
+### Changed
+- **Two real tiers.** The Intelligence suite now needs Pro ($99/mo): Industry Agents and Agent Approvals, the AI Copilot chat, AI Insights, smart search, daily briefings and every `/api/ai/*` writing/analysis endpoint (except product/knowledge-base setup helpers). Growth ($29) keeps the full CRM.
+- Enforced on the server, not just the UI: `/api/ai/*` returns `402 pro_required` unless the signed-in user's workspace (sent as `X-Tenant-Id`, membership-checked, plan read from the database) is Pro/Enterprise or the founder account. The cron agent scan skips Growth workspaces. Browser agent scans and "Run now" are also blocked.
+- Growth users see a lock + "Upgrade to Pro" on those screens and a global upgrade popup if an AI call is refused. Dashboard briefing falls back to a plain status line.
+- Pro is open to every workspace (the tester-only gate is switched off via `PRO_OPEN_TO_ALL`).
+- Plan changes to Pro can no longer be applied locally: they go through Stripe and are applied on the `?subscription=success` return trip (verified against the Checkout session when the server has Stripe configured). Pricing-page feature lists updated.
+
 ## [2.15.2]
 
 ### Fixed

@@ -40,7 +40,8 @@ import {
   PLATFORM_PLAN,
   getPaymentLinkUrlForPlan,
   getSelectablePlansForEmail,
-  isProTesterEmail,
+  FOUNDER_EMAIL,
+  beginPaidUpgrade,
 } from "../../data/subscriptionPlans";
 import { apiFetch } from "../../lib/apiClient";
 import { getMailboxById, mailboxLabel } from "../../lib/webmail";
@@ -539,12 +540,13 @@ export const SettingsView: React.FC = () => {
 
   // Handle Subscription Plan Modification
   const handleUpdateSubscriptionTier = async (newPlan: "Starter" | "Growth" | "Pro" | "Enterprise", newCycle: "monthly" | "annually") => {
-    // Pro is testing-only — block it here too, not just in the picker's
-    // rendered list, since this function is the one that actually writes
-    // the tenant's plan.
-    if (newPlan === "Pro" && !isProTesterEmail(activeTenant?.ownerEmail)) {
-      setTierNotice("Pro is currently limited to internal testing and isn't available on this workspace yet.");
-      setTimeout(() => setTierNotice(null), 3500);
+    // Moving up to a paid tier must go through Stripe -- never flip the plan
+    // locally, since Pro unlocks the Intelligence suite. The plan is applied
+    // when the user returns from Stripe with ?subscription=success. The
+    // founder account is exempt (always active, no card needed).
+    const isFounder = (activeTenant?.ownerEmail || "").trim().toLowerCase() === FOUNDER_EMAIL.toLowerCase();
+    if (newPlan === "Pro" && activeTenant?.plan !== "Pro" && !isFounder) {
+      beginPaidUpgrade(activeTenantId, activeTenant?.ownerEmail || "", "Pro");
       return;
     }
     setIsUpdatingTier(true);

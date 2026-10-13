@@ -122,6 +122,20 @@ const SECTIONS: Section[] = [
   {
     icon: Wrench,
     group: "Admin (workspace owner)",
+    title: "Plans: Growth ($29) vs Pro ($99)",
+    body: [
+      "Growth is the complete CRM: leads, deals, pipelines, tasks, invoicing, email campaigns (you write them), WhatsApp messaging and groups.",
+      "Pro adds the whole Intelligence suite: Industry Agents and Agent Approvals, the AI Copilot chat, AI Insights, smart search, daily AI briefings, AI campaign/email writing, reply and lead analysis, ABIC audits, AI-drafted WhatsApp replies, multiple mailboxes and 10GB of storage.",
+    ],
+    steps: [
+      "On Growth, Intelligence screens show a Pro lock and an Upgrade button. Nothing else is limited.",
+      "To upgrade: Settings -> Subscription -> choose Pro (checkout with Stripe). Pro unlocks the moment you return to AarPex.",
+      "Industry Agents on a Growth workspace pause until the workspace is on Pro; your agents and settings are kept.",
+    ],
+  },
+  {
+    icon: Wrench,
+    group: "Admin (workspace owner)",
     title: "Connect the Aargard Founder's Dashboard",
     body: [
       "The Founder's Dashboard can read this workspace (deals, leads, tasks, activity) and make changes through a secret key that only you can create. It never touches your database directly, and you can disconnect it at any time. Only workspace admins see this page.",

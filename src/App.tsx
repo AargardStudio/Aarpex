@@ -34,6 +34,7 @@ import { AuthPage } from "./components/auth/AuthPage";
 import { EmailComposeModal } from "./components/modals/EmailComposeModal";
 import { WhatsAppComposeModal } from "./components/modals/WhatsAppComposeModal";
 import { FloatingAIChat } from "./components/common/FloatingAIChat";
+import { UpgradePrompt, UpgradeModal } from "./components/common/UpgradeGate";
 
 const CRMMainContent: React.FC = () => {
   const {
@@ -49,6 +50,7 @@ const CRMMainContent: React.FC = () => {
     setWhatsAppComposeOpen,
     whatsappComposeProps,
     tenants,
+    hasIntelligence,
   } = useCRM();
 
   // While the initial Supabase session check is in flight, render nothing
@@ -118,7 +120,7 @@ const CRMMainContent: React.FC = () => {
       case "stripe":
         return <StripeView />;
       case "aiinsights":
-        return <AiInsightsView />;
+        return hasIntelligence ? <AiInsightsView /> : <UpgradePrompt feature="AI Insights" />;
       case "emailmarketing":
         return <EmailMarketingView />;
       case "products":
@@ -128,9 +130,9 @@ const CRMMainContent: React.FC = () => {
       case "knowledgebase":
         return <KnowledgeBaseView />;
       case "industryagents":
-        return <IndustryAgentsView />;
+        return hasIntelligence ? <IndustryAgentsView /> : <UpgradePrompt feature="Industry Agents" />;
       case "agentapprovals":
-        return <AgentApprovalsView />;
+        return hasIntelligence ? <AgentApprovalsView /> : <UpgradePrompt feature="Agent Approvals" />;
       case "filemanager":
         return <FileManagerView />;
       case "inbox":
@@ -202,7 +204,8 @@ const CRMMainContent: React.FC = () => {
       />
 
       {/* Floating AI Chat -- available on every signed-in screen */}
-      <FloatingAIChat />
+      {hasIntelligence && <FloatingAIChat />}
+      <UpgradeModal />
     </div>
   );
 };

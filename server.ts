@@ -143,6 +143,62 @@ app.use((req, res, next) => {
   return requireAuth(req, res, next);
 });
 
+// ---- Intelligence suite = Pro tier ----------------------------------------
+// Growth ($29) workspaces get the CRM; the Intelligence suite (AI Copilot,
+// AI writing/analysis, Industry Agents and everything under /api/ai/*) needs
+// Pro ($99). This is the real boundary -- the UI only mirrors it. The caller
+// names its workspace in X-Tenant-Id; we confirm the signed-in user belongs
+// to it and read the plan from the database, never from the request.
+const FOUNDER_EMAIL_SERVER = "aargardglobal@gmail.com";
+const INTELLIGENCE_PLANS_SERVER = new Set(["Pro", "Enterprise"]);
+// Product setup helpers that also live in Growth (not part of the paid suite).
+const INTELLIGENCE_EXEMPT_PATHS = new Set(["/api/ai/product-assist", "/api/ai/knowledge-base-from-url"]);
+const planCache = new Map<string, { at: number; allowed: boolean }>();
+
+function tenantHasIntelligence(t: any): boolean {
+  if (!t) return false;
+  if (String(t.owner_email || "").trim().toLowerCase() === FOUNDER_EMAIL_SERVER) return true;
+  return INTELLIGENCE_PLANS_SERVER.has(String(t.plan || ""));
+}
+
+app.use(async (req: any, res, next) => {
+  if (!req.path.startsWith("/api/ai/")) return next();
+  if (INTELLIGENCE_EXEMPT_PATHS.has(req.path)) return next();
+  if (!isServerAuthConfigured()) return next(); // demo mode: no accounts to check
+  const deny = (message: string, status = 402) =>
+    res.status(status).json({
+      error: message,
+      code: "pro_required",
+      feature: req.path.replace("/api/ai/", ""),
+    });
+  try {
+    const tenantId = String(req.headers["x-tenant-id"] || "").trim();
+    if (!tenantId) return deny("Open a workspace first -- AI features are part of the Pro plan.");
+    const cacheKey = `${req.userId}:${tenantId}`;
+    const hit = planCache.get(cacheKey);
+    if (hit && Date.now() - hit.at < 30_000) {
+      return hit.allowed ? next() : deny("AI Intelligence features are part of the Pro plan ($99/mo). Upgrade in Settings to unlock them.");
+    }
+    const supabase = getServerSupabase();
+    if (!supabase) return next();
+    const { data: member } = await supabase
+      .from("tenant_members")
+      .select("tenant_id")
+      .eq("tenant_id", tenantId)
+      .eq("user_id", req.userId)
+      .maybeSingle();
+    if (!member) return deny("You are not a member of that workspace.", 403);
+    const { data: tenant } = await supabase.from("tenants").select("plan, owner_email").eq("id", tenantId).maybeSingle();
+    const allowed = tenantHasIntelligence(tenant);
+    planCache.set(cacheKey, { at: Date.now(), allowed });
+    if (!allowed) return deny("AI Intelligence features are part of the Pro plan ($99/mo). Upgrade in Settings to unlock them.");
+    return next();
+  } catch (err) {
+    console.error("Intelligence gate check failed:", err);
+    return deny("Couldn't verify your plan right now. Please try again.", 503);
+  }
+});
+
 // Founder's Dashboard integration (machine API + admin endpoints)
 registerIntegrationApi(app, getServerSupabase);
 
@@ -1392,6 +1448,11 @@ const handleCronAgentScan = async (req: express.Request, res: express.Response) 
           const { data: t } = await supabase.from("tenants").select("*").eq("id", tenantId).maybeSingle();
           tenant = t || null;
           tenantCache.set(tenantId, tenant);
+        }
+        // Industry Agents are part of the Pro tier: Growth workspaces' agents don't run.
+        if (!tenantHasIntelligence(tenant)) {
+          outcome.agentsScanned -= 1;
+          continue;
         }
 
         let product: any = null;
@@ -3750,7 +3811,9 @@ const AARPEX_PLATFORM_STRIPE_PRODUCT_ID =
 // for plan "Pro" from a caller whose email isn't on this list is clamped
 // down to Growth pricing before a Stripe Checkout session is ever created.
 const AARPEX_PRO_TESTER_EMAILS = ["ceo@aargard.com"];
+const PRO_OPEN_TO_ALL = true; // keep in sync with src/data/subscriptionPlans.ts
 function isAarpexProTesterEmail(email: string | undefined | null): boolean {
+  if (PRO_OPEN_TO_ALL) return true;
   if (!email) return false;
   const normalized = String(email).trim().toLowerCase();
   return AARPEX_PRO_TESTER_EMAILS.some((e) => e.toLowerCase() === normalized);

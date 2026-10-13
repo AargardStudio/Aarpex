@@ -27,6 +27,9 @@ export interface SubscriptionPlan {
  */
 export const PRICING_LOCKED = false;
 
+/** Monthly price of the Pro tier, for upgrade prompts. */
+export const PRO_PLAN_PRICE = 99;
+
 /** Free trial length offered on the platform subscription. */
 export const PLATFORM_TRIAL_DAYS = 14;
 
@@ -50,9 +53,28 @@ export const FOUNDER_EMAIL = "aargardglobal@gmail.com";
  */
 export const PRO_TESTER_EMAILS: string[] = ["ceo@aargard.com"];
 
+/** Pro is generally available (v2.16.0): every workspace may subscribe. Set
+ * back to false to restore the tester-only gate above. Keep in sync with
+ * PRO_OPEN_TO_ALL in server.ts. */
+export const PRO_OPEN_TO_ALL = true;
+
+/**
+ * Plans that include the Intelligence suite (Industry Agents, the AI
+ * Copilot/assistant, AI Insights and every AI writing/analysis feature).
+ * Growth ($29) does not. The founder account is always entitled.
+ * Server-side enforcement lives in server.ts (requireIntelligence) -- this
+ * helper only drives what the UI shows.
+ */
+export const INTELLIGENCE_PLAN_IDS: string[] = ["Pro", "Enterprise"];
+export function planHasIntelligence(plan: string | undefined | null, ownerEmail?: string | null): boolean {
+  if (ownerEmail && ownerEmail.trim().toLowerCase() === FOUNDER_EMAIL.toLowerCase()) return true;
+  return INTELLIGENCE_PLAN_IDS.includes(String(plan || ""));
+}
+
 /** Whether this email is allowed to select/stay on the Pro tier while it's
  * still testing-only. Case-insensitive. */
 export function isProTesterEmail(email: string | undefined | null): boolean {
+  if (PRO_OPEN_TO_ALL) return true;
   if (!email) return false;
   const normalized = email.trim().toLowerCase();
   return PRO_TESTER_EMAILS.some((e) => e.toLowerCase() === normalized);
@@ -129,6 +151,21 @@ export function buildPlatformPaymentLinkUrl(email: string, referenceId: string, 
   return `${getPaymentLinkUrlForPlan(planId)}?${params.toString()}`;
 }
 
+/** localStorage key holding an in-flight upgrade of an existing workspace
+ * (set right before redirecting to Stripe, read on the return trip). */
+export const PENDING_UPGRADE_KEY = "aarpex_pending_upgrade_v1";
+
+/** Sends an existing workspace to Stripe to pay for a plan change. The plan
+ * is applied only when the user comes back with ?subscription=success. */
+export function beginPaidUpgrade(tenantId: string, ownerEmail: string, planId: string): void {
+  try {
+    localStorage.setItem(PENDING_UPGRADE_KEY, JSON.stringify({ tenantId, plan: planId, at: Date.now() }));
+  } catch {
+    /* ignore */
+  }
+  window.location.href = buildPlatformPaymentLinkUrl(ownerEmail || "billing@aarpex.com", tenantId, planId);
+}
+
 /** Generates a short, locally-unique id to correlate a pending signup or
  * workspace with the Payment Link redirect it kicks off. */
 export function generatePendingReferenceId(): string {
@@ -176,15 +213,14 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
     id: "Growth",
     name: "Growth",
-    tagline: "The complete AarPex CRM at one low starting price",
+    tagline: "The complete AarPex CRM -- pipeline, email, WhatsApp, invoicing",
     monthlyPrice: 29,
     annualPrice: 29,
     seats: 5,
     features: [
       "Up to 5 team members",
       "Unlimited leads, deals, contacts & companies",
-      "AarPex AI Sales Intelligence & Copilot",
-      "WhatsApp Business API messaging",
+      "WhatsApp Business API messaging (manual replies)",
       "Connect your own Stripe account for client billing",
       "Create subscription & one-time pricing for your customers",
       "Multi-currency billing (USD, EUR, GBP)",
@@ -196,16 +232,19 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
     id: "Pro",
     name: "Pro",
-    tagline: "For teams running multiple inboxes and heavier AI workflows",
+    tagline: "The full Intelligence suite: agents, AI Copilot and AI writing",
     monthlyPrice: 99,
     annualPrice: 99,
     seats: 10,
     isPopular: true,
     features: [
-      "Everything in Growth, plus:",
+      "Everything in Growth, plus the full Intelligence suite:",
+      "Industry Agents -- auto-scan, draft and queue follow-ups by industry or group",
+      "AarPex AI Copilot, AI Insights, smart search and daily briefings",
+      "AI campaign & email writing, reply analysis, lead analysis and ABIC audits",
       "Connect multiple sending mailboxes",
       "Choose which mailbox sends each campaign",
-      "WhatsApp Business API messaging",
+      "WhatsApp Business API messaging with AI-drafted replies",
       "AI Prompt Manager — customize the prompts behind every AI feature",
       "Analysis Manager — a searchable history of every AI analysis you've run",
       "Workspace Knowledge Base to ground AI answers in your own material",
