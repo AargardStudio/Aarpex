@@ -995,6 +995,14 @@ export interface TenantWhatsAppConfig {
   accessToken?: string;
   phoneNumberId: string;
   businessAccountId?: string;
+  // How the Meta connection was made: one-click Embedded Signup (Aargard as
+  // Tech Provider) or credentials pasted by hand. Embedded Signup also
+  // records the Meta business id, when it connected, and the PIN the number
+  // was registered with (needed if the number ever has to be re-registered).
+  connectionMethod?: "embedded_signup" | "manual";
+  businessId?: string;
+  connectedAt?: string;
+  registerPin?: string;
 
   // -- Twilio fields (provider: "twilio") -- Twilio's WhatsApp API sits in
   // front of the same Meta WhatsApp network, authenticated with your

@@ -105,6 +105,22 @@ const SECTIONS: Section[] = [
   {
     icon: MessageCircle,
     group: "Setup guides",
+    title: "Connect WhatsApp in one click",
+    body: [
+      "If your AarPex has one-click sign-up switched on, you can connect your own WhatsApp Business number without copying any tokens or IDs.",
+    ],
+    steps: [
+      "Go to Settings -> WhatsApp and click \"Connect WhatsApp with Facebook\".",
+      "In the Meta popup, log in with Facebook, then choose or create your WhatsApp Business Account.",
+      "Enter your business phone number and verify it with the code Meta sends. The number can't be active on the regular WhatsApp or WhatsApp Business app, so delete that account first or use a fresh number.",
+      "When the popup closes, AarPex shows Connected and replies start arriving on the WhatsApp page.",
+      "Add a payment method in WhatsApp Manager so Meta can bill you for messages beyond the free tier.",
+      "If the button is greyed out, one-click sign-up isn't enabled yet: use the manual setup below it.",
+    ],
+  },
+  {
+    icon: MessageCircle,
+    group: "Setup guides",
     title: "WhatsApp (Meta Cloud API) setup",
     body: [
       "AarPex uses Meta's official WhatsApp Business Cloud API. Nothing is sent to a prospect without your approval.",

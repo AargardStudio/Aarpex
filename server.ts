@@ -1,3 +1,4 @@
+import { randomInt } from "crypto";
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
@@ -4906,6 +4907,118 @@ app.post("/api/whatsapp/webhook", async (req: any, res) => {
 });
 
 // 5. Verify a WhatsApp Business connection (Meta or Twilio)
+// ---- WhatsApp Embedded Signup (Aargard as a Meta Tech Provider) -------------
+// One-click onboarding: the customer logs in with Facebook in a Meta popup,
+// picks or creates their WhatsApp Business Account and verifies a number. The
+// browser hands us a 30-second `code` plus the new waba_id / phone_number_id;
+// here we exchange the code for the customer's business token (server-side,
+// with our app secret), subscribe our app's webhook to their WABA, register
+// their number, and return what the workspace needs. Webhooks arrive at the
+// existing /api/whatsapp/webhook (app-level), matched by phone_number_id.
+// Env: META_APP_ID, META_APP_SECRET, META_ES_CONFIG_ID (Facebook Login for
+// Business configuration with the WhatsApp Embedded Signup variation).
+app.get("/api/whatsapp/embedded-signup/config", (_req, res) => {
+  const appId = (process.env.META_APP_ID || "").trim();
+  const configId = (process.env.META_ES_CONFIG_ID || "").trim();
+  const hasSecret = Boolean((process.env.META_APP_SECRET || "").trim());
+  res.json({
+    enabled: Boolean(appId && configId && hasSecret),
+    appId: appId && configId && hasSecret ? appId : "",
+    configId: appId && configId && hasSecret ? configId : "",
+    sdkVersion: (process.env.META_SDK_VERSION || "v25.0").trim(),
+  });
+});
+
+app.post("/api/whatsapp/embedded-signup/complete", async (req, res) => {
+  try {
+    const appId = (process.env.META_APP_ID || "").trim();
+    const appSecret = (process.env.META_APP_SECRET || "").trim();
+    if (!appId || !appSecret) {
+      return res.status(503).json({ success: false, error: "One-click WhatsApp sign-up isn't set up on this server yet (META_APP_ID / META_APP_SECRET)." });
+    }
+    const { code, phoneNumberId, wabaId } = req.body || {};
+    const idOk = (v: any) => typeof v === "string" && /^\d{5,25}$/.test(v);
+    if (typeof code !== "string" || code.length < 10 || code.length > 2000 || !idOk(phoneNumberId) || !idOk(wabaId)) {
+      return res.status(400).json({ success: false, error: "Missing or invalid sign-up details. Please try connecting again." });
+    }
+    const base = `https://graph.facebook.com/${WHATSAPP_GRAPH_VERSION}`;
+    const warnings: string[] = [];
+
+    // 1. code -> business token (code lives ~30s, so do this first)
+    const tokRes = await fetch(
+      `${base}/oauth/access_token?${new URLSearchParams({ client_id: appId, client_secret: appSecret, code })}`
+    );
+    const tok: any = await tokRes.json().catch(() => ({}));
+    if (!tokRes.ok || !tok.access_token) {
+      console.error("Embedded Signup token exchange failed:", tok?.error?.code, tok?.error?.message);
+      return res.status(400).json({
+        success: false,
+        error: "Meta didn't accept the sign-up code (it expires after 30 seconds). Please click Connect again.",
+      });
+    }
+    const token: string = tok.access_token;
+    const authJson = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+    // 2. webhooks for this customer's WABA come to our app
+    let subscribed = false;
+    try {
+      const subRes = await fetch(`${base}/${wabaId}/subscribed_apps`, { method: "POST", headers: authJson });
+      const sub: any = await subRes.json().catch(() => ({}));
+      subscribed = subRes.ok && sub?.success !== false;
+      if (!subscribed) warnings.push("Replies may not arrive: Meta didn't confirm the webhook subscription.");
+    } catch {
+      warnings.push("Replies may not arrive: the webhook subscription call failed.");
+    }
+
+    // 3. register the number for Cloud API use (becomes its two-step PIN)
+    const pin = String(randomInt(100000, 1000000));
+    let registered = false;
+    try {
+      const regRes = await fetch(`${base}/${phoneNumberId}/register`, {
+        method: "POST",
+        headers: authJson,
+        body: JSON.stringify({ messaging_product: "whatsapp", pin }),
+      });
+      const reg: any = await regRes.json().catch(() => ({}));
+      registered = regRes.ok && reg?.success !== false;
+      if (!registered) warnings.push(`Number registration needs attention: ${reg?.error?.message || "Meta refused the request"}.`);
+    } catch {
+      warnings.push("Number registration call failed.");
+    }
+
+    // 4. what number is it, for the Settings card
+    let displayPhoneNumber = "";
+    let verifiedName = "";
+    try {
+      const infoRes = await fetch(`${base}/${phoneNumberId}?fields=display_phone_number,verified_name,quality_rating`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const info: any = await infoRes.json().catch(() => ({}));
+      displayPhoneNumber = info?.display_phone_number || "";
+      verifiedName = info?.verified_name || "";
+    } catch {
+      /* cosmetic only */
+    }
+
+    return res.json({
+      success: true,
+      accessToken: token,
+      phoneNumberId,
+      wabaId,
+      businessId: typeof req.body?.businessId === "string" ? req.body.businessId : "",
+      displayPhoneNumber,
+      verifiedName,
+      subscribed,
+      registered,
+      registerPin: registered ? pin : undefined,
+      warnings,
+    });
+  } catch (err: any) {
+    console.error("Embedded Signup completion failed:", err?.message);
+    return res.status(500).json({ success: false, error: "Something went wrong finishing the WhatsApp connection. Please try again." });
+  }
+});
+
 app.post("/api/whatsapp/verify", async (req, res) => {
   try {
     const provider = req.body.provider === "twilio" ? "twilio" : "meta";

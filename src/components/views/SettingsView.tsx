@@ -44,6 +44,7 @@ import {
   beginPaidUpgrade,
 } from "../../data/subscriptionPlans";
 import { apiFetch } from "../../lib/apiClient";
+import { launchWhatsAppEmbeddedSignup } from "../../lib/metaEmbeddedSignup";
 import { getMailboxById, mailboxLabel } from "../../lib/webmail";
 
 type SettingsTab = "workspaces" | "subscription" | "stripe" | "webmail" | "whatsapp" | "company" | "security" | "database" | "integrations";
@@ -133,6 +134,11 @@ export const SettingsView: React.FC = () => {
   const [waTwilioAuthToken, setWaTwilioAuthToken] = useState(waCfg.twilioAuthToken || "");
   const [waTwilioWhatsAppNumber, setWaTwilioWhatsAppNumber] = useState(waCfg.twilioWhatsAppNumber || "");
   const [showWaToken, setShowWaToken] = useState(false);
+  // One-click Meta Embedded Signup (Aargard as Tech Provider)
+  const [waEs, setWaEs] = useState<{ enabled: boolean; appId: string; configId: string; sdkVersion: string } | null>(null);
+  const [waEsBusy, setWaEsBusy] = useState(false);
+  const [waEsResult, setWaEsResult] = useState<{ ok: boolean; text: string; warnings?: string[] } | null>(null);
+  const [waShowManual, setWaShowManual] = useState(!!(waCfg.accessToken && waCfg.connectionMethod !== "embedded_signup"));
   const [isVerifyingWa, setIsVerifyingWa] = useState(false);
   const [waVerifyResult, setWaVerifyResult] = useState<any>(null);
   const [waTestTo, setWaTestTo] = useState("");
@@ -338,6 +344,53 @@ export const SettingsView: React.FC = () => {
     setTimeout(() => setStripeSaveSuccess(false), 3000);
   };
 
+  // One-click connect through Meta's Embedded Signup popup.
+  const handleConnectWhatsAppWithFacebook = async () => {
+    if (!waEs?.enabled) return;
+    setWaEsBusy(true);
+    setWaEsResult(null);
+    try {
+      const r = await launchWhatsAppEmbeddedSignup({ appId: waEs.appId, configId: waEs.configId, sdkVersion: waEs.sdkVersion });
+      const resp = await apiFetch("/api/whatsapp/embedded-signup/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(r),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.success) throw new Error(data.error || "Couldn't finish connecting WhatsApp.");
+      updateWhatsAppConfig({
+        isEnabled: true,
+        provider: "meta",
+        accessToken: data.accessToken,
+        phoneNumberId: data.phoneNumberId,
+        businessAccountId: data.wabaId,
+        businessId: data.businessId || undefined,
+        displayPhoneNumber: data.displayPhoneNumber || undefined,
+        verifiedName: data.verifiedName || undefined,
+        connectionMethod: "embedded_signup",
+        connectedAt: new Date().toISOString(),
+        lastVerifiedAt: new Date().toISOString(),
+        registerPin: data.registerPin,
+        status: "connected",
+        statusMessage: "Connected with one-click sign-up",
+      });
+      setWaProvider("meta");
+      setWaAccessToken(data.accessToken);
+      setWaPhoneNumberId(data.phoneNumberId);
+      setWaBusinessAccountId(data.wabaId);
+      addAuditLogEntry("Connected WhatsApp via Meta Embedded Signup", data.displayPhoneNumber || data.phoneNumberId, "settings");
+      setWaEsResult({
+        ok: true,
+        text: `Connected${data.displayPhoneNumber ? ` ${data.displayPhoneNumber}` : ""}${data.verifiedName ? ` (${data.verifiedName})` : ""}.`,
+        warnings: data.warnings,
+      });
+    } catch (e: any) {
+      setWaEsResult({ ok: false, text: e?.message || "Couldn't connect WhatsApp." });
+    } finally {
+      setWaEsBusy(false);
+    }
+  };
+
   // Verify WhatsApp Business connection via Backend (Meta Graph API or Twilio)
   const handleVerifyWhatsApp = async () => {
     setIsVerifyingWa(true);
@@ -537,6 +590,24 @@ export const SettingsView: React.FC = () => {
     const mailbox = (activeTenant?.webmailConfigs || []).find((m: any) => m.id === id);
     addAuditLogEntry("Set default webmail mailbox", mailboxLabel(mailbox), "settings");
   };
+
+  useEffect(() => {
+    if (activeTab !== "whatsapp" || waEs) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await apiFetch("/api/whatsapp/embedded-signup/config");
+        const d = await r.json();
+        if (!cancelled) setWaEs({ enabled: !!d.enabled, appId: d.appId || "", configId: d.configId || "", sdkVersion: d.sdkVersion || "v25.0" });
+      } catch {
+        if (!cancelled) setWaEs({ enabled: false, appId: "", configId: "", sdkVersion: "v25.0" });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   // Handle Subscription Plan Modification
   const handleUpdateSubscriptionTier = async (newPlan: "Starter" | "Growth" | "Pro" | "Enterprise", newCycle: "monthly" | "annually") => {
@@ -1511,6 +1582,57 @@ export const SettingsView: React.FC = () => {
               </button>
             </div>
 
+            {waProvider === "meta" && (
+              <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-950/20 space-y-3">
+                <div>
+                  <div className="text-sm font-bold text-white">Connect with Facebook (recommended)</div>
+                  <p className="text-slate-400 mt-0.5">
+                    Sign in with Facebook, pick or create your WhatsApp Business Account and verify your number, all in one popup.
+                    No tokens or IDs to copy, and replies start arriving in AarPex automatically.
+                  </p>
+                </div>
+                {waCfg.connectionMethod === "embedded_signup" && waCfg.status === "connected" && (
+                  <div className="text-xs text-emerald-300 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Connected via one-click sign-up
+                    {waCfg.displayPhoneNumber ? ` - ${waCfg.displayPhoneNumber}` : ""}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={handleConnectWhatsAppWithFacebook}
+                  disabled={waEsBusy || !waEs?.enabled}
+                  className="px-4 py-2 bg-[#1877f2] hover:bg-[#1668d8] disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-2"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  {waEsBusy
+                    ? "Waiting for Meta..."
+                    : waCfg.connectionMethod === "embedded_signup" && waCfg.status === "connected"
+                    ? "Reconnect or add a number"
+                    : "Connect WhatsApp with Facebook"}
+                </button>
+                {waEs && !waEs.enabled && (
+                  <p className="text-[11px] text-amber-300">
+                    One-click sign-up isn't switched on for this AarPex yet. Use the manual setup below for now.
+                  </p>
+                )}
+                {waEsResult && (
+                  <div className={`text-xs ${waEsResult.ok ? "text-emerald-300" : "text-rose-300"}`}>
+                    {waEsResult.text}
+                    {waEsResult.warnings?.map((w, i) => (
+                      <div key={i} className="text-amber-300 mt-1">{w}</div>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setWaShowManual((v) => !v)}
+                  className="text-[11px] text-slate-400 hover:text-white underline"
+                >
+                  {waShowManual ? "Hide manual setup" : "Advanced: enter Meta credentials manually"}
+                </button>
+              </div>
+            )}
+
             {waVerifyResult && (
               <div
                 className={`p-3 rounded-xl border flex items-start gap-2.5 ${
@@ -1573,6 +1695,7 @@ export const SettingsView: React.FC = () => {
               </div>
             )}
 
+            {(waProvider === "twilio" || waShowManual || !waEs?.enabled) && (
             <form onSubmit={handleSaveWhatsApp} className="space-y-4">
               {waProvider === "meta" ? (
                 <>
@@ -1700,6 +1823,7 @@ export const SettingsView: React.FC = () => {
                 </button>
               </div>
             </form>
+            )}
           </div>
         </div>
       )}

@@ -23,6 +23,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.17.0",
+    date: "2026-10-19",
+    headline: "Connect WhatsApp in one click",
+    tagline: "Log in with Facebook, verify your number, done. No tokens to copy.",
+    highlights: [
+      { title: "Connect with Facebook", description: "Settings -> WhatsApp now has a one-click sign-up powered by Meta's official Embedded Signup." },
+      { title: "Replies just work", description: "AarPex subscribes to your WhatsApp account's messages automatically, so replies land in your inbox." },
+      { title: "Manual setup still there", description: "Prefer your own system-user token? It's one click away under Advanced." },
+    ],
+  },
+  {
     version: "2.16.0",
     date: "2026-10-13",
     headline: "Growth and Pro: two clear tiers",

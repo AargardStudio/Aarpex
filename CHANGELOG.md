@@ -13,6 +13,12 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.17.0]
+
+### Added
+- **One-click WhatsApp connect (Meta Tech Provider / Embedded Signup).** Settings -> WhatsApp has a "Connect WhatsApp with Facebook" button: customer logs in with Facebook in a Meta popup, picks or creates a WhatsApp Business Account and verifies a number. The server exchanges the sign-up code for the customer's business token, subscribes our webhook to their WABA, registers the number and returns the details; the workspace is connected with no copy-pasting. New endpoints `GET /api/whatsapp/embedded-signup/config` and `POST /api/whatsapp/embedded-signup/complete`; browser helper `src/lib/metaEmbeddedSignup.ts`. Manual setup stays under "Advanced".
+- Needs `META_APP_ID`, `META_APP_SECRET`, `META_ES_CONFIG_ID` on the server plus Meta Tech Provider setup; the button stays disabled until configured. Setup guide: `docs/META_TECH_PROVIDER.md`. New Docs & Guides entry for customers.
+
 ## [2.16.0]
 
 ### Changed
