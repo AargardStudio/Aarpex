@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.17.1]
+
+### Added
+- `docs/META_SUBMISSION_PACK.md`: roadmap, permission use-case text, Data Handling drafts, video scripts, rejection checklist and go-live checks for becoming a Meta Tech Provider, plus the AarPex gaps to close first (legal pages, token storage, reconnect handling).
+
 ## [2.17.0]
 
 ### Added
