@@ -769,6 +769,9 @@ export async function fetchMyTenantsFull(): Promise<Tenant[] | null> {
         email: m.email as string,
         role: m.role as TenantMember["role"],
         joinedAt: m.joined_at as string,
+        roleTitle: (m.role_title as string) || undefined,
+        permissions: (m.permissions as TenantMember["permissions"]) || undefined,
+        status: m.status === "invited" ? "invited" : "active",
       });
       membersByTenant.set(m.tenant_id as string, list);
     }

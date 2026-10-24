@@ -23,6 +23,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.17.2",
+    date: "2026-10-26",
+    headline: "Team invitations that really work",
+    tagline: "Invite a teammate by email and they get access to your workspace.",
+    highlights: [
+      { title: "Real email invites", description: "Send an invitation, they get a sign-in link, and they join your workspace with the role you chose." },
+      { title: "Roles that stick", description: "Role changes and custom permissions are saved for everyone, and each person sees only what their role allows." },
+      { title: "Safer by design", description: "Only admins can manage the team, seat limits are enforced, and a workspace always keeps one admin." },
+    ],
+  },
+  {
     version: "2.17.0",
     date: "2026-10-19",
     headline: "Connect WhatsApp in one click",

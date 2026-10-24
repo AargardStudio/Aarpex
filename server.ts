@@ -200,6 +200,210 @@ app.use(async (req: any, res, next) => {
   }
 });
 
+// ---- Team invitations & roles -----------------------------------------------
+// Real membership: invites create (or find) the person's login, email them a
+// sign-in link, and add a tenant_members row so they see the workspace.
+// Admin-only; seat limit enforced here, not just in the UI.
+const TEAM_APP_URL = (process.env.PUBLIC_APP_URL || process.env.APP_URL || "https://aarpex.aarbook.com").replace(/\/+$/, "");
+const TEAM_ROLES = ["admin", "sales_manager", "sales_rep", "finance", "viewer", "custom"];
+const TEAM_PERMISSION_KEYS = [
+  "canViewFinancials", "canManageInvoices", "canImportLeads", "canAssignLeads",
+  "canExportData", "canManageUsers", "canManageSettings", "canDeleteRecords",
+];
+const SEATS_BY_PLAN: Record<string, number> = { Starter: 3, Growth: 5, Pro: 10, Enterprise: 999 };
+
+function cleanTeamPermissions(input: any): Record<string, boolean> | null {
+  if (!input || typeof input !== "object") return null;
+  const out: Record<string, boolean> = {};
+  for (const k of TEAM_PERMISSION_KEYS) if (k in input) out[k] = !!input[k];
+  return out;
+}
+
+async function teamRequireAdmin(req: any, res: express.Response, tenantId: any): Promise<any> {
+  const supabase: any = getServerSupabase();
+  if (!supabase) {
+    res.status(503).json({ error: "Team management needs the database configured on the server." });
+    return null;
+  }
+  if (typeof tenantId !== "string" || !tenantId) {
+    res.status(400).json({ error: "tenantId is required." });
+    return null;
+  }
+  const { data: me } = await supabase
+    .from("tenant_members").select("role").eq("tenant_id", tenantId).eq("user_id", req.userId).maybeSingle();
+  if (!me) {
+    res.status(403).json({ error: "You are not a member of that workspace." });
+    return null;
+  }
+  if (me.role !== "admin") {
+    res.status(403).json({ error: "Only workspace administrators can manage the team." });
+    return null;
+  }
+  return supabase;
+}
+
+function shapeMember(m: any) {
+  return {
+    userId: m.user_id, name: m.name, email: m.email, role: m.role,
+    joinedAt: m.joined_at, roleTitle: m.role_title || undefined,
+    permissions: m.permissions || undefined, status: m.status || "active",
+  };
+}
+
+app.post("/api/team/invite", async (req: any, res) => {
+  try {
+    const { tenantId, name, roleTitle } = req.body || {};
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const role = String(req.body?.role || "sales_rep");
+    const supabase = await teamRequireAdmin(req, res, tenantId);
+    if (!supabase) return;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: "Enter a valid email address." });
+    if (!TEAM_ROLES.includes(role)) return res.status(400).json({ error: "Unknown role." });
+    const displayName = String(name || email.split("@")[0]).trim().slice(0, 80);
+
+    const [{ data: tenant }, { data: members }] = await Promise.all([
+      supabase.from("tenants").select("plan, seats_allocated").eq("id", tenantId).maybeSingle(),
+      supabase.from("tenant_members").select("user_id, email").eq("tenant_id", tenantId),
+    ]);
+    const seats = Number(tenant?.seats_allocated) || SEATS_BY_PLAN[String(tenant?.plan)] || 5;
+    if ((members || []).some((m: any) => String(m.email || "").toLowerCase() === email)) {
+      return res.status(409).json({ error: "That person is already on this team." });
+    }
+    if ((members || []).length >= seats) {
+      return res.status(409).json({ error: `Seat limit reached (${seats} team members). Remove a member or upgrade to add more.` });
+    }
+
+    const redirectTo = `${TEAM_APP_URL}/app`;
+    let userId: string | undefined;
+    let status: "invited" | "active" = "invited";
+    let inviteLink: string | undefined;
+    let emailed = true;
+
+    const inv: any = await supabase.auth.admin.inviteUserByEmail(email, { data: { full_name: displayName }, redirectTo });
+    if (!inv.error && inv.data?.user?.id) {
+      userId = inv.data.user.id;
+    } else {
+      const msg = String(inv.error?.message || "");
+      if (/already|registered|exists/i.test(msg)) {
+        // They already have an AarPex login: find it and add them directly.
+        for (let page = 1; page <= 10 && !userId; page++) {
+          const { data: list } = await supabase.auth.admin.listUsers({ page, perPage: 200 });
+          const hit = (list?.users || []).find((u: any) => String(u.email || "").toLowerCase() === email);
+          if (hit) {
+            userId = hit.id;
+            status = hit.last_sign_in_at ? "active" : "invited";
+          }
+          if (!list?.users || list.users.length < 200) break;
+        }
+        emailed = false;
+      } else {
+        // Email couldn't be sent (usually SMTP not set up). Create the login and
+        // hand the admin a link to pass on themselves rather than failing.
+        const gen: any = await supabase.auth.admin.generateLink({
+          type: "invite", email, options: { redirectTo, data: { full_name: displayName } },
+        } as any);
+        if (gen.error || !gen.data?.user?.id) {
+          console.error("Team invite failed:", msg, gen.error?.message);
+          return res.status(502).json({ error: "Couldn't send the invitation email. Check the email (SMTP) settings in Supabase, then try again." });
+        }
+        userId = gen.data.user.id;
+        inviteLink = gen.data.properties?.action_link;
+        emailed = false;
+      }
+    }
+    if (!userId) return res.status(400).json({ error: "Couldn't create that invitation." });
+
+    const { data: row, error: insErr } = await supabase
+      .from("tenant_members")
+      .insert({
+        tenant_id: tenantId, user_id: userId, name: displayName, email, role,
+        role_title: role === "custom" ? String(roleTitle || "Custom Role").slice(0, 60) : null,
+        permissions: role === "custom" ? cleanTeamPermissions(req.body?.permissions) : null,
+        status, invited_at: new Date().toISOString(),
+      })
+      .select("*")
+      .single();
+    if (insErr) {
+      console.error("Team invite insert failed:", insErr.message);
+      return res.status(500).json({ error: "The invitation was created but adding them to the workspace failed. Try again." });
+    }
+    const message = inviteLink
+      ? `${displayName} was added, but the email couldn't be sent. Share this sign-in link with them yourself.`
+      : emailed
+      ? `Invitation emailed to ${email}. They'll join as soon as they accept.`
+      : `${displayName} already has an AarPex login and now has access to this workspace.`;
+    return res.json({ success: true, member: shapeMember(row), message, inviteLink, emailed });
+  } catch (err: any) {
+    console.error("Team invite error:", err?.message);
+    return res.status(500).json({ error: "Something went wrong sending the invitation." });
+  }
+});
+
+app.patch("/api/team/members/:userId", async (req: any, res) => {
+  try {
+    const { tenantId, roleTitle } = req.body || {};
+    const role = String(req.body?.role || "");
+    const supabase = await teamRequireAdmin(req, res, tenantId);
+    if (!supabase) return;
+    if (!TEAM_ROLES.includes(role)) return res.status(400).json({ error: "Unknown role." });
+    const { data: target } = await supabase
+      .from("tenant_members").select("*").eq("tenant_id", tenantId).eq("user_id", req.params.userId).maybeSingle();
+    if (!target) return res.status(404).json({ error: "That person isn't on this team." });
+    if (target.role === "admin" && role !== "admin") {
+      const { count } = await supabase
+        .from("tenant_members").select("user_id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("role", "admin");
+      if ((count || 0) <= 1) return res.status(409).json({ error: "A workspace needs at least one administrator." });
+    }
+    const { data: row, error } = await supabase
+      .from("tenant_members")
+      .update({
+        role,
+        role_title: role === "custom" ? String(roleTitle || "Custom Role").slice(0, 60) : null,
+        permissions: role === "custom" ? cleanTeamPermissions(req.body?.permissions) : null,
+      })
+      .eq("tenant_id", tenantId).eq("user_id", req.params.userId).select("*").single();
+    if (error) return res.status(500).json({ error: "Couldn't update that role." });
+    return res.json({ success: true, member: shapeMember(row) });
+  } catch (err: any) {
+    console.error("Team role update error:", err?.message);
+    return res.status(500).json({ error: "Something went wrong updating that role." });
+  }
+});
+
+app.delete("/api/team/members/:userId", async (req: any, res) => {
+  try {
+    const tenantId = String(req.query.tenantId || "");
+    const supabase = await teamRequireAdmin(req, res, tenantId);
+    if (!supabase) return;
+    const { data: target } = await supabase
+      .from("tenant_members").select("role").eq("tenant_id", tenantId).eq("user_id", req.params.userId).maybeSingle();
+    if (!target) return res.status(404).json({ error: "That person isn't on this team." });
+    if (target.role === "admin") {
+      const { count } = await supabase
+        .from("tenant_members").select("user_id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("role", "admin");
+      if ((count || 0) <= 1) return res.status(409).json({ error: "You can't remove the only administrator." });
+    }
+    const { error } = await supabase.from("tenant_members").delete().eq("tenant_id", tenantId).eq("user_id", req.params.userId);
+    if (error) return res.status(500).json({ error: "Couldn't remove that person." });
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error("Team remove error:", err?.message);
+    return res.status(500).json({ error: "Something went wrong removing that person." });
+  }
+});
+
+// Called after sign-in: invited rows become active once the person is in.
+app.post("/api/team/accept", async (req: any, res) => {
+  try {
+    const supabase: any = getServerSupabase();
+    if (!supabase || !req.userId) return res.json({ success: true });
+    await supabase.from("tenant_members").update({ status: "active" }).eq("user_id", req.userId).eq("status", "invited");
+    return res.json({ success: true });
+  } catch {
+    return res.json({ success: true });
+  }
+});
+
 // Founder's Dashboard integration (machine API + admin endpoints)
 registerIntegrationApi(app, getServerSupabase);
 

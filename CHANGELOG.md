@@ -13,6 +13,14 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.17.2]
+
+### Fixed
+- **Team invitations now actually work.** "Invite Member" used to only add a name to a list in your own browser: no email, no login, no access. It now creates (or finds) the person's login, emails them a sign-in link, and adds them to the workspace with their role. New admin-only endpoints `POST /api/team/invite`, `PATCH`/`DELETE /api/team/members/:userId`, `POST /api/team/accept`.
+- The team list is the real workspace roster; roles and custom permissions are saved, and a signed-in person's own role now comes from their membership instead of always being "admin". Invited people show as Invited until they sign in. Remove button added. Seat limit and "keep at least one admin" are enforced on the server.
+- If Supabase can't send the email (SMTP not set up yet), the admin gets a one-time sign-in link to share manually instead of an error.
+- Migration `0030_team_invites.sql` (permissions, role_title, status, invited_at on `tenant_members`; applied live).
+
 ## [2.17.1]
 
 ### Added

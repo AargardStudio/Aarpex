@@ -138,6 +138,22 @@ const SECTIONS: Section[] = [
   {
     icon: Wrench,
     group: "Admin (workspace owner)",
+    title: "Invite your team",
+    body: [
+      "Only workspace administrators can invite, change roles or remove people. Your plan sets how many seats you have (Growth 5, Pro 10).",
+    ],
+    steps: [
+      "Open the team screen (the Team / Access control button), go to Invite Member, enter their name and email, choose a role and click Send Invitation.",
+      "They get an email with a sign-in link. After they open it and sign in, their status changes from Invited to Active and they see your workspace.",
+      "If they already have an AarPex login, they are added straight away and see your workspace the next time they sign in.",
+      "If the email can't be sent, AarPex shows a one-time sign-in link you can pass on yourself. Treat it like a password.",
+      "Change someone's role from the dropdown on the Team Members tab, or choose Custom for selective access. Remove takes their access away immediately.",
+      "A workspace always keeps at least one administrator.",
+    ],
+  },
+  {
+    icon: Wrench,
+    group: "Admin (workspace owner)",
     title: "Plans: Growth ($29) vs Pro ($99)",
     body: [
       "Growth is the complete CRM: leads, deals, pipelines, tasks, invoicing, email campaigns (you write them), WhatsApp messaging and groups.",

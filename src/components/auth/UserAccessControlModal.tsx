@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useCRM } from "../../context/CRMContext";
 import { UserRole, ROLE_LABELS, ROLE_PERMISSIONS, UserPermissions } from "../../types";
 import {
@@ -21,7 +21,8 @@ export const UserAccessControlModal: React.FC = () => {
     currentUser,
     setCurrentUser,
     updateUserRole,
-    addUser,
+    inviteTeamMember,
+    removeTeamMember,
     activeTenant,
   } = useCRM();
 
@@ -41,7 +42,30 @@ export const UserAccessControlModal: React.FC = () => {
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingPerms, setEditingPerms] = useState<UserPermissions>({ ...ROLE_PERMISSIONS.viewer });
 
+  const [inviting, setInviting] = useState(false);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+
+  // Server-side refusals (e.g. a role change that didn't save) land here.
+  useEffect(() => {
+    const onErr = (e: Event) => {
+      const msg = (e as CustomEvent).detail?.message;
+      if (msg) {
+        setNotification(msg);
+        setTimeout(() => setNotification(null), 4500);
+      }
+    };
+    window.addEventListener("aarpex:team-error", onErr);
+    return () => window.removeEventListener("aarpex:team-error", onErr);
+  }, []);
+
   if (!isAccessControlOpen) return null;
+
+  const handleRemoveMember = async (userId: string, name: string) => {
+    if (!window.confirm(`Remove ${name} from this workspace? They will lose access immediately.`)) return;
+    const r = await removeTeamMember(userId);
+    setNotification(r.ok ? `${name} was removed.` : r.message);
+    setTimeout(() => setNotification(null), 4000);
+  };
 
   const handleRoleChange = (userId: string, role: UserRole | "custom") => {
     if (role === "custom") {
@@ -75,44 +99,39 @@ export const UserAccessControlModal: React.FC = () => {
     setTimeout(() => setNotification(null), 2500);
   };
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUserName || !newUserEmail) return;
+    if (!newUserName || !newUserEmail || inviting) return;
     if (seatsFull) {
       setNotification(`Seat limit reached (${seatLimit} team members). Remove a member or upgrade to add more.`);
       setTimeout(() => setNotification(null), 3500);
       return;
     }
-
-    const initials =
-      newUserName
-        .split(" ")
-        .map((n) => n[0])
-        .slice(0, 2)
-        .join("")
-        .toUpperCase() || "US";
-
+    setInviting(true);
+    setInviteLink(null);
     const isCustom = newUserRole === "custom";
-    const newUser = {
-      id: `usr_${Date.now()}`,
-      name: newUserName,
-      email: newUserEmail,
-      role: isCustom ? "custom" : newUserRole,
-      roleTitle: isCustom ? customRoleTitle.trim() || "Custom Role" : ROLE_LABELS[newUserRole]?.title || "Sales Representative",
+    const r = await inviteTeamMember({
+      name: newUserName.trim(),
+      email: newUserEmail.trim(),
+      role: newUserRole,
+      roleTitle: isCustom ? customRoleTitle.trim() || "Custom Role" : undefined,
       permissions: isCustom ? customPermissions : undefined,
-      avatar: initials,
-      status: "Active" as const,
-      lastLogin: "Invited",
-    };
-
-    addUser(newUser);
-    setNotification(`Created user ${newUserName} with ${isCustom ? customRoleTitle.trim() || "Custom Role" : ROLE_LABELS[newUserRole]?.title}`);
+    });
+    setInviting(false);
+    setNotification(r.message);
+    if (!r.ok) {
+      setTimeout(() => setNotification(null), 6000);
+      return;
+    }
+    if (r.inviteLink) setInviteLink(r.inviteLink);
+    else {
+      setTimeout(() => setNotification(null), 5000);
+    }
     setNewUserName("");
     setNewUserEmail("");
     setCustomRoleTitle("Custom Role");
     setCustomPermissions({ ...ROLE_PERMISSIONS.sales_rep });
-    setActiveTab("members");
-    setTimeout(() => setNotification(null), 2500);
+    if (!r.inviteLink) setActiveTab("members");
   };
 
   const permissionKeys: Array<{ key: keyof UserPermissions; label: string; desc: string }> = [
@@ -288,8 +307,14 @@ export const UserAccessControlModal: React.FC = () => {
                             </select>
                           </td>
                           <td className="p-3.5">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                              {u.status || "Active"}
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                u.status === "Pending"
+                                  ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                                  : "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                              }`}
+                            >
+                              {u.status === "Pending" ? "Invited" : u.status || "Active"}
                             </span>
                           </td>
                           <td className="p-3.5 text-right">
@@ -298,12 +323,20 @@ export const UserAccessControlModal: React.FC = () => {
                                 Current User
                               </span>
                             ) : (
+                              <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleRemoveMember(u.id, u.name)}
+                                className="px-2.5 py-1 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 rounded-lg text-[11px] font-semibold transition-colors"
+                              >
+                                Remove
+                              </button>
                               <button
                                 onClick={() => handleSimulateRole(u)}
                                 className="px-2.5 py-1 bg-[#252a36] hover:bg-[#2f3544] border border-[#3d4455] text-slate-200 hover:text-white rounded-lg text-[11px] font-semibold transition-colors flex items-center gap-1 ml-auto"
                               >
                                 <RefreshCw className="w-3 h-3" /> Simulate
                               </button>
+                              </div>
                             )}
                           </td>
                         </tr>
@@ -523,14 +556,28 @@ export const UserAccessControlModal: React.FC = () => {
                 </div>
               )}
 
+              {inviteLink && (
+                <div className="p-3 rounded-xl border border-amber-700/50 bg-amber-950/30 text-xs text-amber-100 space-y-2">
+                  <p className="font-semibold">The email couldn't be sent, so share this one-time sign-in link yourself (keep it private):</p>
+                  <input readOnly value={inviteLink} onFocus={(e) => e.currentTarget.select()} className="w-full px-2 py-1.5 bg-[#121418] border border-[#2d323f] rounded text-[11px] text-slate-200 font-mono" />
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard?.writeText(inviteLink)}
+                    className="px-2.5 py-1 rounded-lg bg-[#252a36] border border-[#3d4455] text-white text-[11px] font-semibold"
+                  >
+                    Copy link
+                  </button>
+                </div>
+              )}
+
               <button
                 type="submit"
                 id="btn-confirm-add-user"
-                disabled={seatsFull}
+                disabled={seatsFull || inviting}
                 className="w-full py-2.5 bg-[#252a36] hover:bg-[#2f3544] disabled:opacity-50 disabled:cursor-not-allowed border border-[#3d4455] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-md transition-all"
               >
                 <UserPlus className="w-4 h-4 text-teal-400" />
-                {seatsFull ? "Seat Limit Reached" : "Add Team Member with Controlled Role"}
+                {seatsFull ? "Seat Limit Reached" : inviting ? "Sending invitation..." : "Send Invitation"}
               </button>
             </form>
           )}

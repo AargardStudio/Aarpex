@@ -135,6 +135,15 @@ interface CRMContextType {
   users: User[];
   updateUserRole: (userId: string, role: UserRole | string, customPermissions?: Partial<UserPermissions>) => void;
   addUser: (user: User) => void;
+  /** Real invitation: emails the person and adds them to the workspace (admin only). */
+  inviteTeamMember: (input: {
+    name: string;
+    email: string;
+    role: UserRole | "custom";
+    roleTitle?: string;
+    permissions?: Partial<UserPermissions>;
+  }) => Promise<{ ok: boolean; message: string; inviteLink?: string }>;
+  removeTeamMember: (userId: string) => Promise<{ ok: boolean; message: string }>;
   canPerform: (permission: keyof UserPermissions) => boolean;
   signOut: () => void;
   isAuthPageOpen: boolean;
@@ -594,6 +603,41 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   hasIntelligenceRef.current = hasIntelligence;
   // Tell the API client which workspace we're in so the server can check its plan.
   setApiTenantId(activeTenant?.id || activeTenantId);
+
+  // The workspace's real roster (tenant_members) drives the team list and the
+  // signed-in person's own role/permissions, instead of a browser-only list.
+  useEffect(() => {
+    if (!isSupabaseAuthConfigured()) return;
+    const members = activeTenant?.members || [];
+    if (members.length === 0) return;
+    const toUser = (m: NonNullable<typeof activeTenant>["members"][number]): User => ({
+      id: m.userId,
+      name: m.name,
+      email: m.email,
+      role: m.role,
+      roleTitle: m.roleTitle || ROLE_LABELS[m.role as UserRole]?.title || String(m.role),
+      permissions: m.permissions,
+      avatar:
+        (m.name || m.email)
+          .split(/\s+/)
+          .map((x) => x[0])
+          .filter(Boolean)
+          .slice(0, 2)
+          .join("")
+          .toUpperCase() || "US",
+      status: m.status === "invited" ? "Pending" : "Active",
+      lastLogin: m.status === "invited" ? "Invited" : undefined,
+    });
+    setUsers(members.map(toUser));
+    setCurrentUser((prev) => {
+      const me = members.find((m) => m.userId === prev.id);
+      if (!me) return prev;
+      const u = toUser(me);
+      if (prev.role === u.role && JSON.stringify(prev.permissions || {}) === JSON.stringify(u.permissions || {})) return prev;
+      return { ...prev, role: u.role, roleTitle: u.roleTitle, permissions: u.permissions };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTenant?.id, activeTenant?.members]);
 
   useEffect(() => {
     localStorage.setItem("crm_tenants_v3", JSON.stringify(tenants));
@@ -1897,6 +1941,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (myTenants.length > 0) {
+        // Anyone invited into a workspace becomes "active" the first time they get in.
+        void apiFetch("/api/team/accept", { method: "POST" }).catch(() => {});
         setTenants(myTenants);
         setActiveTenantId((prev) => (myTenants.some((t) => t.id === prev) ? prev : myTenants[0].id));
       } else if (hasPendingTenantCreations()) {
@@ -4088,8 +4134,17 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Dynamic Role & Permission Update. `role` accepts a plain UserRole or the
   // literal string "custom" for a selective, checkbox-built permission set
   // that doesn't map to any preset role.
+  const patchActiveMembers = (fn: (list: TenantMember[]) => TenantMember[]) => {
+    setTenants((prev) => prev.map((t) => (t.id === activeTenantId ? { ...t, members: fn(t.members || []) } : t)));
+  };
+
+  const reportTeamError = (message: string) => {
+    window.dispatchEvent(new CustomEvent("aarpex:team-error", { detail: { message } }));
+  };
+
   const updateUserRole = (userId: string, role: UserRole | string, customPermissions?: Partial<UserPermissions>) => {
     const roleInfo = ROLE_LABELS[role as UserRole] || { title: role === "custom" ? "Custom Role" : role };
+    const previous = users.find((u) => u.id === userId);
     setUsers((prev) =>
       prev.map((u) => {
         if (u.id === userId) {
@@ -4107,10 +4162,84 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return u;
       })
     );
+
+    if (isSupabaseAuthConfigured() && activeTenantId) {
+      void (async () => {
+        try {
+          const res = await apiFetch(`/api/team/members/${encodeURIComponent(userId)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              tenantId: activeTenantId,
+              role,
+              roleTitle: role === "custom" ? roleInfo.title : undefined,
+              permissions: role === "custom" ? customPermissions : undefined,
+            }),
+          });
+          const d = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(d.error || "Couldn't save that role change.");
+          if (d.member) patchActiveMembers((list) => list.map((m) => (m.userId === userId ? d.member : m)));
+        } catch (e: any) {
+          // Put the screen back the way the server has it.
+          if (previous) setUsers((prev) => prev.map((u) => (u.id === userId ? previous : u)));
+          if (previous && currentUser.id === userId) setCurrentUser(previous);
+          reportTeamError(e?.message || "Couldn't save that role change.");
+        }
+      })();
+    }
   };
 
   const addUser = (newUser: User) => {
     setUsers((prev) => [newUser, ...prev]);
+  };
+
+  const inviteTeamMember: CRMContextType["inviteTeamMember"] = async (input) => {
+    if (!isSupabaseAuthConfigured()) {
+      // Demo mode has no accounts to invite: keep the old local-only behaviour.
+      addUser({
+        id: `usr_${Date.now()}`,
+        name: input.name,
+        email: input.email,
+        role: input.role,
+        roleTitle: input.role === "custom" ? input.roleTitle || "Custom Role" : ROLE_LABELS[input.role]?.title,
+        permissions: input.role === "custom" ? input.permissions : undefined,
+        avatar: input.name.slice(0, 2).toUpperCase() || "US",
+        status: "Active",
+        lastLogin: "Invited",
+      });
+      return { ok: true, message: `Added ${input.name} (demo mode: no email is sent).` };
+    }
+    try {
+      const res = await apiFetch("/api/team/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId: activeTenantId, ...input }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.success) return { ok: false, message: d.error || "Couldn't send the invitation." };
+      if (d.member) patchActiveMembers((list) => [...list.filter((m) => m.userId !== d.member.userId), d.member]);
+      return { ok: true, message: d.message || "Invitation sent.", inviteLink: d.inviteLink };
+    } catch {
+      return { ok: false, message: "Couldn't reach the server. Check your connection and try again." };
+    }
+  };
+
+  const removeTeamMember: CRMContextType["removeTeamMember"] = async (userId) => {
+    if (!isSupabaseAuthConfigured()) {
+      setUsers((prev) => prev.filter((u) => u.id !== userId));
+      return { ok: true, message: "Removed." };
+    }
+    try {
+      const res = await apiFetch(`/api/team/members/${encodeURIComponent(userId)}?tenantId=${encodeURIComponent(activeTenantId)}`, {
+        method: "DELETE",
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, message: d.error || "Couldn't remove that person." };
+      patchActiveMembers((list) => list.filter((m) => m.userId !== userId));
+      return { ok: true, message: "Removed from the workspace." };
+    } catch {
+      return { ok: false, message: "Couldn't reach the server. Try again." };
+    }
   };
 
   // Real sign-out: ends the Supabase session. The session-bootstrap effect's
@@ -4186,6 +4315,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         users,
         updateUserRole,
         addUser,
+        inviteTeamMember,
+        removeTeamMember,
         canPerform,
         signOut,
         isAuthPageOpen,

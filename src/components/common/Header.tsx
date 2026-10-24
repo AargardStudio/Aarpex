@@ -23,9 +23,11 @@ import {
   Menu,
   MessageSquare,
   Bot,
+  KeyRound,
 } from "lucide-react";
 import { DateFilterRange, ROLE_LABELS, UserRole } from "../../types";
 import { apiFetch } from "../../lib/apiClient";
+import { ChangePasswordModal } from "../modals/ChangePasswordModal";
 
 export const Header: React.FC = () => {
   const {
@@ -52,6 +54,8 @@ export const Header: React.FC = () => {
   const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   // AI Smart query execution state
   const [aiAnswer, setAiAnswer] = useState<string | null>(null);
@@ -255,31 +259,59 @@ export const Header: React.FC = () => {
             Billing from Settings -> Subscription (and the "Settings &
             Billing" link in the footer). */}
 
-        {/* User Badge / Sign Out */}
-        <button
-          id="btn-user-signout"
-          onClick={() => {
-            if (confirm("Sign out of AarPex?")) signOut();
-          }}
-          className="flex items-center gap-2 px-1.5 sm:px-2.5 py-1 bg-[#181b21] hover:bg-[#222630] border border-[#2d323f] rounded-lg text-left transition-colors group"
-          title="Sign out"
-        >
-          <div className="w-6 h-6 rounded-full bg-[#252a36] border border-[#3d4455] text-teal-300 flex items-center justify-center text-[10px] font-bold shrink-0">
-            {currentUser.avatar || "U"}
-          </div>
-          <div className="hidden lg:block text-left pr-1">
-            <div className="text-[11px] font-bold text-white leading-tight flex items-center gap-1">
-              {currentUser.name.split(" ")[0]}
-              {currentUser.isGoogleAccount && (
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-              )}
+        {/* User Badge / Account Menu */}
+        <div className="relative">
+          <button
+            id="btn-user-menu"
+            onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+            className="flex items-center gap-2 px-1.5 sm:px-2.5 py-1 bg-[#181b21] hover:bg-[#222630] border border-[#2d323f] rounded-lg text-left transition-colors group"
+            title="Account"
+          >
+            <div className="w-6 h-6 rounded-full bg-[#252a36] border border-[#3d4455] text-teal-300 flex items-center justify-center text-[10px] font-bold shrink-0">
+              {currentUser.avatar || "U"}
             </div>
-            <div className="text-[9px] text-slate-400 uppercase tracking-wider">
-              {ROLE_LABELS[(currentUser.role as UserRole) || "viewer"]?.title.split(" ")[0] || currentUser.role}
+            <div className="hidden lg:block text-left pr-1">
+              <div className="text-[11px] font-bold text-white leading-tight flex items-center gap-1">
+                {currentUser.name.split(" ")[0]}
+                {currentUser.isGoogleAccount && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                )}
+              </div>
+              <div className="text-[9px] text-slate-400 uppercase tracking-wider">
+                {ROLE_LABELS[(currentUser.role as UserRole) || "viewer"]?.title.split(" ")[0] || currentUser.role}
+              </div>
             </div>
-          </div>
-          <LogIn className="hidden sm:block w-3.5 h-3.5 text-slate-400 group-hover:text-rose-400 rotate-180" />
-        </button>
+            <ChevronDown className="hidden sm:block w-3.5 h-3.5 text-slate-400 group-hover:text-white" />
+          </button>
+
+          {isUserMenuOpen && (
+            <div className="absolute right-0 mt-2 w-52 bg-[#181b21] border border-[#2d323f] rounded-xl shadow-2xl overflow-hidden z-50 text-white animate-in fade-in slide-in-from-top-1 duration-150">
+              <button
+                id="btn-user-change-password"
+                onClick={() => {
+                  setIsUserMenuOpen(false);
+                  setIsChangePasswordOpen(true);
+                }}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-slate-200 hover:bg-[#222630] transition-colors"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-slate-400" />
+                Change Password
+              </button>
+              <div className="border-t border-[#2d323f]" />
+              <button
+                id="btn-user-signout"
+                onClick={() => {
+                  setIsUserMenuOpen(false);
+                  if (confirm("Sign out of AarPex?")) signOut();
+                }}
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium text-rose-400 hover:bg-[#222630] transition-colors"
+              >
+                <LogIn className="w-3.5 h-3.5 rotate-180" />
+                Sign Out
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Global Date Filter Pill */}
         <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 bg-[#181b21] border border-[#2d323f] rounded-lg text-xs text-slate-300">
@@ -572,6 +604,7 @@ export const Header: React.FC = () => {
         )}
       </div>
     )}
+      <ChangePasswordModal isOpen={isChangePasswordOpen} onClose={() => setIsChangePasswordOpen(false)} />
     </>
   );
 };

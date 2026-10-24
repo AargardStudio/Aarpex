@@ -1029,6 +1029,10 @@ export interface TenantMember {
   email: string;
   role: UserRole;
   joinedAt: string;
+  roleTitle?: string;
+  permissions?: Partial<UserPermissions>;
+  // "invited" until the person signs in for the first time.
+  status?: "active" | "invited";
 }
 
 export interface EmailAttachment {
