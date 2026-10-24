@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>You're invited to AarPex</title>
+</head>
+<body style="margin:0;padding:0;background:#eef1f5;font-family:'Segoe UI',Helvetica,Arial,sans-serif;color:#1c2330;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">{{ if .Data.inviter_name }}{{ .Data.inviter_name }}{{ else }}Your team{{ end }} invited you to join {{ if .Data.company_name }}{{ .Data.company_name }}{{ else }}their workspace{{ end }} on AarPex.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef1f5;padding:32px 12px;">
+  <tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #dde2ea;">
+      <!-- Header -->
+      <tr><td style="background:#0d0f12;padding:30px 36px 26px 36px;">
+        <div style="font-size:26px;font-weight:800;letter-spacing:3px;color:#ffffff;">AARPEX</div>
+        <div style="margin-top:6px;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:#2dd4bf;font-weight:700;">Sales Intelligence System</div>
+        <div style="margin-top:4px;font-size:12px;color:#8b94a7;">A project of Aargard</div>
+      </td></tr>
+      <tr><td style="height:4px;background:#14b8a6;font-size:0;line-height:0;">&nbsp;</td></tr>
+
+      <!-- Body -->
+      <tr><td style="padding:36px 36px 8px 36px;">
+        <p style="margin:0 0 6px 0;font-size:13px;color:#64708a;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;">You're invited</p>
+        <h1 style="margin:0 0 18px 0;font-size:24px;line-height:1.3;color:#0d0f12;">Hello{{ if .Data.full_name }} {{ .Data.full_name }}{{ end }},</h1>
+        <p style="margin:0 0 14px 0;font-size:16px;line-height:1.6;color:#2a3344;">
+          {{ if .Data.inviter_name }}<strong>{{ .Data.inviter_name }}</strong> has invited you{{ else }}You have been invited{{ end }}
+          to join <strong>{{ if .Data.company_name }}{{ .Data.company_name }}{{ else }}their team{{ end }}</strong>
+          on <strong>AarPex</strong>, the sales intelligence workspace where your team manages leads, deals, follow-ups and WhatsApp and email outreach in one place.
+        </p>
+        {{ if .Data.role_title }}
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 18px 0;"><tr>
+          <td style="background:#e6faf7;border:1px solid #99e6dc;border-radius:999px;padding:6px 14px;font-size:13px;color:#0f766e;font-weight:700;">Your role: {{ .Data.role_title }}</td>
+        </tr></table>
+        {{ end }}
+      </td></tr>
+
+      <!-- Button -->
+      <tr><td align="center" style="padding:10px 36px 8px 36px;">
+        <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#14b8a6;color:#04201d;text-decoration:none;font-weight:800;font-size:16px;padding:15px 38px;border-radius:10px;">Accept invitation</a>
+      </td></tr>
+      <tr><td align="center" style="padding:6px 36px 22px 36px;">
+        <p style="margin:0;font-size:13px;color:#64708a;">You'll choose your own password the first time you sign in.</p>
+      </td></tr>
+
+      <!-- Steps -->
+      <tr><td style="padding:0 36px 8px 36px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f8fb;border-radius:12px;">
+          <tr><td style="padding:18px 22px;font-size:14px;line-height:1.7;color:#2a3344;">
+            <strong style="color:#0d0f12;">What happens next</strong><br>
+            1. Click <em>Accept invitation</em>.<br>
+            2. Choose a password (8 or more characters).<br>
+            3. You're in {{ if .Data.company_name }}{{ .Data.company_name }}'s{{ else }}the{{ end }} AarPex workspace.
+          </td></tr>
+        </table>
+      </td></tr>
+
+      <!-- Fallback link & safety -->
+      <tr><td style="padding:18px 36px 8px 36px;">
+        <p style="margin:0 0 6px 0;font-size:12px;color:#64708a;">If the button doesn't work, copy this link into your browser:</p>
+        <p style="margin:0;font-size:11px;line-height:1.5;color:#64708a;word-break:break-all;"><a href="{{ .ConfirmationURL }}" style="color:#0f766e;">{{ .ConfirmationURL }}</a></p>
+      </td></tr>
+      <tr><td style="padding:16px 36px 30px 36px;">
+        <p style="margin:0;font-size:12px;line-height:1.6;color:#8a93a6;">
+          This invitation was sent to {{ .Email }} and can be used once. If you weren't expecting it, you can ignore this email and no account will be used.
+          Please don't forward it, because anyone with the link could sign in as you.
+        </p>
+      </td></tr>
+
+      <!-- Footer -->
+      <tr><td style="background:#f6f8fb;padding:20px 36px;border-top:1px solid #e3e8ef;">
+        <p style="margin:0;font-size:12px;line-height:1.6;color:#8a93a6;">
+          <strong style="color:#4b5568;">AarPex - Sales Intelligence System</strong>, a project of Aargard Business Solutions<br>
+          12828 Willow Centre Drive, Houston, Texas, USA &middot; <a href="mailto:support@aargard.com" style="color:#0f766e;">support@aargard.com</a>
+        </p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>

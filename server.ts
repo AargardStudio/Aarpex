@@ -262,7 +262,7 @@ app.post("/api/team/invite", async (req: any, res) => {
     const displayName = String(name || email.split("@")[0]).trim().slice(0, 80);
 
     const [{ data: tenant }, { data: members }] = await Promise.all([
-      supabase.from("tenants").select("plan, seats_allocated").eq("id", tenantId).maybeSingle(),
+      supabase.from("tenants").select("plan, seats_allocated, name, company_name").eq("id", tenantId).maybeSingle(),
       supabase.from("tenant_members").select("user_id, email").eq("tenant_id", tenantId),
     ]);
     const seats = Number(tenant?.seats_allocated) || SEATS_BY_PLAN[String(tenant?.plan)] || 5;
@@ -274,12 +274,28 @@ app.post("/api/team/invite", async (req: any, res) => {
     }
 
     const redirectTo = `${TEAM_APP_URL}/app`;
+    // Branded invitation email: these values feed the Supabase "Invite user" template.
+    let inviterName = "A teammate";
+    try {
+      const { data: me }: any = await supabase.auth.admin.getUserById(req.userId);
+      const md = me?.user?.user_metadata || {};
+      inviterName = String(md.full_name || md.name || me?.user?.email || inviterName).slice(0, 80);
+    } catch { /* keep the generic fallback */ }
+    const roleLabel = String(roleTitle || "").trim().slice(0, 60) ||
+      ({ admin: "Administrator", sales_manager: "Sales Manager", sales_rep: "Sales Representative", finance: "Finance", viewer: "Viewer", custom: "Team Member" } as Record<string, string>)[role];
+    const inviteMeta = {
+      full_name: displayName,
+      needs_password: true,
+      inviter_name: inviterName,
+      company_name: String(tenant?.company_name || tenant?.name || "your team").slice(0, 120),
+      role_title: roleLabel,
+    };
     let userId: string | undefined;
     let status: "invited" | "active" = "invited";
     let inviteLink: string | undefined;
     let emailed = true;
 
-    const inv: any = await supabase.auth.admin.inviteUserByEmail(email, { data: { full_name: displayName, needs_password: true }, redirectTo });
+    const inv: any = await supabase.auth.admin.inviteUserByEmail(email, { data: inviteMeta, redirectTo });
     if (!inv.error && inv.data?.user?.id) {
       userId = inv.data.user.id;
     } else {
@@ -300,7 +316,7 @@ app.post("/api/team/invite", async (req: any, res) => {
         // Email couldn't be sent (usually SMTP not set up). Create the login and
         // hand the admin a link to pass on themselves rather than failing.
         const gen: any = await supabase.auth.admin.generateLink({
-          type: "invite", email, options: { redirectTo, data: { full_name: displayName, needs_password: true } },
+          type: "invite", email, options: { redirectTo, data: inviteMeta },
         } as any);
         if (gen.error || !gen.data?.user?.id) {
           console.error("Team invite failed:", msg, gen.error?.message);

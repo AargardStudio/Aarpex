@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.17.4]
+
+### Added
+- **Branded invitation email.** Invites now carry the invitee's name, the inviting person's name, the company (workspace) name and the role, so the email can read "Hamza invited you to join Aargard Business Solutions on AarPex". Ready-made template: `docs/email-templates/invite.html` (paste into Supabase, Authentication, Emails, Templates, Invite user).
+
 ## [2.17.3]
 
 ### Added

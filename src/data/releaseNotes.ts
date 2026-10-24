@@ -23,6 +23,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.17.4",
+    date: "2026-10-26",
+    headline: "A proper invitation email",
+    tagline: "Invitations are branded AarPex and name the person and company inviting you.",
+    highlights: [
+      { title: "Personal invitations", description: "The email greets the invitee by name and says who invited them, to which company, and in what role." },
+    ],
+  },
+  {
     version: "2.17.3",
     date: "2026-10-26",
     headline: "Passwords for invited teammates",
