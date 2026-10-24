@@ -135,6 +135,9 @@ interface CRMContextType {
   users: User[];
   updateUserRole: (userId: string, role: UserRole | string, customPermissions?: Partial<UserPermissions>) => void;
   addUser: (user: User) => void;
+  /** Set when someone must choose a password before using the app (first invited sign-in, or a reset link). */
+  passwordGate: "invite" | "recovery" | null;
+  clearPasswordGate: () => void;
   /** Real invitation: emails the person and adds them to the workspace (admin only). */
   inviteTeamMember: (input: {
     name: string;
@@ -599,6 +602,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Intelligence suite (Industry Agents, AI Copilot, AI writing) = Pro tier.
   const hasIntelligence = planHasIntelligence(activeTenant?.plan, activeTenant?.ownerEmail);
+  const [passwordGate, setPasswordGate] = useState<"invite" | "recovery" | null>(null);
+  const clearPasswordGate = () => setPasswordGate(null);
   const hasIntelligenceRef = useRef(hasIntelligence);
   hasIntelligenceRef.current = hasIntelligence;
   // Tell the API client which workspace we're in so the server can check its plan.
@@ -1881,6 +1886,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let cancelled = false;
 
     const hydrateFromSession = async (sessionUser: { id: string; email?: string; user_metadata?: any } | null) => {
+      // Invited teammates arrive with no password: make them choose one first.
+      if (sessionUser?.user_metadata?.needs_password === true) setPasswordGate((g) => g || "invite");
       if (!sessionUser || !sessionUser.email) {
         setTenants([]);
         setActiveTenantId("");
@@ -1974,7 +1981,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!cancelled) setIsBootstrapping(false);
     })();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") setPasswordGate("recovery");
+      if (event === "SIGNED_OUT") setPasswordGate(null);
       void hydrateFromSession(session?.user || null);
     });
 
@@ -4315,6 +4324,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         users,
         updateUserRole,
         addUser,
+        passwordGate,
+        clearPasswordGate,
         inviteTeamMember,
         removeTeamMember,
         canPerform,

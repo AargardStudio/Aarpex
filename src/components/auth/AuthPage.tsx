@@ -390,7 +390,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     }
     try {
       const supabase = getSupabaseAuthClient();
-      const { error } = await supabase.auth.resetPasswordForEmail(signInEmail);
+      const { error } = await supabase.auth.resetPasswordForEmail(signInEmail, { redirectTo: AUTH_REDIRECT_URL });
       if (error) {
         setErrorMessage(error.message || "Unable to send password reset email.");
         return;

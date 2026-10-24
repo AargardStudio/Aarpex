@@ -34,6 +34,7 @@ import { AuthPage } from "./components/auth/AuthPage";
 import { EmailComposeModal } from "./components/modals/EmailComposeModal";
 import { WhatsAppComposeModal } from "./components/modals/WhatsAppComposeModal";
 import { FloatingAIChat } from "./components/common/FloatingAIChat";
+import { SetPasswordGate } from "./components/auth/SetPasswordGate";
 import { UpgradePrompt, UpgradeModal } from "./components/common/UpgradeGate";
 
 const CRMMainContent: React.FC = () => {
@@ -51,6 +52,7 @@ const CRMMainContent: React.FC = () => {
     whatsappComposeProps,
     tenants,
     hasIntelligence,
+    passwordGate,
   } = useCRM();
 
   // While the initial Supabase session check is in flight, render nothing
@@ -62,6 +64,11 @@ const CRMMainContent: React.FC = () => {
         <div className="w-8 h-8 border-2 border-teal-500/30 border-t-teal-400 rounded-full animate-spin" />
       </div>
     );
+  }
+
+  // Invited teammates and password-reset links must choose a password first.
+  if (passwordGate && !isAuthPageOpen) {
+    return <SetPasswordGate mode={passwordGate} />;
   }
 
   if (isAuthPageOpen) {

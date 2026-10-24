@@ -279,7 +279,7 @@ app.post("/api/team/invite", async (req: any, res) => {
     let inviteLink: string | undefined;
     let emailed = true;
 
-    const inv: any = await supabase.auth.admin.inviteUserByEmail(email, { data: { full_name: displayName }, redirectTo });
+    const inv: any = await supabase.auth.admin.inviteUserByEmail(email, { data: { full_name: displayName, needs_password: true }, redirectTo });
     if (!inv.error && inv.data?.user?.id) {
       userId = inv.data.user.id;
     } else {
@@ -300,7 +300,7 @@ app.post("/api/team/invite", async (req: any, res) => {
         // Email couldn't be sent (usually SMTP not set up). Create the login and
         // hand the admin a link to pass on themselves rather than failing.
         const gen: any = await supabase.auth.admin.generateLink({
-          type: "invite", email, options: { redirectTo, data: { full_name: displayName } },
+          type: "invite", email, options: { redirectTo, data: { full_name: displayName, needs_password: true } },
         } as any);
         if (gen.error || !gen.data?.user?.id) {
           console.error("Team invite failed:", msg, gen.error?.message);

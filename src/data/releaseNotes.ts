@@ -23,6 +23,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.17.3",
+    date: "2026-10-26",
+    headline: "Passwords for invited teammates",
+    tagline: "New teammates choose a password the first time they sign in.",
+    highlights: [
+      { title: "Set your password first", description: "Invited teammates must choose a password before they can use AarPex, so they can sign in normally from then on." },
+      { title: "Working password reset", description: "Forgot-password links now lead to a proper set-new-password screen." },
+    ],
+  },
+  {
     version: "2.17.2",
     date: "2026-10-26",
     headline: "Team invitations that really work",

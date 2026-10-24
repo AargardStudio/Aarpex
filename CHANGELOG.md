@@ -13,6 +13,12 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.17.3]
+
+### Added
+- **Choose-a-password step.** An invited teammate who signs in from their email link is now required to set a password (8+ characters, not their email) before reaching the app, so they can sign in normally next time. The same screen appears after a "Forgot password" link, which previously signed people in with no way to set a new password. Reset emails now return to `/app`.
+- Invites mark the new login with `needs_password` (cleared once the password is saved). People invited before this release aren't prompted; they can use "Forgot password" once.
+
 ## [2.17.2]
 
 ### Fixed
