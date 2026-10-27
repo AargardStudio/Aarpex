@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useCRM } from "../../context/CRMContext";
 import { FounderDashboardCard } from "../settings/FounderDashboardCard";
+import { ApiCenter } from "../settings/ApiCenter";
 import {
   Link2,
   Building,
@@ -2291,6 +2292,7 @@ export const SettingsView: React.FC = () => {
       {/* TAB 6: WORKSPACE DATA CONTROLS */}
       {activeTab === "integrations" && (
         <div className="space-y-5 animate-in fade-in duration-150">
+          <ApiCenter />
           <FounderDashboardCard />
         </div>
       )}

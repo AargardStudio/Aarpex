@@ -23,6 +23,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.18.0",
+    date: "2026-10-27",
+    headline: "API & Integrations Center",
+    tagline: "Connect your website, automations and AI tools with secure, limited API keys.",
+    highlights: [
+      { title: "Generate API keys", description: "Create named keys, choose exactly what each can do, set an expiry, and revoke any time." },
+      { title: "Public API", description: "Work with leads, deals, pipelines, tasks and activities from your own systems." },
+    ],
+  },
+  {
     version: "2.17.4",
     date: "2026-10-26",
     headline: "A proper invitation email",

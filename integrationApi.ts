@@ -27,17 +27,17 @@ const SCOPES = ["read", "write", "users"];
 // ---------------------------------------------------------------------------
 // small helpers
 // ---------------------------------------------------------------------------
-const sha256 = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
-const token = (bytes = 32) => crypto.randomBytes(bytes).toString("base64url");
-const newId = () => crypto.randomUUID();
-const nowIso = () => new Date().toISOString();
+export const sha256 = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
+export const token = (bytes = 32) => crypto.randomBytes(bytes).toString("base64url");
+export const newId = () => crypto.randomUUID();
+export const nowIso = () => new Date().toISOString();
 
 function fail(res: express.Response, status: number, code: string, message: string) {
   return res.status(status).json({ error: { code, message } });
 }
 
 // Webhook targets must be public https URLs (blocks SSRF into private ranges).
-function isSafeWebhookUrl(raw: string): boolean {
+export function isSafeWebhookUrl(raw: string): boolean {
   try {
     const u = new URL(raw);
     if (u.protocol !== "https:") return false;
@@ -82,7 +82,7 @@ function exchangeLimited(ip: string): boolean {
 // ---------------------------------------------------------------------------
 // entity definitions (only whitelisted columns are ever written)
 // ---------------------------------------------------------------------------
-interface EntityDef {
+export interface EntityDef {
   table: string;
   label: string;
   writable: string[];
@@ -94,7 +94,7 @@ interface EntityDef {
   eventPrefix?: string;
 }
 
-const ENTITIES: Record<string, EntityDef> = {
+export const ENTITIES: Record<string, EntityDef> = {
   deals: {
     table: "deals",
     label: "deal",
@@ -162,7 +162,7 @@ const ENTITIES: Record<string, EntityDef> = {
 };
 
 // Public shape: DB row without tenant_id, always with created_at + updated_at.
-function pub(row: any): any {
+export function pub(row: any): any {
   if (!row) return row;
   const { tenant_id, ...rest } = row;
   if (!rest.updated_at) rest.updated_at = rest.created_at ?? null;
@@ -840,4 +840,7 @@ export function registerIntegrationApi(app: express.Express, getSupabase: () => 
       res.json({ ok: true });
     })
   );
+
+  // Lets the Aargard Connect adapter (connectApi.ts) reuse the same signed webhook sender.
+  return { emitSoon };
 }

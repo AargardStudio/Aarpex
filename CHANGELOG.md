@@ -13,6 +13,14 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.18.0]
+
+### Added
+- **API & Integrations Center** (Settings, Integrations). Workspace admins can generate named API keys (`agc_live_...`) with per-resource permissions and an expiry, rotate, edit and revoke them, and see usage and activity. Keys are hashed, shown once, and limited to one workspace.
+- **Aargard Connect public API** at `/api/connect/v1` for leads, deals, pipelines, tasks, activities and lead groups, with scopes, pagination, filtering, sorting, request IDs, rate-limit headers and idempotency keys. `/capabilities` publishes the contract.
+- Database: `connect_api_keys`, `connect_audit_logs`, `connect_idempotency`, `connect_usage_daily` (migration 0031). The Founder's Dashboard API is unchanged.
+- Docs: `docs/AARGARD_CONNECT.md`, `docs/AARGARD_CONNECT_ASSESSMENT.md`.
+
 ## [2.17.4]
 
 ### Added
