@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useCRM } from "../../context/CRMContext";
 import { FounderDashboardCard } from "../settings/FounderDashboardCard";
 import { ApiCenter } from "../settings/ApiCenter";
+import { WHATSAPP_COMING_SOON } from "../../data/featureFlags";
+import { WhatsAppComingSoon } from "../common/WhatsAppComingSoon";
 import {
   Link2,
   Building,
@@ -829,7 +831,8 @@ export const SettingsView: React.FC = () => {
         >
           <MessageSquare className="w-3.5 h-3.5" />
           <span>WhatsApp Business</span>
-          {activeTenant?.whatsappConfig?.status === "connected" && (
+          {WHATSAPP_COMING_SOON && <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 text-[9px] font-bold uppercase">Soon</span>}
+          {!WHATSAPP_COMING_SOON && activeTenant?.whatsappConfig?.status === "connected" && (
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
           )}
         </button>
@@ -1531,7 +1534,13 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* TAB: WHATSAPP BUSINESS (META CLOUD API OR TWILIO) */}
-      {activeTab === "whatsapp" && (
+      {activeTab === "whatsapp" && WHATSAPP_COMING_SOON && (
+        <div className="animate-in fade-in duration-150">
+          <WhatsAppComingSoon />
+        </div>
+      )}
+
+      {activeTab === "whatsapp" && !WHATSAPP_COMING_SOON && (
         <div className="space-y-5 animate-in fade-in duration-150">
           <div className="bg-[#181b21] p-6 rounded-2xl border border-[#2d323f] shadow-md space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

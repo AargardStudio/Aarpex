@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.18.1]
+
+### Changed
+- **WhatsApp is now "Coming soon"** while Meta's partner (Tech Provider) approval is pending. The sidebar page and Settings > WhatsApp Business show a notice; the header, quick-create and lead "Send WhatsApp" buttons are hidden. Nothing was deleted: set `WHATSAPP_COMING_SOON` to `false` in `src/data/featureFlags.ts` to switch it all back on.
+
 ## [2.18.0]
 
 ### Added

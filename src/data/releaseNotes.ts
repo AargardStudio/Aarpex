@@ -23,6 +23,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.18.1",
+    date: "2026-10-29",
+    headline: "WhatsApp coming soon",
+    tagline: "One-click WhatsApp arrives once Meta approves AarPex as a partner.",
+    highlights: [
+      { title: "WhatsApp paused", description: "WhatsApp is marked Coming soon while we finish Meta's partner approval. Email and everything else work as normal." },
+    ],
+  },
+  {
     version: "2.18.0",
     date: "2026-10-27",
     headline: "API & Integrations Center",

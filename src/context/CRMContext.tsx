@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from "react";
+import { WHATSAPP_COMING_SOON } from "../data/featureFlags";
 import { LeadGroup,
   Lead,
   Deal,
@@ -562,6 +563,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     body?: string;
     leadId?: string;
   }) => {
+    if (WHATSAPP_COMING_SOON) return; // WhatsApp is paused until Meta partner approval
     setWhatsAppComposeProps(props || {});
     setWhatsAppComposeOpen(true);
   };

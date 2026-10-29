@@ -1,4 +1,5 @@
 import { AbicAuditPanel } from "./AbicAuditPanel";
+import { WHATSAPP_COMING_SOON } from "../../data/featureFlags";
 import { LeadDetailsEditor } from "./LeadDetailsEditor";
 import { ReplyDraftPanel } from "./ReplyDraftPanel";
 import React, { useState } from "react";
@@ -826,7 +827,7 @@ export const LeadProfileDrawer: React.FC = () => {
                   <span>Email</span>
                 </button>
               )}
-              {(lead.whatsapp || lead.phone) && (
+              {!WHATSAPP_COMING_SOON && (lead.whatsapp || lead.phone) && (
                 <button
                   type="button"
                   onClick={() => openWhatsAppComposer({ to: lead.whatsapp || lead.phone, leadId: lead.id })}

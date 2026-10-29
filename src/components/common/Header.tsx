@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useCRM } from "../../context/CRMContext";
+import { WHATSAPP_COMING_SOON } from "../../data/featureFlags";
 import {
   Search,
   Plus,
@@ -456,8 +457,8 @@ export const Header: React.FC = () => {
           <span className="hidden md:inline">Compose</span>
         </button>
 
-        {/* Send WhatsApp Message Button */}
-        <button
+        {/* Send WhatsApp Message Button (hidden until Meta partner approval) */}
+        {!WHATSAPP_COMING_SOON && <button
           id="btn-header-whatsapp"
           onClick={() => openWhatsAppComposer()}
           className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 rounded-lg text-xs font-bold shadow-sm transition-all"
@@ -465,7 +466,7 @@ export const Header: React.FC = () => {
         >
           <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
           <span className="hidden md:inline">WhatsApp</span>
-        </button>
+        </button>}
 
         {/* Global Quick Create Dropdown Button (Executive Slate-Grey) */}
         <div className="relative">
@@ -492,6 +493,7 @@ export const Header: React.FC = () => {
                 <span>Send Email (Attachments)</span>
               </button>
 
+              {!WHATSAPP_COMING_SOON && (
               <button
                 onClick={() => {
                   openWhatsAppComposer();
@@ -502,6 +504,7 @@ export const Header: React.FC = () => {
                 <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Send WhatsApp Message</span>
               </button>
+              )}
 
               <div className="border-t border-[#282d39] my-1" />
 

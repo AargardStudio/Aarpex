@@ -36,6 +36,7 @@ import {
   Lock,
 } from "lucide-react";
 import { ROLE_LABELS, UserRole } from "../../types";
+import { WHATSAPP_COMING_SOON } from "../../data/featureFlags";
 
 interface NavItem {
   name: NavView;
@@ -136,8 +137,8 @@ export const Sidebar: React.FC = () => {
     {
       name: "WhatsApp",
       icon: MessageCircle,
-      badge: whatsAppUnreadTotal || undefined,
-      badgeColor: "bg-emerald-950/80 text-emerald-300 border border-emerald-500/40",
+      badge: WHATSAPP_COMING_SOON ? "Soon" : whatsAppUnreadTotal || undefined,
+      badgeColor: WHATSAPP_COMING_SOON ? "bg-amber-950/60 text-amber-300 border border-amber-500/40" : "bg-emerald-950/80 text-emerald-300 border border-emerald-500/40",
       category: "Marketing",
     },
 

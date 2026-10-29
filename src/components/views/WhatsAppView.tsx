@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { WHATSAPP_COMING_SOON } from "../../data/featureFlags";
+import { WhatsAppComingSoon } from "../common/WhatsAppComingSoon";
 import {
   MessageCircle,
   Search,
@@ -63,7 +65,7 @@ const Ticks: React.FC<{ status?: string }> = ({ status }) => {
   return <Clock className="w-3 h-3 text-slate-500" />;
 };
 
-export const WhatsAppView: React.FC = () => {
+const WhatsAppViewInner: React.FC = () => {
   const {
     leads,
     activeTenant,
@@ -626,3 +628,5 @@ const DraftCard: React.FC<{ action: any; onApprove: (body: string) => Promise<bo
     </div>
   );
 };
+
+export const WhatsAppView: React.FC = () => (WHATSAPP_COMING_SOON ? <div className="p-4 md:p-8"><WhatsAppComingSoon /></div> : <WhatsAppViewInner />);
