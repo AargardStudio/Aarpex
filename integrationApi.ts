@@ -408,8 +408,8 @@ export function registerIntegrationApi(app: express.Express, getSupabase: () => 
       const newLeads30 = leads.filter((l) => l.created_at >= since30).length;
       const pending = approvalsR.count || 0;
       const alerts: any[] = [];
-      if (overdueTasks + overdueLeads > 0) alerts.push({ severity: "warning", title: `${overdueTasks + overdueLeads} overdue follow-up(s)`, detail: `${overdueTasks} task(s) and ${overdueLeads} lead(s) are past their due date.`, url: `${APP_URL}/app` });
-      if (pending > 0) alerts.push({ severity: "info", title: `${pending} agent draft(s) awaiting approval`, detail: "Nothing is sent to prospects until approved.", url: `${APP_URL}/app` });
+      if (overdueTasks + overdueLeads > 0) alerts.push({ severity: "warning", message: `${overdueTasks + overdueLeads} overdue follow-up(s): ${overdueTasks} task(s) and ${overdueLeads} lead(s) are past their due date.`, title: `${overdueTasks + overdueLeads} overdue follow-up(s)`, detail: `${overdueTasks} task(s) and ${overdueLeads} lead(s) are past their due date.`, url: `${APP_URL}/app` });
+      if (pending > 0) alerts.push({ severity: "info", message: `${pending} agent draft(s) awaiting approval. Nothing is sent to prospects until approved.`, title: `${pending} agent draft(s) awaiting approval`, detail: "Nothing is sent to prospects until approved.", url: `${APP_URL}/app` });
       res.json({
         app: "aarpex",
         business_id: tid,
@@ -839,6 +839,12 @@ export function registerIntegrationApi(app: express.Express, getSupabase: () => 
       await emitEvent(tenantId, event, req.body?.data ?? {});
       res.json({ ok: true });
     })
+  );
+
+  // Anything else under this prefix: a clear JSON 404 that names the right base,
+  // instead of Express's bare "Cannot GET".
+  app.use("/api/aargard-integration", (req: any, res: any) =>
+    fail(res, 404, "not_found", `No endpoint ${req.method} ${req.path}. The base URL is ${APP_URL}${API_BASE} (for example ${API_BASE}/health).`)
   );
 
   // Lets the Aargard Connect adapter (connectApi.ts) reuse the same signed webhook sender.

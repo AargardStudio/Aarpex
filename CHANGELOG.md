@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.18.2]
+
+### Changed
+- Founder's Dashboard API: `/summary` alerts now also carry a plain `message` field, and unknown paths under `/api/aargard-integration` return a JSON 404 that names the correct base URL instead of "Cannot GET".
+
 ## [2.18.1]
 
 ### Changed

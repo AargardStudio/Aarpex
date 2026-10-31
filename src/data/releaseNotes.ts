@@ -23,6 +23,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.18.2",
+    date: "2026-10-31",
+    headline: "Founder's Dashboard API polish",
+    tagline: "Clearer errors and alert messages for the Dashboard connection.",
+    highlights: [
+      { title: "Clearer API errors", description: "Wrong Dashboard API paths now return a helpful message with the correct address." },
+    ],
+  },
+  {
     version: "2.18.1",
     date: "2026-10-29",
     headline: "WhatsApp coming soon",
