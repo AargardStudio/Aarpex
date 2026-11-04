@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.18.6]
+
+### Fixed
+- **{{firstName}} / {{company}} / {{jobTitle}} buttons in the email draft editor now visibly insert.** They used to add the tag at the very end of the email, which looked like nothing happened on longer drafts. They now insert at your cursor (or replace the selected text), keep the cursor in the box and put it right after the tag.
+
 ## [2.18.5]
 
 ### Fixed

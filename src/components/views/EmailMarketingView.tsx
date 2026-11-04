@@ -576,9 +576,29 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     );
     setActiveStepTab((t) => Math.max(0, Math.min(t, generatedSteps.length - 2)));
   };
+  // Inserts at the cursor in the body box (or replaces the selected text), then
+  // puts the cursor right after the tag so it is obvious something happened.
+  // Falls back to the end of the body if the box has never been clicked.
+  const bodyRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const bodyTouched = React.useRef(false);
   const insertTag = (tag: string) => {
     const cur = generatedSteps[activeStepTab];
-    if (cur) updateGeneratedStep(activeStepTab, { body: `${cur.body}${cur.body.endsWith(" ") || cur.body.endsWith("\n") ? "" : " "}${tag}` });
+    if (!cur) return;
+    const el = bodyRef.current;
+    const body = cur.body || "";
+    const hasCaret = bodyTouched.current && !!el && el.value === body;
+    const start = hasCaret ? (el!.selectionStart as number) : body.length;
+    const end = hasCaret ? (el!.selectionEnd as number) : body.length;
+    const needsSpace = !hasCaret && body.length > 0 && !/[\s]$/.test(body);
+    const insert = `${needsSpace ? " " : ""}${tag}`;
+    updateGeneratedStep(activeStepTab, { body: body.slice(0, start) + insert + body.slice(end) });
+    const caret = start + insert.length;
+    setTimeout(() => {
+      if (bodyRef.current) {
+        bodyRef.current.focus();
+        bodyRef.current.setSelectionRange(caret, caret);
+      }
+    }, 0);
   };
   const rewriteStep = async (instruction: string) => {
     const cur = generatedSteps[activeStepTab];
@@ -1275,6 +1295,8 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                       </span>
                     </div>
                     <textarea
+                      ref={bodyRef}
+                      onFocus={() => { bodyTouched.current = true; }}
                       rows={9}
                       value={generatedSteps[activeStepTab].body}
                       onChange={(e) => updateGeneratedStep(activeStepTab, { body: e.target.value })}
@@ -1283,7 +1305,7 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                     <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
                       <span className="text-[10px] text-slate-500">Insert:</span>
                       {["{{firstName}}", "{{company}}", "{{jobTitle}}"].map((tg) => (
-                        <button key={tg} type="button" onClick={() => insertTag(tg)} className="px-2 py-0.5 rounded bg-[#252a36] hover:bg-[#2f3544] text-teal-300 text-[10px] font-mono">
+                        <button key={tg} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertTag(tg)} className="px-2 py-0.5 rounded bg-[#252a36] hover:bg-[#2f3544] text-teal-300 text-[10px] font-mono">
                           {tg}
                         </button>
                       ))}
@@ -1421,6 +1443,8 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                   <div>
                     <label className="block text-slate-400 mb-1">Body</label>
                     <textarea
+                      ref={bodyRef}
+                      onFocus={() => { bodyTouched.current = true; }}
                       rows={8}
                       value={cur.body}
                       onChange={(e) => updateGeneratedStep(activeStepTab, { body: e.target.value })}
@@ -1430,7 +1454,7 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-[10px] text-slate-500">Personalise:</span>
                     {["{{firstName}}", "{{company}}", "{{jobTitle}}"].map((tg) => (
-                      <button key={tg} type="button" onClick={() => insertTag(tg)} className="px-2 py-0.5 rounded bg-[#252a36] hover:bg-[#2f3544] text-teal-300 text-[10px] font-mono">
+                      <button key={tg} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertTag(tg)} className="px-2 py-0.5 rounded bg-[#252a36] hover:bg-[#2f3544] text-teal-300 text-[10px] font-mono">
                         {tg}
                       </button>
                     ))}

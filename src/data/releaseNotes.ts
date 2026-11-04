@@ -23,6 +23,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.18.6",
+    date: "2026-11-04",
+    headline: "Personalisation tags insert at your cursor",
+    tagline: "First name, company and job title buttons now drop in exactly where you are typing.",
+    highlights: [
+      { title: "Insert at cursor", description: "The tag buttons in the email editor insert where your cursor is, so you can see them appear." },
+    ],
+  },
+  {
     version: "2.18.5",
     date: "2026-11-04",
     headline: "Deletes now stick",
