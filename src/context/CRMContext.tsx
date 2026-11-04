@@ -104,6 +104,7 @@ export type NavView =
   | "Tasks"
   | "AI Insights"
   | "Email Marketing"
+  | "Campaigns"
   | "Inbox"
   | "WhatsApp"
   | "Reports"

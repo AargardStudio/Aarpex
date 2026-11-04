@@ -23,6 +23,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.18.7",
+    date: "2026-11-04",
+    headline: "Campaigns page with full follow-up sequences",
+    tagline: "See every campaign in one place and open any of them to view its emails and follow-ups.",
+    highlights: [
+      { title: "All campaigns", description: "A new Campaigns page lists every campaign with status, recipients and sending progress." },
+      { title: "Sequence timeline", description: "Click a campaign to see the initial email and each follow-up, when it is due, and who it was sent to." },
+    ],
+  },
+  {
     version: "2.18.6",
     date: "2026-11-04",
     headline: "Personalisation tags insert at your cursor",

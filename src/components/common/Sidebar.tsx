@@ -2,6 +2,7 @@ import React from "react";
 import { useCRM, NavView } from "../../context/CRMContext";
 import {
   LayoutDashboard,
+  ListOrdered,
   UserCheck,
   Briefcase,
   GitBranch,
@@ -123,6 +124,13 @@ export const Sidebar: React.FC = () => {
       name: "Email Marketing",
       icon: Mail,
       badge: emailCampaigns.filter((c) => c.status === "Active").length || undefined,
+      badgeColor: "bg-[#252a36] text-teal-300 border border-[#3d4455] font-semibold",
+      category: "Marketing",
+    },
+    {
+      name: "Campaigns",
+      icon: ListOrdered,
+      badge: emailCampaigns.length || undefined,
       badgeColor: "bg-[#252a36] text-teal-300 border border-[#3d4455] font-semibold",
       category: "Marketing",
     },

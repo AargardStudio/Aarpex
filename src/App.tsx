@@ -17,6 +17,7 @@ import { AiInsightsView } from "./components/views/AiInsightsView";
 import { EmailMarketingView } from "./components/views/EmailMarketingView";
 import { ProductsView } from "./components/views/ProductsView";
 import { CeoNotesView } from "./components/views/CeoNotesView";
+import { CampaignSequencesView } from "./components/views/CampaignSequencesView";
 import { InboxView } from "./components/views/InboxView";
 import { WhatsAppView } from "./components/views/WhatsAppView";
 import { ReportsView } from "./components/views/ReportsView";
@@ -142,6 +143,8 @@ const CRMMainContent: React.FC = () => {
         return hasIntelligence ? <AgentApprovalsView /> : <UpgradePrompt feature="Agent Approvals" />;
       case "filemanager":
         return <FileManagerView />;
+      case "campaigns":
+        return <CampaignSequencesView />;
       case "inbox":
         return <InboxView />;
       case "whatsapp":

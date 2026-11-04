@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.18.7] - 2026-11-04
+
+### Added
+- **Campaigns page** (Marketing > Campaigns): lists every campaign with status, recipients, sent/failed/replied counts and a step progress bar. Opening a campaign shows its sequence timeline (initial email and each follow-up, due/scheduled/sent state) with the email content and a per-recipient sending log.
+
 ## [2.18.6]
 
 ### Fixed
