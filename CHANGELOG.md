@@ -13,6 +13,15 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.18.4]
+
+### Added
+- **Inbox > Sent.** Every campaign email that was sent (or failed) is now listed in a Sent tab in the Inbox, newest first, with search. Open one to see From, To, campaign, delivery status and the exact personalised subject and body. Built from each campaign's delivery records, so earlier campaigns appear too.
+- **Email tools on the Review & Deploy step.** Edit the subject and body right where the draft is shown, insert merge tags, add a greeting, call to action, opt-out line or sign-off with one click, rewrite with AI (shorter, warmer, custom instruction), add, duplicate or remove follow-ups, or regenerate everything.
+
+### Fixed
+- **"Execute AI" no longer spins forever.** The AI writer had no time limit, so one slow model could stall the request. Each model attempt is now time-limited (about 20 seconds overall) and falls back to a ready-made template; the screen also gives up after 45 seconds with a clear message, and shows an error instead of an empty editor if nothing comes back. The server function allowance was raised to 60 seconds (`vercel.json`).
+
 ## [2.18.3]
 
 ### Changed

@@ -23,6 +23,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.18.4",
+    date: "2026-11-04",
+    headline: "Sent items and faster campaign writing",
+    tagline: "See every campaign email you sent, edit drafts with built-in tools, and no more endless loading.",
+    highlights: [
+      { title: "Inbox Sent tab", description: "Every campaign email appears in Sent with its delivery status and full text." },
+      { title: "Email tools", description: "Edit, add blocks, or rewrite with AI right on the review screen." },
+      { title: "Reliable AI writing", description: "Campaign writing now always finishes, with a ready template if the AI is slow." },
+    ],
+  },
+  {
     version: "2.18.3",
     date: "2026-11-04",
     headline: "Review your campaign before it goes out",

@@ -474,16 +474,27 @@ async function callGeminiSafe(prompt: string, responseMimeType: string = "applic
   // Use high-availability low-latency models first: gemini-3.1-flash-lite avoids 503 high demand spikes
   const candidateModels = ["gemini-3.1-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"];
 
+  // Never let a slow model hang the request: each attempt gets a time limit and
+  // the whole call a ~20s budget (the hosting proxy gives up around 26s), after
+  // which callers fall back to their built-in templates.
+  const deadline = Date.now() + 20_000;
   for (let i = 0; i < candidateModels.length; i++) {
     const model = candidateModels[i];
+    const remaining = deadline - Date.now();
+    if (remaining < 2000) break;
     try {
-      const response = await ai.models.generateContent({
+      const attempt = ai.models.generateContent({
         model,
         contents: prompt,
         config: {
           responseMimeType,
         },
       });
+      attempt.catch(() => {}); // a late rejection after the timeout must not crash the process
+      const response: any = await Promise.race([
+        attempt,
+        new Promise((_, rej) => setTimeout(() => rej(new Error("model timeout")), Math.min(remaining, i === 0 ? 12_000 : 8_000))),
+      ]);
 
       if (response?.text) {
         return response.text;

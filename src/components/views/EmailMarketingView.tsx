@@ -473,8 +473,13 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     setGenerateError("");
     try {
       const recipients = buildRecipients();
+      // Give up after 45s instead of spinning forever; the server itself falls
+      // back to a ready template within ~20s, so this only triggers on a dead connection.
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 45_000);
       const res = await apiFetch("/api/ai/email-campaign", {
         method: "POST",
+        signal: ctrl.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           audienceType,
@@ -504,7 +509,20 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
             : undefined,
         }),
       });
-      const data = await res.json();
+      clearTimeout(timer);
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        /* non-JSON (e.g. a gateway timeout page) handled below */
+      }
+      if (!res.ok || !Array.isArray(data?.steps) || data.steps.length === 0) {
+        throw new Error(
+          res.status === 402
+            ? "Campaign writing needs the Pro plan."
+            : data?.error || `The email writer didn't respond (${res.status || "no response"}). Please try again.`
+        );
+      }
       const steps: EmailStep[] = (data.steps || []).map((s: any, i: number) => ({
         id: `${Date.now()}_${i}`,
         stepNumber: s.stepNumber ?? i + 1,
@@ -518,7 +536,7 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
       setActiveStepTab(0);
       setStep(4);
     } catch (err: any) {
-      setGenerateError(err.message || "Failed to generate emails. Please try again.");
+      setGenerateError(err?.name === "AbortError" ? "This is taking too long. Please try again in a moment." : err.message || "Failed to generate emails. Please try again.");
     } finally {
       setIsGenerating(false);
     }
@@ -1386,6 +1404,103 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                     <div className="px-4 py-3 whitespace-pre-wrap text-xs leading-relaxed">{mergeTags(cur.body, sample)}</div>
                   </div>
                   <p className="text-[10px] text-slate-500 mt-1">Shown for {sample.firstName} at {sample.company}. Each recipient gets their own personalised version.</p>
+                </div>
+
+                {/* Email creation tools: edit the draft, add building blocks, or let AI reshape it. */}
+                <div className="rounded-xl border border-[#2d323f] bg-[#121418] p-4 space-y-3">
+                  <div className="font-bold text-white">Email tools</div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Subject</label>
+                    <input
+                      type="text"
+                      value={cur.subject}
+                      onChange={(e) => updateGeneratedStep(activeStepTab, { subject: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Body</label>
+                    <textarea
+                      rows={8}
+                      value={cur.body}
+                      onChange={(e) => updateGeneratedStep(activeStepTab, { body: e.target.value })}
+                      className="w-full px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400 resize-none"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] text-slate-500">Personalise:</span>
+                    {["{{firstName}}", "{{company}}", "{{jobTitle}}"].map((tg) => (
+                      <button key={tg} type="button" onClick={() => insertTag(tg)} className="px-2 py-0.5 rounded bg-[#252a36] hover:bg-[#2f3544] text-teal-300 text-[10px] font-mono">
+                        {tg}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] text-slate-500">Add a block:</span>
+                    {[
+                      ["Greeting", "Hi {{firstName}},\n\n", true],
+                      ["Call to action", "\n\nWould a quick 15-minute call this week work for you?", false],
+                      ["Opt-out line", "\n\nIf this isn't relevant, just reply and I won't email you again.", false],
+                      ["Sign-off", `\n\nBest regards,\n${currentUser?.name || "The Team"}\n${activeTenant?.companyName || activeTenant?.name || ""}`, false],
+                    ].map(([label, text, atStart]) => (
+                      <button
+                        key={label as string}
+                        type="button"
+                        onClick={() =>
+                          updateGeneratedStep(activeStepTab, { body: atStart ? `${text}${cur.body}` : `${cur.body.replace(/\s+$/, "")}${text}` })
+                        }
+                        className="px-2.5 py-1 rounded-full bg-[#252a36] hover:bg-[#2f3544] text-slate-200 text-[11px]"
+                      >
+                        + {label as string}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-slate-300 font-semibold">
+                      <Sparkles className="w-3.5 h-3.5 text-teal-400" /> Rewrite with AI
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {REWRITE_ACTIONS.map((a) => (
+                        <button
+                          key={a}
+                          type="button"
+                          disabled={rewriteBusy}
+                          onClick={() => rewriteStep(a)}
+                          className="px-2.5 py-1 rounded-full bg-[#252a36] hover:bg-[#2f3544] disabled:opacity-50 text-slate-200 text-[11px]"
+                        >
+                          {a}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={customRewrite}
+                        onChange={(e) => setCustomRewrite(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") rewriteStep(customRewrite); }}
+                        placeholder="Or tell the AI what to change, e.g. mention our free audit"
+                        className="flex-1 px-3 py-2 bg-[#181b21] border border-[#2d323f] text-white rounded-lg focus:outline-none focus:border-teal-400"
+                      />
+                      <button
+                        type="button"
+                        disabled={rewriteBusy || !customRewrite.trim()}
+                        onClick={() => rewriteStep(customRewrite)}
+                        className="px-3 rounded-lg bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white font-semibold flex items-center gap-1.5"
+                      >
+                        {rewriteBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                        Apply
+                      </button>
+                    </div>
+                    {rewriteNote && <p className="text-[11px] text-slate-400">{rewriteNote}</p>}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-[#2d323f]">
+                    <button type="button" onClick={addBlankStep} className="px-2.5 py-1 rounded-lg bg-[#252a36] hover:bg-[#2f3544] text-slate-200 font-semibold">+ Add follow-up</button>
+                    <button type="button" onClick={() => duplicateStep(activeStepTab)} className="px-2.5 py-1 rounded-lg bg-[#252a36] hover:bg-[#2f3544] text-slate-200 font-semibold">Duplicate this email</button>
+                    {generatedSteps.length > 1 && (
+                      <button type="button" onClick={() => removeStep(activeStepTab)} className="px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 font-semibold">Remove this email</button>
+                    )}
+                    <button type="button" onClick={() => setStep(3)} className="px-2.5 py-1 rounded-lg bg-[#252a36] hover:bg-[#2f3544] text-slate-200 font-semibold ml-auto">Regenerate everything</button>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
