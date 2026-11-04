@@ -54,8 +54,11 @@ import {
   flushPendingTenantCreations,
   flushAllPendingSyncs,
   hasPendingSyncs,
+  markTenantHydrated,
+  resetSyncGuards,
   onSyncFailure,
 } from "../lib/tenantDataSync";
+import type { TenantTable } from "../lib/tenantDataSync";
 import {
   initialLeads,
   initialDeals,
@@ -476,6 +479,16 @@ const STORAGE_KEYS = {
   COMMENTS: "crm_comments_v1",
 };
 
+// localStorage is only an offline cache. A full or blocked browser store must
+// never stop the effect that also mirrors the data to the database.
+function persistLocal(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    console.warn(`[aarpex] could not cache ${key} locally:`, (err as any)?.message || err);
+  }
+}
+
 export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeNav, setActiveNav] = useState<NavView>("Dashboard");
   const [settingsDeepLinkTab, setSettingsDeepLinkTab] = useState<string | null>(null);
@@ -838,78 +851,78 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Persist to tenant-scoped storage
   useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_leads`, JSON.stringify(leads));
+    persistLocal(`crm_tenant_${activeTenantId}_leads`, leads);
     if (shouldSyncToSupabase) syncTenantTable("leads", activeTenantId, leads);
   }, [leads, activeTenantId]);
 
   useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_deals`, JSON.stringify(deals));
+    persistLocal(`crm_tenant_${activeTenantId}_deals`, deals);
     if (shouldSyncToSupabase) syncTenantTable("deals", activeTenantId, deals);
   }, [deals, activeTenantId]);
 
   useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_pipelines`, JSON.stringify(pipelines));
+    persistLocal(`crm_tenant_${activeTenantId}_pipelines`, pipelines);
     if (shouldSyncToSupabase) syncTenantTable("pipelines", activeTenantId, pipelines);
   }, [pipelines, activeTenantId]);
 
   useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_invoices`, JSON.stringify(invoices));
+    persistLocal(`crm_tenant_${activeTenantId}_invoices`, invoices);
     if (shouldSyncToSupabase) syncTenantTable("invoices", activeTenantId, invoices);
   }, [invoices, activeTenantId]);
 
   useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_payments`, JSON.stringify(payments));
+    persistLocal(`crm_tenant_${activeTenantId}_payments`, payments);
     if (shouldSyncToSupabase) syncTenantTable("payments", activeTenantId, payments);
   }, [payments, activeTenantId]);
 
   useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_activities`, JSON.stringify(activities));
+    persistLocal(`crm_tenant_${activeTenantId}_activities`, activities);
     if (shouldSyncToSupabase) syncTenantTable("activities", activeTenantId, activities);
   }, [activities, activeTenantId]);
 
   useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_tasks`, JSON.stringify(tasks));
+    persistLocal(`crm_tenant_${activeTenantId}_tasks`, tasks);
     if (shouldSyncToSupabase) syncTenantTable("tasks", activeTenantId, tasks);
   }, [tasks, activeTenantId]);
 
   useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_comments`, JSON.stringify(comments));
+    persistLocal(`crm_tenant_${activeTenantId}_comments`, comments);
     if (shouldSyncToSupabase) syncTenantTable("comments", activeTenantId, comments);
   }, [comments, activeTenantId]);
 
   useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_emailCampaigns`, JSON.stringify(emailCampaigns));
+    persistLocal(`crm_tenant_${activeTenantId}_emailCampaigns`, emailCampaigns);
     if (shouldSyncToSupabase) syncTenantTable("email_campaigns", activeTenantId, emailCampaigns);
   }, [emailCampaigns, activeTenantId]);
 
   useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_products`, JSON.stringify(products));
+    persistLocal(`crm_tenant_${activeTenantId}_products`, products);
     if (shouldSyncToSupabase) syncTenantTable("products", activeTenantId, products);
   }, [products, activeTenantId]);
 
   useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_leadGroups`, JSON.stringify(leadGroups));
+    persistLocal(`crm_tenant_${activeTenantId}_leadGroups`, leadGroups);
     if (shouldSyncToSupabase) syncTenantTable("lead_groups", activeTenantId, leadGroups);
   }, [leadGroups, activeTenantId]);
 
   useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_knowledgeBase`, JSON.stringify(knowledgeBase));
+    persistLocal(`crm_tenant_${activeTenantId}_knowledgeBase`, knowledgeBase);
     if (shouldSyncToSupabase) syncTenantTable("knowledge_base", activeTenantId, knowledgeBase);
   }, [knowledgeBase, activeTenantId]);
 
   useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_industryAgents`, JSON.stringify(industryAgents));
+    persistLocal(`crm_tenant_${activeTenantId}_industryAgents`, industryAgents);
     if (shouldSyncToSupabase) syncTenantTable("industry_agents", activeTenantId, industryAgents);
   }, [industryAgents, activeTenantId]);
 
   useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_agentActions`, JSON.stringify(agentActions));
+    persistLocal(`crm_tenant_${activeTenantId}_agentActions`, agentActions);
     if (shouldSyncToSupabase) syncTenantTable("agent_actions", activeTenantId, agentActions);
   }, [agentActions, activeTenantId]);
 
   useEffect(() => {
-    localStorage.setItem(`crm_tenant_${activeTenantId}_storedFiles`, JSON.stringify(storedFiles));
-    localStorage.setItem(`crm_tenant_${activeTenantId}_leadGroups`, JSON.stringify(leadGroups));
+    persistLocal(`crm_tenant_${activeTenantId}_storedFiles`, storedFiles);
+    persistLocal(`crm_tenant_${activeTenantId}_leadGroups`, leadGroups);
     if (shouldSyncToSupabase) syncTenantTable("stored_files", activeTenantId, storedFiles);
   }, [storedFiles, activeTenantId]);
 
@@ -1639,6 +1652,20 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (agentActionsRes) setAgentActions(agentActionsRes);
       if (storedFilesRes) setStoredFiles(storedFilesRes);
       if (leadGroupsRes) setLeadGroups(leadGroupsRes);
+      markTenantHydrated(
+        activeTenantId,
+        (
+          [
+            ["leads", leadsRes], ["deals", dealsRes], ["pipelines", pipelinesRes], ["invoices", invoicesRes],
+            ["payments", paymentsRes], ["activities", activitiesRes], ["tasks", tasksRes], ["comments", commentsRes],
+            ["email_campaigns", emailCampaignsRes], ["products", productsRes], ["knowledge_base", knowledgeBaseRes],
+            ["industry_agents", industryAgentsRes], ["agent_actions", agentActionsRes], ["stored_files", storedFilesRes],
+            ["lead_groups", leadGroupsRes],
+          ] as Array<[TenantTable, any[] | null]>
+        )
+          .filter(([, rows]) => Array.isArray(rows) && rows.length > 0)
+          .map(([t]) => t)
+      );
       setIsHydratingTenantData(false);
     })();
     return () => {
@@ -1650,22 +1677,23 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Tenant workspace operations
   const switchTenant = (targetId: string) => {
     if (targetId === activeTenantId) return;
+    resetSyncGuards();
 
     // Flush current tenant state before switching
-    localStorage.setItem(`crm_tenant_${activeTenantId}_leads`, JSON.stringify(leads));
-    localStorage.setItem(`crm_tenant_${activeTenantId}_deals`, JSON.stringify(deals));
-    localStorage.setItem(`crm_tenant_${activeTenantId}_pipelines`, JSON.stringify(pipelines));
-    localStorage.setItem(`crm_tenant_${activeTenantId}_invoices`, JSON.stringify(invoices));
-    localStorage.setItem(`crm_tenant_${activeTenantId}_payments`, JSON.stringify(payments));
-    localStorage.setItem(`crm_tenant_${activeTenantId}_activities`, JSON.stringify(activities));
-    localStorage.setItem(`crm_tenant_${activeTenantId}_tasks`, JSON.stringify(tasks));
-    localStorage.setItem(`crm_tenant_${activeTenantId}_comments`, JSON.stringify(comments));
-    localStorage.setItem(`crm_tenant_${activeTenantId}_emailCampaigns`, JSON.stringify(emailCampaigns));
-    localStorage.setItem(`crm_tenant_${activeTenantId}_products`, JSON.stringify(products));
-    localStorage.setItem(`crm_tenant_${activeTenantId}_knowledgeBase`, JSON.stringify(knowledgeBase));
-    localStorage.setItem(`crm_tenant_${activeTenantId}_industryAgents`, JSON.stringify(industryAgents));
-    localStorage.setItem(`crm_tenant_${activeTenantId}_agentActions`, JSON.stringify(agentActions));
-    localStorage.setItem(`crm_tenant_${activeTenantId}_storedFiles`, JSON.stringify(storedFiles));
+    persistLocal(`crm_tenant_${activeTenantId}_leads`, leads);
+    persistLocal(`crm_tenant_${activeTenantId}_deals`, deals);
+    persistLocal(`crm_tenant_${activeTenantId}_pipelines`, pipelines);
+    persistLocal(`crm_tenant_${activeTenantId}_invoices`, invoices);
+    persistLocal(`crm_tenant_${activeTenantId}_payments`, payments);
+    persistLocal(`crm_tenant_${activeTenantId}_activities`, activities);
+    persistLocal(`crm_tenant_${activeTenantId}_tasks`, tasks);
+    persistLocal(`crm_tenant_${activeTenantId}_comments`, comments);
+    persistLocal(`crm_tenant_${activeTenantId}_emailCampaigns`, emailCampaigns);
+    persistLocal(`crm_tenant_${activeTenantId}_products`, products);
+    persistLocal(`crm_tenant_${activeTenantId}_knowledgeBase`, knowledgeBase);
+    persistLocal(`crm_tenant_${activeTenantId}_industryAgents`, industryAgents);
+    persistLocal(`crm_tenant_${activeTenantId}_agentActions`, agentActions);
+    persistLocal(`crm_tenant_${activeTenantId}_storedFiles`, storedFiles);
 
     // Every workspace starts genuinely empty except "pipelines" (a
     // structural default, not sample data) — see loadTenantEntity above.
@@ -3386,7 +3414,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const next = { ...waRead, [d]: new Date().toISOString() };
     setWaRead(next);
     try {
-      localStorage.setItem(`crm_tenant_${activeTenantId}_whatsapp_read`, JSON.stringify(next));
+      persistLocal(`crm_tenant_${activeTenantId}_whatsapp_read`, next);
     } catch {
       // ignore
     }
@@ -4268,6 +4296,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const signOut = () => {
     if (isSupabaseAuthConfigured()) {
       void flushAllPendingSyncs().finally(() => {
+        resetSyncGuards();
         void getSupabaseAuthClient().auth.signOut();
       });
     } else {

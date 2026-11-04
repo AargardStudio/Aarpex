@@ -23,6 +23,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.18.5",
+    date: "2026-11-04",
+    headline: "Deletes now stick",
+    tagline: "Removing the last item in a list is saved, and local cache problems can't block saving.",
+    highlights: [
+      { title: "Deleted means deleted", description: "A removed Industry Agent (or any last remaining item) no longer reappears after refreshing." },
+    ],
+  },
+  {
     version: "2.18.4",
     date: "2026-11-04",
     headline: "Sent items and faster campaign writing",

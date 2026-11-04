@@ -13,6 +13,13 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.18.5]
+
+### Fixed
+- **Deleting the last item no longer brings it back.** Removing the only remaining Industry Agent (or the last record of any kind in a list) was never saved to the database, so it reappeared after a refresh. The app now saves that removal, but only when it has actually seen records in that list for your workspace in the current session, so a momentarily empty screen during sign-in or switching workspace can never wipe real data.
+- **A full or blocked browser cache can't stop saving.** The local browser copy is now best-effort; if it fails, the record is still sent to the database.
+- Unexpected errors while saving a list now raise the existing "failed to save" notice instead of only appearing in the browser console.
+
 ## [2.18.4]
 
 ### Added

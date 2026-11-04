@@ -113,8 +113,35 @@ function fromRow(table: TenantTable, row: Record<string, any>): Record<string, a
 // signs back in, since Supabase is the source of truth on load.
 const pendingSyncs = new Map<string, { timeoutId: ReturnType<typeof setTimeout>; run: () => Promise<void> }>();
 
+// Deleting the LAST remaining row of a table used to be impossible: an empty
+// array was never allowed to delete anything (see the safety net in
+// performSync), so the removed row came back on the next refresh. We now honour
+// an empty array only when this session has positively seen that table
+// non-empty for the tenant AFTER its data was loaded -- i.e. the user really
+// removed the final record, rather than state being momentarily empty during
+// sign-in or a tenant switch.
+let hydratedTenant: string | null = null;
+const seenNonEmpty = new Set<string>();
+
+/** Call once a tenant's tables have been loaded; `nonEmpty` lists tables that came back with rows. */
+export function markTenantHydrated(tenantId: string, nonEmpty: TenantTable[]): void {
+  hydratedTenant = tenantId;
+  seenNonEmpty.clear();
+  for (const t of nonEmpty) seenNonEmpty.add(`${t}:${tenantId}`);
+}
+
+/** Call when signing out or switching workspace, before state is replaced. */
+export function resetSyncGuards(): void {
+  hydratedTenant = null;
+  seenNonEmpty.clear();
+}
+
 export function syncTenantTable(table: TenantTable, tenantId: string, rows: Array<Record<string, any>>): void {
   if (!isSupabaseAuthConfigured() || !tenantId) return;
+
+  const guardKey = `${table}:${tenantId}`;
+  if (hydratedTenant === tenantId && rows.length > 0) seenNonEmpty.add(guardKey);
+  const allowEmptyDelete = rows.length === 0 && hydratedTenant === tenantId && seenNonEmpty.has(guardKey);
 
   const debounceKey = `${table}:${tenantId}`;
   const existing = pendingSyncs.get(debounceKey);
@@ -122,7 +149,7 @@ export function syncTenantTable(table: TenantTable, tenantId: string, rows: Arra
 
   const run = async () => {
     pendingSyncs.delete(debounceKey);
-    await performSync(table, tenantId, rows);
+    await performSync(table, tenantId, rows, allowEmptyDelete);
   };
 
   const timeoutId = setTimeout(() => {
@@ -245,7 +272,7 @@ async function upsertRowsResilient(
   return failures;
 }
 
-async function performSync(table: TenantTable, tenantId: string, rows: Array<Record<string, any>>): Promise<void> {
+async function performSync(table: TenantTable, tenantId: string, rows: Array<Record<string, any>>, allowEmptyDelete = false): Promise<void> {
   try {
     // Flush this table's dependencies out of turn first, so its sync always
     // lands after the rows it references.
@@ -324,7 +351,7 @@ async function performSync(table: TenantTable, tenantId: string, rows: Array<Rec
     // added and later removed, which re-triggers a normal non-empty diff).
     // That's a far smaller, recoverable issue than mass data loss.
     const keepIds = rows.map((r) => r.id).filter(Boolean);
-    if (keepIds.length > 0) {
+    if (keepIds.length > 0 || allowEmptyDelete) {
       // Previously this issued ONE delete with a `.not("id", "in", "(...)")`
       // filter listing every kept id as a quoted literal embedded directly
       // in the request URL's query string. That's fine for a handful of
@@ -387,6 +414,13 @@ async function performSync(table: TenantTable, tenantId: string, rows: Array<Rec
     }
   } catch (err) {
     console.error(`[tenantDataSync] sync failed for ${table}:`, err);
+    notifySyncFailure({
+      table,
+      tenantId,
+      failedCount: rows.length || 1,
+      totalCount: rows.length || 1,
+      sample: [{ id: "-", error: String((err as any)?.message || err) }],
+    });
   }
 }
 
