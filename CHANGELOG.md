@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.18.3]
+
+### Changed
+- **New campaign wizard has a final "Review & Deploy" step.** After customising the emails you now see a summary (recipients, sending mailbox, sequence timing) and the email draft rendered as the recipient will see it (From/To/Subject/body), with a test-send button. From there you can **Save as Draft** (stores the campaign and template, sends nothing) or **Deploy Campaign** (sends the first email now). Previously the editor's footer sent straight away.
+
 ## [2.18.2]
 
 ### Changed

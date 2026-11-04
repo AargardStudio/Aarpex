@@ -23,6 +23,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.18.3",
+    date: "2026-11-04",
+    headline: "Review your campaign before it goes out",
+    tagline: "A final step shows your email draft as recipients will see it.",
+    highlights: [
+      { title: "Review & Deploy", description: "See the full email draft, recipients and schedule, then save it as a draft or deploy." },
+    ],
+  },
+  {
     version: "2.18.2",
     date: "2026-10-31",
     headline: "Founder's Dashboard API polish",

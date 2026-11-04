@@ -348,7 +348,7 @@ const CampaignCard: React.FC<{
 const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { leads, leadGroups, products, industryAgents, getAgentForIndustry, activeTenant, currentUser, addEmailCampaign, addActivity } = useCRM();
 
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [name, setName] = useState("");
   // Companies/Contacts no longer exist as entities -- the audience is
   // always Leads. Kept as a constant (rather than removed outright) so the
@@ -706,8 +706,8 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
             <div>
               <h2 className="text-sm font-bold text-white">New Email Campaign</h2>
               <p className="text-[11px] text-slate-400">
-                Step {step} of 4 &bull;{" "}
-                {step === 1 ? "Name & Audience" : step === 2 ? "Cadence" : step === 3 ? "Technique & Style" : "Customize Emails"}
+                Step {step} of 5 &bull;{" "}
+                {step === 1 ? "Name & Audience" : step === 2 ? "Cadence" : step === 3 ? "Technique & Style" : step === 4 ? "Customize Emails" : "Review & Deploy"}
               </p>
             </div>
           </div>
@@ -1349,6 +1349,65 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
               )}
             </div>
           )}
+
+          {step === 5 && generatedSteps.length > 0 && (() => {
+            const sample = sampleRecipient();
+            const cur = generatedSteps[Math.min(activeStepTab, generatedSteps.length - 1)];
+            const mb = getMailboxById(activeTenant, selectedMailboxId);
+            const recipientCount = buildRecipients().length;
+            return (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-[#2d323f] bg-[#121418] p-4 grid grid-cols-2 gap-x-4 gap-y-2">
+                  <div><span className="text-slate-500">Campaign</span><div className="font-bold text-white">{name.trim() || `${audienceType} Campaign`}</div></div>
+                  <div><span className="text-slate-500">Recipients</span><div className="font-bold text-white">{recipientCount} {audienceType.toLowerCase()}</div></div>
+                  <div><span className="text-slate-500">Sending from</span><div className="font-bold text-white break-all">{mb?.email || "No mailbox set up"}</div></div>
+                  <div><span className="text-slate-500">Sequence</span><div className="font-bold text-white">{generatedSteps.length} email{generatedSteps.length === 1 ? "" : "s"}: first goes out now{generatedSteps.length > 1 ? `, then follow-ups every ${frequencyDays} day(s)${opts.skipWeekends ? " (weekdays only)" : ""}` : ""}</div></div>
+                </div>
+
+                <div>
+                  <div className="text-slate-300 font-semibold mb-1.5">Your email draft</div>
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                    {generatedSteps.map((st, i) => (
+                      <button
+                        key={st.id}
+                        onClick={() => setActiveStepTab(i)}
+                        className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap border ${activeStepTab === i ? "bg-teal-600 border-teal-600 text-white" : "bg-[#121418] border-[#2d323f] text-slate-400 hover:text-white"}`}
+                      >
+                        {i === 0 ? "Initial" : `Follow-up ${i}`}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="rounded-xl border border-[#2d323f] bg-white text-slate-800 overflow-hidden mt-1.5">
+                    <div className="px-4 py-2.5 bg-slate-100 border-b border-slate-200 text-[11px] text-slate-600 space-y-0.5">
+                      <div><span className="text-slate-400">From:</span> {currentUser?.name || "You"} {mb?.email ? `<${mb.email}>` : ""}</div>
+                      <div><span className="text-slate-400">To:</span> {sample.firstName} {sample.email ? `<${sample.email}>` : ""}</div>
+                      <div className="font-bold text-slate-900 text-sm pt-1">{mergeTags(cur.subject, sample)}</div>
+                    </div>
+                    <div className="px-4 py-3 whitespace-pre-wrap text-xs leading-relaxed">{mergeTags(cur.body, sample)}</div>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">Shown for {sample.firstName} at {sample.company}. Each recipient gets their own personalised version.</p>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    disabled={testBusy}
+                    onClick={sendTestToMe}
+                    className="px-3 py-1.5 rounded-lg bg-[#252a36] hover:bg-[#2f3544] disabled:opacity-50 text-slate-200 font-semibold flex items-center gap-1.5"
+                  >
+                    {testBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    Send a test to me
+                  </button>
+                  {testNote && <span className="text-[11px] text-slate-400">{testNote}</span>}
+                </div>
+
+                <div className="rounded-lg border border-teal-500/30 bg-teal-950/20 p-3 text-slate-300">
+                  <strong className="text-white">Save as Draft</strong> stores this campaign and your email template without sending anything, so you can finish it later.{" "}
+                  <strong className="text-white">Deploy</strong> sends the first email to {recipientCount} {audienceType.toLowerCase()} right now.
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Footer */}
@@ -1383,6 +1442,17 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           )}
 
           {step === 4 && (
+            <button
+              onClick={() => setStep(5)}
+              disabled={generatedSteps.length === 0}
+              className="px-4 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white font-bold rounded-lg flex items-center gap-1.5"
+            >
+              Review & Deploy
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {step === 5 && (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => handleSave(false)}
@@ -1397,7 +1467,7 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                 className="px-4 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-60 text-white font-bold rounded-lg flex items-center gap-1.5"
               >
                 {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                <span>{isSaving ? "Launching..." : "Save & Send Now"}</span>
+                <span>{isSaving ? "Deploying..." : "Deploy Campaign"}</span>
               </button>
             </div>
           )}
