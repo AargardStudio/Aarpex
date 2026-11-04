@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.18.8] - 2026-11-04
+
+### Fixed
+- Campaigns not persisting after re-login: `email_campaigns` was missing the `mailbox_id` column, so every save was rejected. Added migration 0032.
+
 ## [2.18.7] - 2026-11-04
 
 ### Added

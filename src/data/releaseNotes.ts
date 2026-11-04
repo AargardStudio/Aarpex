@@ -23,6 +23,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.18.8",
+    date: "2026-11-04",
+    headline: "Campaigns now save reliably",
+    tagline: "Fixed campaigns disappearing after you log out and back in.",
+    highlights: [
+      { title: "Campaign persistence", description: "Campaigns are now stored correctly and are still there after re-login." },
+    ],
+  },
+  {
     version: "2.18.7",
     date: "2026-11-04",
     headline: "Campaigns page with full follow-up sequences",
