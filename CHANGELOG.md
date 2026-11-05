@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.18.9] - 2026-11-05
+
+### Added
+- Google Search Console site-verification meta tag in `index.html`.
+
 ## [2.18.8] - 2026-11-04
 
 ### Fixed

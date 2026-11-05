@@ -23,6 +23,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.18.9",
+    date: "2026-11-05",
+    headline: "Google site verification",
+    tagline: "Added the Google Search Console verification tag.",
+    highlights: [
+      { title: "Site verification", description: "The verification meta tag is now in the app's page head." },
+    ],
+  },
+  {
     version: "2.18.8",
     date: "2026-11-04",
     headline: "Campaigns now save reliably",
