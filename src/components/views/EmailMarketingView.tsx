@@ -3,7 +3,7 @@ import { useCRM } from "../../context/CRMContext";
 import { EmailCampaign, EmailFrequency, EmailCampaignTechnique, EmailStep, EmailStepDeliveryResult, SalesTechnique, CampaignOptions } from "../../types";
 import { apiFetch } from "../../lib/apiClient";
 import { computeProductMatches } from "../../lib/productMatching";
-import { getMailboxById, mailboxLabel } from "../../lib/webmail";
+import { getMailboxById, mailboxLabel, mailAuthFields } from "../../lib/webmail";
 import {
   Mail,
   Plus,
@@ -134,7 +134,7 @@ async function sendCampaignEmail(
       body: JSON.stringify({
         email: mailCfg?.email || currentUser?.email,
         displayName: mailCfg?.displayName || currentUser?.name || activeTenant?.name,
-        password: mailCfg?.password || "",
+        ...mailAuthFields(mailCfg),
         smtpHost: mailCfg?.smtpHost || "smtp.hostinger.com",
         smtpPort: mailCfg?.smtpPort || 465,
         to: recipient.email,

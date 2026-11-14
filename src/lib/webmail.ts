@@ -27,3 +27,16 @@ export function mailboxLabel(m?: TenantWebmailConfig | null): string {
   if (!m) return "";
   return m.label?.trim() || m.email || "Unnamed mailbox";
 }
+
+/** Credential fields to put in a /api/webmail/* request body: a Microsoft-signed-in
+ * mailbox sends only its id (the server holds the tokens); others send the password. */
+export function mailAuthFields(m?: TenantWebmailConfig | null): { password?: string; oauthMailboxId?: string } {
+  if (m?.authType === "microsoft") return { oauthMailboxId: m.id };
+  return { password: m?.password || "" };
+}
+
+/** True when the mailbox can actually send/read mail (password saved, or Microsoft sign-in done). */
+export function mailboxHasCredentials(m?: TenantWebmailConfig | null): boolean {
+  if (!m) return false;
+  return m.authType === "microsoft" ? m.status === "connected" : !!m.password;
+}

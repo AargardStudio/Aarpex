@@ -961,6 +961,8 @@ export interface TenantWebmailConfig {
   email: string;
   displayName: string;
   password?: string;
+  /** "microsoft" = signed in with Microsoft 365 (OAuth); tokens live on the server, never in the browser. Unset/"password" = SMTP/IMAP password. */
+  authType?: "password" | "microsoft";
   smtpHost: string;
   smtpPort: number;
   smtpEncryption: "SSL" | "TLS" | "STARTTLS";

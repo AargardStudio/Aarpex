@@ -23,6 +23,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.19.0",
+    date: "2026-11-14",
+    headline: "Sign in with Microsoft for Microsoft 365 mailboxes",
+    tagline: "Connect an Outlook / Microsoft 365 mailbox with one click, no password needed.",
+    highlights: [
+      { title: "One-click connect", description: "Pick Microsoft 365 in Webmail settings and sign in with Microsoft. Works even when your organisation blocks password sign-in." },
+      { title: "Secure by design", description: "No mailbox password is stored. Access is kept as an encrypted token on the server and can be disconnected any time." },
+    ],
+  },
+  {
     version: "2.18.9",
     date: "2026-11-05",
     headline: "Google site verification",

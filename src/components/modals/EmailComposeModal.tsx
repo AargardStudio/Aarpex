@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { EmailAttachment } from "../../types";
 import { apiFetch } from "../../lib/apiClient";
-import { getMailboxById, mailboxLabel } from "../../lib/webmail";
+import { getMailboxById, mailboxLabel, mailAuthFields } from "../../lib/webmail";
 
 interface EmailComposeModalProps {
   isOpen: boolean;
@@ -234,7 +234,7 @@ export const EmailComposeModal: React.FC<EmailComposeModalProps> = ({
       const payload = {
         email: senderEmail,
         displayName: mailCfg?.displayName || currentUser?.name || activeTenant?.name,
-        password: mailCfg?.password || "",
+        ...mailAuthFields(mailCfg),
         smtpHost: mailCfg?.smtpHost || "smtp.hostinger.com",
         smtpPort: mailCfg?.smtpPort || 465,
         smtpEncryption: mailCfg?.smtpEncryption || "SSL",

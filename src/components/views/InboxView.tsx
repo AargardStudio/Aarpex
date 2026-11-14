@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Inbox as InboxIcon, RefreshCw, Mail, CheckCircle2, Clock, Info, Send, AlertCircle, Search } from "lucide-react";
 import { useCRM } from "../../context/CRMContext";
-import { getMailboxById } from "../../lib/webmail";
+import { getMailboxById, mailboxHasCredentials } from "../../lib/webmail";
 
 // Inbox: reply-tracking for Email Marketing sequences. This isn't a full
 // mail client -- it doesn't browse your inbox message by message. Instead
@@ -99,7 +99,7 @@ export const InboxView: React.FC = () => {
     }
   };
 
-  const mailboxConnected = (activeTenant?.webmailConfigs || []).some((m) => !!m.password && !!m.imapHost);
+  const mailboxConnected = (activeTenant?.webmailConfigs || []).some((m) => mailboxHasCredentials(m) && !!m.imapHost);
   const totalReplied = trackedCampaigns.reduce((sum, c) => sum + (c.repliedAudienceIds?.length || 0), 0);
   const totalAwaiting = trackedCampaigns.reduce(
     (sum, c) => sum + c.audienceIds.filter((id) => !(c.repliedAudienceIds || []).includes(id)).length,

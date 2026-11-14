@@ -39,7 +39,7 @@ import { LeadGroup,
 } from "../types";
 import { STORAGE_LIMITS_BYTES } from "../data/subscriptionPlans";
 import { isSupabaseAuthConfigured, getSupabaseAuthClient } from "../config/supabaseAuthClient";
-import { getMailboxById } from "../lib/webmail";
+import { getMailboxById, mailAuthFields, mailboxHasCredentials } from "../lib/webmail";
 import { fetchWhatsAppMessages, upsertWhatsAppMessages, phoneDigits, samePhone } from "../lib/whatsappStore";
 import {
   syncTenantTable,
@@ -620,6 +620,16 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const hasIntelligence = planHasIntelligence(activeTenant?.plan, activeTenant?.ownerEmail);
   const [passwordGate, setPasswordGate] = useState<"invite" | "recovery" | null>(null);
   const clearPasswordGate = () => setPasswordGate(null);
+  // Returning from "Sign in with Microsoft" (full-page redirect): land on
+  // Settings so the mailbox form can finish connecting (see SettingsView).
+  useEffect(() => {
+    try {
+      if (new URLSearchParams(window.location.search).get("mailbox_oauth")) setActiveNav("Settings");
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const hasIntelligenceRef = useRef(hasIntelligence);
   hasIntelligenceRef.current = hasIntelligence;
   // Tell the API client which workspace we're in so the server can check its plan.
@@ -1213,7 +1223,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // "check replies" button uses, against this industry's candidate
         // addresses, then drafts a proposed reply for any that wrote back.
         const mailCfg = getMailboxById(curTenant);
-        if (mailCfg?.email && mailCfg?.password && mailCfg?.imapHost) {
+        if (mailCfg?.email && mailboxHasCredentials(mailCfg) && mailCfg?.imapHost) {
           const candidateLeads = curLeads.filter(
             (l) =>
               agentMatchesLead(agent, l) &&
@@ -1236,7 +1246,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   email: mailCfg.email,
-                  password: mailCfg.password,
+                  ...mailAuthFields(mailCfg),
                   imapHost: mailCfg.imapHost,
                   imapPort: mailCfg.imapPort,
                   imapEncryption: mailCfg.imapEncryption,
@@ -2957,7 +2967,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: webmail?.email,
-          password: webmail?.password,
+          ...mailAuthFields(webmail),
           imapHost: webmail?.imapHost,
           imapPort: webmail?.imapPort,
           imapEncryption: webmail?.imapEncryption,
@@ -3300,7 +3310,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         body: JSON.stringify({
           email: mailCfg?.email || currentUser?.email || "",
           displayName: mailCfg?.displayName || currentUser?.name || activeTenant?.name,
-          password: mailCfg?.password || "",
+          ...mailAuthFields(mailCfg),
           smtpHost: mailCfg?.smtpHost || "smtp.hostinger.com",
           smtpPort: mailCfg?.smtpPort || 465,
           smtpEncryption: mailCfg?.smtpEncryption || "SSL",

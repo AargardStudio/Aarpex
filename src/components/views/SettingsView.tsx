@@ -265,6 +265,125 @@ export const SettingsView: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMailboxId, activeTenant?.webmailConfigs?.length]);
 
+  // ---- Microsoft 365 sign-in (OAuth) ---------------------------------------
+  const [msConfigured, setMsConfigured] = useState<boolean | null>(null);
+  const [msBusy, setMsBusy] = useState(false);
+  const [msNotice, setMsNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [msUsePassword, setMsUsePassword] = useState(false);
+  // Signed in with Microsoft = this mailbox holds a server-side token, no password.
+  const useMs = mailProvider === "outlook" && mailCfg.authType === "microsoft" && mailCfg.status === "connected";
+  const showMsCard = mailProvider === "outlook" && msConfigured !== false && !msUsePassword;
+
+  useEffect(() => {
+    if (activeTab !== "webmail" || msConfigured !== null) return;
+    (async () => {
+      try {
+        const r = await apiFetch("/api/mail-oauth/microsoft/config");
+        const d = await r.json();
+        setMsConfigured(!!d.enabled);
+      } catch {
+        setMsConfigured(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  // Back from Microsoft: finish connecting the mailbox it was started for.
+  const msReturnHandled = React.useRef(false);
+  useEffect(() => {
+    if (msReturnHandled.current || !activeTenant?.id) return;
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("mailbox_oauth");
+    if (!result) return;
+    msReturnHandled.current = true;
+    const id = params.get("mailbox") || "";
+    const email = params.get("email") || "";
+    const message = params.get("message") || "";
+    window.history.replaceState({}, "", window.location.pathname);
+    setActiveTab("webmail");
+    if (result === "ok" && id && (activeTenant?.webmailConfigs || []).some((m: any) => m.id === id)) {
+      updateWebmailConfig(id, {
+        isEnabled: true,
+        authType: "microsoft",
+        provider: "outlook",
+        email,
+        password: "",
+        smtpHost: "smtp.office365.com",
+        smtpPort: 587,
+        smtpEncryption: "STARTTLS",
+        imapHost: "outlook.office365.com",
+        imapPort: 993,
+        imapEncryption: "SSL",
+        status: "connected",
+        statusMessage: `Signed in with Microsoft as ${email}`,
+      } as any);
+      setSelectedMailboxId(id);
+      setMsNotice({ ok: true, text: `Signed in with Microsoft as ${email}. This mailbox is ready to send.` });
+      addAuditLogEntry("Connected Microsoft 365 mailbox", email, "settings");
+    } else if (result === "ok") {
+      setMsNotice({ ok: false, text: "Signed in, but the mailbox record wasn't found. Please add the mailbox again and retry." });
+    } else {
+      setMsNotice({ ok: false, text: message || "Microsoft sign-in didn't complete. Please try again." });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTenant?.id]);
+
+  const handleConnectMicrosoft = async () => {
+    setMsBusy(true);
+    setMsNotice(null);
+    try {
+      let id = selectedMailboxId;
+      const base: any = {
+        label: mailLabel.trim() || undefined,
+        provider: "outlook",
+        email: mailEmail.trim(),
+        displayName: mailDisplayName.trim(),
+        smtpHost: "smtp.office365.com",
+        smtpPort: 587,
+        smtpEncryption: "STARTTLS",
+        imapHost: "outlook.office365.com",
+        imapPort: 993,
+        imapEncryption: "SSL",
+      };
+      if (id) updateWebmailConfig(id, base);
+      else {
+        const created = addWebmailConfig(base);
+        id = created.id;
+        setSelectedMailboxId(id);
+      }
+      // Give the workspace sync a moment to save the mailbox before we leave the page.
+      await new Promise((r) => setTimeout(r, 2000));
+      const res = await apiFetch("/api/mail-oauth/microsoft/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId: activeTenant?.id, mailboxId: id, loginHint: mailEmail.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) throw new Error(data.error || "Couldn't start Microsoft sign-in.");
+      window.location.href = data.url;
+    } catch (err: any) {
+      setMsNotice({ ok: false, text: err.message || "Couldn't start Microsoft sign-in." });
+      setMsBusy(false);
+    }
+  };
+
+  const handleDisconnectMicrosoft = async () => {
+    if (!selectedMailboxId) return;
+    if (!confirm("Disconnect this Microsoft sign-in? Emails can't be sent from this mailbox until you sign in again.")) return;
+    setMsBusy(true);
+    try {
+      await apiFetch("/api/mail-oauth/microsoft/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId: activeTenant?.id, mailboxId: selectedMailboxId }),
+      });
+      updateWebmailConfig(selectedMailboxId, { authType: "password", status: "unconfigured", statusMessage: "Microsoft sign-in disconnected" } as any);
+      setMsNotice({ ok: true, text: "Microsoft sign-in disconnected." });
+    } finally {
+      setMsBusy(false);
+    }
+  };
+
   // Provider presets helper
   const applyMailPreset = (preset: "hostinger" | "gmail" | "outlook" | "cpanel" | "custom") => {
     setMailProvider(preset);
@@ -483,7 +602,7 @@ export const SettingsView: React.FC = () => {
         body: JSON.stringify({
           provider: mailProvider,
           email: mailEmail.trim(),
-          password: mailPassword.trim(),
+          ...(useMs ? { oauthMailboxId: selectedMailboxId } : { password: mailPassword.trim() }),
           smtpHost: smtpHost.trim(),
           smtpPort,
           smtpEncryption,
@@ -520,7 +639,7 @@ export const SettingsView: React.FC = () => {
         body: JSON.stringify({
           email: mailEmail.trim(),
           displayName: mailDisplayName.trim(),
-          password: mailPassword.trim(),
+          ...(useMs ? { oauthMailboxId: selectedMailboxId } : { password: mailPassword.trim() }),
           smtpHost: smtpHost.trim(),
           smtpPort,
           recipientEmail: testRecipient.trim(),
@@ -550,7 +669,8 @@ export const SettingsView: React.FC = () => {
       provider: mailProvider,
       email: mailEmail.trim(),
       displayName: mailDisplayName.trim(),
-      password: mailPassword.trim(),
+      password: useMs ? "" : mailPassword.trim(),
+      authType: useMs ? "microsoft" : "password",
       smtpHost: smtpHost.trim(),
       smtpPort: Number(smtpPort),
       smtpEncryption,
@@ -558,7 +678,7 @@ export const SettingsView: React.FC = () => {
       imapPort: Number(imapPort),
       signature: mailSignature,
       replyTo: mailEmail.trim(),
-      status: mailPassword.trim() ? "connected" : "unconfigured",
+      status: useMs || mailPassword.trim() ? "connected" : "unconfigured",
     };
     if (selectedMailboxId) {
       updateWebmailConfig(selectedMailboxId, payload);
@@ -1341,6 +1461,46 @@ export const SettingsView: React.FC = () => {
               </div>
             </div>
 
+            {/* Microsoft 365 one-click sign-in */}
+            {mailProvider === "outlook" && msConfigured !== false && (
+              <div className="p-4 rounded-xl border border-sky-500/30 bg-sky-950/20 space-y-2.5">
+                {showMsCard ? (
+                  useMs ? (
+                    <>
+                      <div className="flex items-center gap-2 text-emerald-300 font-semibold text-xs">
+                        <CheckCircle2 className="w-4 h-4" /> Signed in with Microsoft as {mailCfg.email}
+                      </div>
+                      <p className="text-[11px] text-slate-400">No password is stored. Sending and reply tracking use a secure Microsoft sign-in.</p>
+                      <div className="flex gap-2">
+                        <button type="button" disabled={msBusy} onClick={handleConnectMicrosoft} className="px-3 py-1.5 rounded-lg border border-[#2d323f] text-xs text-slate-200 hover:border-slate-500">Sign in again</button>
+                        <button type="button" disabled={msBusy} onClick={handleDisconnectMicrosoft} className="px-3 py-1.5 rounded-lg border border-rose-500/40 text-xs text-rose-300 hover:bg-rose-950/30">Disconnect</button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-white font-semibold text-xs">Connect your Microsoft 365 mailbox</div>
+                      <p className="text-[11px] text-slate-400">Click below and sign in with your Microsoft work account. No password to copy, and it works even when your organisation blocks password sign-in.</p>
+                      <button
+                        type="button"
+                        disabled={msBusy || msConfigured === null}
+                        onClick={handleConnectMicrosoft}
+                        className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-white text-slate-900 text-xs font-semibold hover:bg-slate-100 disabled:opacity-60"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 21 21" aria-hidden="true"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+                        {msBusy ? "Opening Microsoft…" : "Sign in with Microsoft"}
+                      </button>
+                      <button type="button" onClick={() => setMsUsePassword(true)} className="block text-[10px] text-slate-500 hover:text-slate-300 underline">Use an app password instead</button>
+                    </>
+                  )
+                ) : (
+                  <button type="button" onClick={() => setMsUsePassword(false)} className="text-[11px] text-sky-300 hover:underline">← Use Sign in with Microsoft instead</button>
+                )}
+                {msNotice && (
+                  <div className={`text-[11px] ${msNotice.ok ? "text-emerald-300" : "text-rose-300"}`}>{msNotice.text}</div>
+                )}
+              </div>
+            )}
+
             {/* Verification Result Feedback */}
             {mailVerifyResult && (
               <div
@@ -1406,6 +1566,7 @@ export const SettingsView: React.FC = () => {
                   />
                 </div>
 
+                {!showMsCard && (
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1 flex items-center justify-between">
                     <span>Mailbox Password / App Password</span>
@@ -1428,6 +1589,7 @@ export const SettingsView: React.FC = () => {
                     </button>
                   </div>
                 </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>

@@ -11,6 +11,7 @@ import { simpleParser } from "mailparser";
 import { createClient } from "@supabase/supabase-js";
 import { registerIntegrationApi } from "./integrationApi";
 import { registerConnectApi } from "./connectApi";
+import { registerMailOAuth, resolveMailOAuth } from "./mailOAuth";
 
 dotenv.config();
 
@@ -141,6 +142,7 @@ app.use((req, res, next) => {
   if (req.path === "/api/cron/agent-scan") return next();
   if (req.path.startsWith("/api/connect/v1")) return next(); // Aargard Connect public API: authenticates itself with an agc_live_ key (connectApi.ts)
   if (req.path.startsWith("/api/aargard-integration/")) return next(); // Founder's Dashboard API: authenticates itself with a per-connection API key (integrationApi.ts)
+  if (req.path === "/api/mail-oauth/microsoft/callback") return next(); // Microsoft redirects the browser here; it authenticates itself with a signed state (mailOAuth.ts)
   if (req.path === "/api/whatsapp/webhook") return next(); // Meta calls this; it authenticates itself (verify token + HMAC signature)
   if (!req.path.startsWith("/api/")) return next();
   return requireAuth(req, res, next);
@@ -425,6 +427,7 @@ app.post("/api/team/accept", async (req: any, res) => {
 // Founder's Dashboard integration (machine API + admin endpoints)
 const integrationHooks = registerIntegrationApi(app, getServerSupabase);
 registerConnectApi(app, getServerSupabase, integrationHooks.emitSoon);
+registerMailOAuth(app, getServerSupabase);
 
 // Lazy Stripe client supporting per-user and per-tenant custom secret keys
 const customStripeClients = new Map<string, Stripe>();
@@ -4254,6 +4257,19 @@ app.post("/api/subscriptions/billing-portal", async (req, res) => {
 
 // Webmail & Hostinger Integration Endpoints
 
+// Microsoft-connected mailboxes send "oauthMailboxId" instead of a password;
+// the server swaps it for a fresh access token (mailOAuth.ts). Returns the
+// oauth identity, null for ordinary password mailboxes, or sends the error
+// response itself and returns undefined.
+async function mailOAuthOrFail(req: any, res: express.Response, failShape: (msg: string) => any): Promise<any> {
+  try {
+    return await resolveMailOAuth(req, getServerSupabase);
+  } catch (e: any) {
+    res.status(400).json(failShape(e.message || "Microsoft sign-in problem."));
+    return undefined;
+  }
+}
+
 // 1. Verify Webmail / Hostinger SMTP connection
 app.post("/api/webmail/verify", async (req, res) => {
   try {
@@ -4273,6 +4289,9 @@ app.post("/api/webmail/verify", async (req, res) => {
       });
     }
 
+    const oauth = await mailOAuthOrFail(req, res, (m) => ({ success: false, error: m }));
+    if (oauth === undefined) return;
+
     const port = Number(smtpPort) || (smtpEncryption === "STARTTLS" || smtpEncryption === "TLS" ? 587 : 465);
     const isSecure = port === 465;
 
@@ -4280,7 +4299,7 @@ app.post("/api/webmail/verify", async (req, res) => {
       host: smtpHost.trim(),
       port,
       secure: isSecure,
-      auth: password && password.trim() ? {
+      auth: oauth ? ({ type: "OAuth2", user: oauth.email, accessToken: oauth.accessToken } as any) : password && password.trim() ? {
         user: email.trim(),
         pass: password.trim(),
       } : undefined,
@@ -4402,6 +4421,9 @@ app.post("/api/webmail/send-test", async (req, res) => {
       return res.status(400).json({ success: false, error: "Email address and SMTP host are required." });
     }
 
+    const oauth = await mailOAuthOrFail(req, res, (m) => ({ success: false, error: m }));
+    if (oauth === undefined) return;
+
     const port = Number(smtpPort) || 465;
     const isSecure = port === 465;
 
@@ -4409,7 +4431,7 @@ app.post("/api/webmail/send-test", async (req, res) => {
       host: smtpHost.trim(),
       port,
       secure: isSecure,
-      auth: password && password.trim() ? {
+      auth: oauth ? ({ type: "OAuth2", user: oauth.email, accessToken: oauth.accessToken } as any) : password && password.trim() ? {
         user: email.trim(),
         pass: password.trim(),
       } : undefined,
@@ -4499,7 +4521,9 @@ app.post("/api/webmail/send-email", async (req, res) => {
     const toList = normalizedTo.valid;
 
     // Default to configured Hostinger/SMTP credentials or simulation if not yet populated
-    const senderEmail = email && email.trim() ? email.trim() : "billing@apexcrm.enterprise";
+    const oauth = await mailOAuthOrFail(req, res, (m) => ({ success: false, error: m }));
+    if (oauth === undefined) return;
+    const senderEmail = oauth ? oauth.email : email && email.trim() ? email.trim() : "billing@apexcrm.enterprise";
     const host = smtpHost && smtpHost.trim() ? smtpHost.trim() : "smtp.hostinger.com";
     const port = Number(smtpPort) || 465;
     const isSecure = port === 465;
@@ -4507,15 +4531,17 @@ app.post("/api/webmail/send-email", async (req, res) => {
     const formattedAttachments = formatNodemailerAttachments(attachments);
 
     // If real password and host are provided, dispatch via actual nodemailer SMTP
-    if (password && password.trim()) {
+    if (oauth || (password && password.trim())) {
       const transporter = nodemailer.createTransport({
         host,
         port,
         secure: isSecure,
-        auth: {
-          user: senderEmail,
-          pass: password.trim(),
-        },
+        auth: oauth
+          ? ({ type: "OAuth2", user: oauth.email, accessToken: oauth.accessToken } as any)
+          : {
+              user: senderEmail,
+              pass: password.trim(),
+            },
         tls: { rejectUnauthorized: false },
         connectionTimeout: 12000,
       });
@@ -4601,7 +4627,9 @@ app.post("/api/webmail/fetch-replies", async (req, res) => {
     : [];
   const checkedAt = new Date().toISOString();
   if (cleanAddresses.length === 0) return res.json({ replies: [], checked: 0, simulated: false, checkedAt });
-  if (!password || !String(password).trim() || !email || !String(email).trim() || !imapHost || !String(imapHost).trim()) {
+  const oauth = await mailOAuthOrFail(req, res, (m) => ({ replies: [], checked: cleanAddresses.length, simulated: true, checkedAt, message: m }));
+  if (oauth === undefined) return;
+  if (!oauth && (!password || !String(password).trim() || !email || !String(email).trim() || !imapHost || !String(imapHost).trim())) {
     return res.json({ replies: [], checked: cleanAddresses.length, simulated: true, checkedAt });
   }
 
@@ -4622,10 +4650,10 @@ app.post("/api/webmail/fetch-replies", async (req, res) => {
   let client: ImapFlow | null = null;
   try {
     client = new ImapFlow({
-      host: String(imapHost).trim(),
+      host: String(imapHost || "outlook.office365.com").trim(),
       port: Number(imapPort) || 993,
       secure: String(imapEncryption || "SSL").toUpperCase() !== "STARTTLS",
-      auth: { user: String(email).trim(), pass: String(password).trim() },
+      auth: oauth ? { user: oauth.email, accessToken: oauth.accessToken } : { user: String(email).trim(), pass: String(password).trim() },
       logger: false,
       tls: { rejectUnauthorized: false },
     });
@@ -4706,7 +4734,9 @@ app.post("/api/webmail/check-replies", async (req, res) => {
 
   // No real mailbox credentials configured yet -- can't check anything, but
   // this isn't an error, just "nothing to report" so the UI can say so.
-  if (!password || !password.trim() || !email || !email.trim() || !imapHost || !imapHost.trim()) {
+  const oauth = await mailOAuthOrFail(req, res, (m) => ({ repliedEmails: [], checked: cleanAddresses.length, simulated: true, checkedAt: new Date().toISOString(), message: m }));
+  if (oauth === undefined) return;
+  if (!oauth && (!password || !password.trim() || !email || !email.trim() || !imapHost || !imapHost.trim())) {
     return res.json({
       repliedEmails: [],
       checked: cleanAddresses.length,
@@ -4719,10 +4749,10 @@ app.post("/api/webmail/check-replies", async (req, res) => {
   let client: ImapFlow | null = null;
   try {
     client = new ImapFlow({
-      host: imapHost.trim(),
+      host: String(imapHost || "outlook.office365.com").trim(),
       port: Number(imapPort) || 993,
       secure: (imapEncryption || "SSL").toUpperCase() !== "STARTTLS",
-      auth: { user: email.trim(), pass: password.trim() },
+      auth: oauth ? { user: oauth.email, accessToken: oauth.accessToken } : { user: email.trim(), pass: password.trim() },
       logger: false,
       tls: { rejectUnauthorized: false },
     });

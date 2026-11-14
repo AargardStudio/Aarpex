@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Loader2, MessageSquareReply, Send, Copy, CheckCircle2, RefreshCw } from "lucide-react";
 import { useCRM } from "../../context/CRMContext";
 import { apiFetch } from "../../lib/apiClient";
-import { getMailboxById } from "../../lib/webmail";
+import { getMailboxById, mailAuthFields, mailboxHasCredentials } from "../../lib/webmail";
 import type { Lead } from "../../types";
 
 // Draft on demand: reads the lead's latest email reply from the connected
@@ -34,7 +34,7 @@ export const ReplyDraftPanel: React.FC<{ lead: Lead }> = ({ lead }) => {
   const [queued, setQueued] = useState(false);
 
   const mail = getMailboxById(activeTenant);
-  const hasMail = !!(mail?.email && mail?.password && mail?.imapHost);
+  const hasMail = !!(mail?.email && mailboxHasCredentials(mail) && mail?.imapHost);
 
   const loadLatest = async (): Promise<{ text: string; subject: string } | null> => {
     if (!hasMail || !lead.email) {
@@ -46,7 +46,7 @@ export const ReplyDraftPanel: React.FC<{ lead: Lead }> = ({ lead }) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email: mail.email,
-        password: mail.password,
+        ...mailAuthFields(mail),
         imapHost: mail.imapHost,
         imapPort: mail.imapPort,
         imapEncryption: mail.imapEncryption,
