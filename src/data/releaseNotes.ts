@@ -23,6 +23,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.19.1",
+    date: "2026-11-14",
+    headline: "Microsoft sign-in set up from inside AarPex",
+    tagline: "The platform owner configures the Microsoft app in Settings; no server changes needed.",
+    highlights: [
+      { title: "In-app setup", description: "Microsoft app credentials are saved encrypted from Settings, so workspaces can use Sign in with Microsoft right away." },
+    ],
+  },
+  {
     version: "2.19.0",
     date: "2026-11-14",
     headline: "Sign in with Microsoft for Microsoft 365 mailboxes",

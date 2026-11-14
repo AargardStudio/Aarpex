@@ -12,12 +12,14 @@ import type { Express, Request, Response } from "express";
 // Setup (one-time, by Aargard): register ONE multi-tenant app in Microsoft
 // Entra, add redirect URI  <APP_URL>/api/mail-oauth/microsoft/callback,
 // delegated permissions SMTP.Send + IMAP.AccessAsUser.All (Office 365
-// Exchange Online) + offline_access, create a client secret, then set
-// MS_OAUTH_CLIENT_ID and MS_OAUTH_CLIENT_SECRET on the server.
+// Exchange Online) + offline_access, create a client secret, then paste the
+// client ID + secret into Settings (founder account only). They are stored
+// encrypted in the platform_settings table -- no server env vars needed
+// (MS_OAUTH_CLIENT_ID / MS_OAUTH_CLIENT_SECRET still work as a fallback).
 
 const APP_URL = () => (process.env.PUBLIC_APP_URL || process.env.APP_URL || "https://aarpex.aarbook.com").replace(/\/+$/, "");
-const CLIENT_ID = () => (process.env.MS_OAUTH_CLIENT_ID || "").trim();
-const CLIENT_SECRET = () => (process.env.MS_OAUTH_CLIENT_SECRET || "").trim();
+const FOUNDER_EMAIL = "aargardglobal@gmail.com";
+type Creds = { id: string; secret: string };
 const REDIRECT_URI = () => `${APP_URL()}/api/mail-oauth/microsoft/callback`;
 const SCOPES = [
   "offline_access",
@@ -29,11 +31,10 @@ const SCOPES = [
 ];
 const AUTHORITY = "https://login.microsoftonline.com/common/oauth2/v2.0";
 
-export const microsoftOAuthConfigured = () => !!CLIENT_ID() && !!CLIENT_SECRET();
 
 // ---- token encryption ------------------------------------------------------
 function encKey(): Buffer {
-  const base = process.env.MAIL_OAUTH_ENC_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || CLIENT_SECRET();
+  const base = process.env.MAIL_OAUTH_ENC_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "aarpex-dev-only";
   return crypto.createHash("sha256").update(`aarpex-mail-oauth:${base}`).digest();
 }
 function encrypt(plain: string): string {
@@ -51,7 +52,7 @@ function decrypt(blob: string): string {
 
 // ---- signed state (CSRF + carries tenant/user/mailbox through the redirect) --
 function stateKey(): string {
-  return `${process.env.MAIL_OAUTH_ENC_KEY || ""}|${CLIENT_SECRET()}|${process.env.SUPABASE_SERVICE_ROLE_KEY || ""}`;
+  return `${process.env.MAIL_OAUTH_ENC_KEY || ""}|${process.env.SUPABASE_SERVICE_ROLE_KEY || "aarpex-dev-only"}`;
 }
 function signState(payload: object): string {
   const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
@@ -74,11 +75,32 @@ function readState(state: string): any | null {
   }
 }
 
-async function tokenRequest(params: Record<string, string>): Promise<any> {
+// Platform Microsoft app credentials: stored encrypted in platform_settings
+// (set from Settings by the founder account); env vars are only a fallback.
+let credCache: { at: number; creds: Creds | null } | null = null;
+async function getCreds(supabase: any): Promise<Creds | null> {
+  if (credCache && Date.now() - credCache.at < 30_000) return credCache.creds;
+  let creds: Creds | null = null;
+  try {
+    const { data } = await supabase.from("platform_settings").select("key,value_enc").in("key", ["ms_oauth_client_id", "ms_oauth_client_secret"]);
+    const m: Record<string, string> = {};
+    for (const r of data || []) m[r.key] = decrypt(r.value_enc);
+    if (m.ms_oauth_client_id && m.ms_oauth_client_secret) creds = { id: m.ms_oauth_client_id, secret: m.ms_oauth_client_secret };
+  } catch (e) {
+    console.error("[mail-oauth] couldn't read platform credentials:", e);
+  }
+  if (!creds && process.env.MS_OAUTH_CLIENT_ID && process.env.MS_OAUTH_CLIENT_SECRET) {
+    creds = { id: process.env.MS_OAUTH_CLIENT_ID.trim(), secret: process.env.MS_OAUTH_CLIENT_SECRET.trim() };
+  }
+  credCache = { at: Date.now(), creds };
+  return creds;
+}
+
+async function tokenRequest(creds: Creds, params: Record<string, string>): Promise<any> {
   const r = await fetch(`${AUTHORITY}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: CLIENT_ID(), client_secret: CLIENT_SECRET(), ...params }).toString(),
+    body: new URLSearchParams({ client_id: creds.id, client_secret: creds.secret, ...params }).toString(),
   });
   const data: any = await r.json().catch(() => ({}));
   if (!r.ok) {
@@ -124,15 +146,77 @@ export function registerMailOAuth(app: Express, getSupabase: () => any) {
     return supabase;
   }
 
-  app.get("/api/mail-oauth/microsoft/config", (_req, res) => {
-    res.json({ enabled: microsoftOAuthConfigured(), redirectUri: REDIRECT_URI() });
+  app.get("/api/mail-oauth/microsoft/config", async (_req, res) => {
+    const creds = await getCreds(getSupabase());
+    res.json({ enabled: !!creds, redirectUri: REDIRECT_URI() });
+  });
+
+  // Founder-only: view / set / clear the platform Microsoft app credentials.
+  async function requireFounder(req: any, res: Response) {
+    const supabase = getSupabase();
+    if (!supabase) {
+      res.status(503).json({ error: "Database not configured." });
+      return null;
+    }
+    const { data } = await supabase.auth.admin.getUserById(req.userId);
+    if (String(data?.user?.email || "").toLowerCase() !== FOUNDER_EMAIL) {
+      res.status(403).json({ error: "Only the platform owner can change Microsoft sign-in credentials." });
+      return null;
+    }
+    return supabase;
+  }
+
+  app.get("/api/mail-oauth/microsoft/platform-config", async (req: any, res) => {
+    const supabase = await requireFounder(req, res);
+    if (!supabase) return;
+    const creds = await getCreds(supabase);
+    const { data } = await supabase.from("platform_settings").select("updated_at").eq("key", "ms_oauth_client_secret").maybeSingle();
+    res.json({ configured: !!creds, clientIdHint: creds ? `…${creds.id.slice(-6)}` : "", updatedAt: data?.updated_at || null, redirectUri: REDIRECT_URI() });
+  });
+
+  app.put("/api/mail-oauth/microsoft/platform-config", async (req: any, res) => {
+    try {
+      const supabase = await requireFounder(req, res);
+      if (!supabase) return;
+      const clientId = String(req.body?.clientId || "").trim();
+      const clientSecret = String(req.body?.clientSecret || "").trim();
+      if (!/^[0-9a-fA-F-]{36}$/.test(clientId)) return res.status(400).json({ error: "Application (client) ID should look like 00000000-0000-0000-0000-000000000000." });
+      let secret = clientSecret;
+      if (!secret) {
+        const existing = await getCreds(supabase);
+        if (!existing) return res.status(400).json({ error: "Client secret is required." });
+        secret = existing.secret;
+      }
+      const now = new Date().toISOString();
+      const { error } = await supabase.from("platform_settings").upsert(
+        [
+          { key: "ms_oauth_client_id", value_enc: encrypt(clientId), updated_at: now, updated_by: req.userId },
+          { key: "ms_oauth_client_secret", value_enc: encrypt(secret), updated_at: now, updated_by: req.userId },
+        ],
+        { onConflict: "key" }
+      );
+      if (error) throw new Error(error.message);
+      credCache = null;
+      return res.json({ success: true });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || "Could not save." });
+    }
+  });
+
+  app.delete("/api/mail-oauth/microsoft/platform-config", async (req: any, res) => {
+    const supabase = await requireFounder(req, res);
+    if (!supabase) return;
+    await supabase.from("platform_settings").delete().in("key", ["ms_oauth_client_id", "ms_oauth_client_secret"]);
+    credCache = null;
+    res.json({ success: true });
   });
 
   // Step 1: the signed-in admin asks for the Microsoft sign-in URL.
   app.post("/api/mail-oauth/microsoft/start", async (req: any, res) => {
     try {
-      if (!microsoftOAuthConfigured()) {
-        return res.status(503).json({ error: "Microsoft sign-in isn't set up on this server yet (MS_OAUTH_CLIENT_ID / MS_OAUTH_CLIENT_SECRET)." });
+      const creds = await getCreds(getSupabase());
+      if (!creds) {
+        return res.status(503).json({ error: "Microsoft sign-in isn't set up for this platform yet. The platform owner needs to add the Microsoft app credentials in Settings." });
       }
       const { tenantId, mailboxId, loginHint } = req.body || {};
       if (!mailboxId || typeof mailboxId !== "string") return res.status(400).json({ error: "mailboxId is required." });
@@ -140,7 +224,7 @@ export function registerMailOAuth(app: Express, getSupabase: () => any) {
       if (!supabase) return;
       const state = signState({ t: tenantId, u: req.userId, m: mailboxId, n: crypto.randomBytes(8).toString("hex"), exp: Date.now() + 10 * 60 * 1000 });
       const url = new URL(`${AUTHORITY}/authorize`);
-      url.searchParams.set("client_id", CLIENT_ID());
+      url.searchParams.set("client_id", creds.id);
       url.searchParams.set("response_type", "code");
       url.searchParams.set("redirect_uri", REDIRECT_URI());
       url.searchParams.set("response_mode", "query");
@@ -171,7 +255,9 @@ export function registerMailOAuth(app: Express, getSupabase: () => any) {
         return back({ mailbox_oauth: "error", mailbox: st.m, message: String(error_description || error).split("\r\n")[0].slice(0, 300) });
       }
       if (!code) return back({ mailbox_oauth: "error", mailbox: st.m, message: "Microsoft did not return an authorisation code." });
-      const tokens = await tokenRequest({
+      const creds = await getCreds(getSupabase());
+      if (!creds) return back({ mailbox_oauth: "error", mailbox: st.m, message: "Microsoft sign-in isn't configured on this platform." });
+      const tokens = await tokenRequest(creds, {
         grant_type: "authorization_code",
         code: String(code),
         redirect_uri: REDIRECT_URI(),
@@ -233,10 +319,11 @@ export async function resolveMailOAuth(req: any, getSupabase: () => any): Promis
   if (!member) throw new Error("You are not a member of that workspace.");
   const { data: row } = await supabase.from("mail_oauth_connections").select("*").eq("tenant_id", tenantId).eq("mailbox_id", mailboxId).maybeSingle();
   if (!row) throw new Error("This mailbox isn't signed in to Microsoft yet. Open Settings and choose Sign in with Microsoft.");
-  if (!microsoftOAuthConfigured()) throw new Error("Microsoft sign-in isn't configured on this server.");
+  const creds = await getCreds(supabase);
+  if (!creds) throw new Error("Microsoft sign-in isn't configured on this platform.");
   let tokens: any;
   try {
-    tokens = await tokenRequest({ grant_type: "refresh_token", refresh_token: decrypt(row.refresh_token_enc), scope: SCOPES.join(" ") });
+    tokens = await tokenRequest(creds, { grant_type: "refresh_token", refresh_token: decrypt(row.refresh_token_enc), scope: SCOPES.join(" ") });
   } catch (err: any) {
     if (err.code === "invalid_grant") {
       throw new Error("Microsoft sign-in for this mailbox has expired or was revoked. Open Settings and sign in with Microsoft again.");

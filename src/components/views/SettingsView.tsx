@@ -288,6 +288,48 @@ export const SettingsView: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
+  // Platform owner only: the one Microsoft app all workspaces sign in through.
+  const isPlatformOwner = (currentUser?.email || "").trim().toLowerCase() === FOUNDER_EMAIL.toLowerCase();
+  const [msPlat, setMsPlat] = useState<{ configured: boolean; clientIdHint: string; redirectUri: string } | null>(null);
+  const [msPlatId, setMsPlatId] = useState("");
+  const [msPlatSecret, setMsPlatSecret] = useState("");
+  const [msPlatMsg, setMsPlatMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [msPlatBusy, setMsPlatBusy] = useState(false);
+  useEffect(() => {
+    if (!isPlatformOwner || activeTab !== "webmail" || msPlat) return;
+    (async () => {
+      try {
+        const r = await apiFetch("/api/mail-oauth/microsoft/platform-config");
+        if (r.ok) setMsPlat(await r.json());
+      } catch {
+        // owner card just stays hidden
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, isPlatformOwner]);
+  const saveMsPlatform = async () => {
+    setMsPlatBusy(true);
+    setMsPlatMsg(null);
+    try {
+      const r = await apiFetch("/api/mail-oauth/microsoft/platform-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId: msPlatId.trim(), clientSecret: msPlatSecret.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Couldn't save.");
+      setMsPlatMsg({ ok: true, text: "Saved. Workspaces can now use Sign in with Microsoft." });
+      setMsPlatSecret("");
+      setMsConfigured(true);
+      const r2 = await apiFetch("/api/mail-oauth/microsoft/platform-config");
+      if (r2.ok) setMsPlat(await r2.json());
+    } catch (e: any) {
+      setMsPlatMsg({ ok: false, text: e.message || "Couldn't save." });
+    } finally {
+      setMsPlatBusy(false);
+    }
+  };
+
   // Back from Microsoft: finish connecting the mailbox it was started for.
   const msReturnHandled = React.useRef(false);
   useEffect(() => {
@@ -1460,6 +1502,24 @@ export const SettingsView: React.FC = () => {
                 ))}
               </div>
             </div>
+
+            {/* Platform owner: Microsoft app credentials (one app for all workspaces) */}
+            {mailProvider === "outlook" && isPlatformOwner && (
+              <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-950/10 space-y-2.5">
+                <div className="text-white font-semibold text-xs">Platform owner: Microsoft app for Sign in with Microsoft</div>
+                <p className="text-[11px] text-slate-400">
+                  Register one multi-tenant app in Microsoft Entra and paste its details here. Stored encrypted; the secret is never shown again.
+                  {msPlat?.redirectUri && <> Redirect URI to register: <span className="font-mono text-slate-300 select-all">{msPlat.redirectUri}</span></>}
+                </p>
+                {msPlat?.configured && <div className="text-[11px] text-emerald-300">Configured (client ID {msPlat.clientIdHint}). Enter new values to replace.</div>}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input value={msPlatId} onChange={(e) => setMsPlatId(e.target.value)} placeholder="Application (client) ID" className="px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg text-xs font-mono focus:outline-none focus:border-teal-400" />
+                  <input type="password" value={msPlatSecret} onChange={(e) => setMsPlatSecret(e.target.value)} placeholder={msPlat?.configured ? "Client secret (leave blank to keep)" : "Client secret value"} className="px-3 py-2 bg-[#121418] border border-[#2d323f] text-white rounded-lg text-xs font-mono focus:outline-none focus:border-teal-400" />
+                </div>
+                <button type="button" disabled={msPlatBusy || !msPlatId.trim()} onClick={saveMsPlatform} className="px-3 py-1.5 rounded-lg bg-teal-500/20 border border-teal-500/40 text-teal-200 text-xs font-semibold disabled:opacity-50">{msPlatBusy ? "Saving…" : "Save Microsoft app"}</button>
+                {msPlatMsg && <div className={`text-[11px] ${msPlatMsg.ok ? "text-emerald-300" : "text-rose-300"}`}>{msPlatMsg.text}</div>}
+              </div>
+            )}
 
             {/* Microsoft 365 one-click sign-in */}
             {mailProvider === "outlook" && msConfigured !== false && (

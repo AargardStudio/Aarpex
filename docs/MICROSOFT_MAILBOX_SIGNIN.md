@@ -11,14 +11,10 @@ Lets a workspace connect a Microsoft 365 / Outlook mailbox with **Sign in with M
 2. API permissions -> Add -> **APIs my organization uses** -> *Office 365 Exchange Online* -> **Delegated**: `SMTP.Send`, `IMAP.AccessAsUser.All`. Also add Microsoft Graph delegated `offline_access`, `openid`, `email`, `profile`.
 3. Certificates & secrets -> New client secret. Copy the **value**.
 4. Branding & properties -> set a **Publisher domain** and complete **Publisher verification** (otherwise some customer tenants show "needs admin approval" instead of the normal consent screen).
-5. Set on Vercel (Production):
-   - `MS_OAUTH_CLIENT_ID` = Application (client) ID
-   - `MS_OAUTH_CLIENT_SECRET` = the secret value
-   - optional `MAIL_OAUTH_ENC_KEY` = long random string (token encryption key; defaults to a key derived from the service-role key)
-   - `APP_URL` / `PUBLIC_APP_URL` must be `https://aarpex.aarbook.com`
-6. Apply `supabase/migrations/0033_mail_oauth.sql`.
+5. In AarPex, sign in as the platform owner -> Settings -> Hostinger & Webmail -> choose **Microsoft 365**, and paste the Client ID and Client secret into the "Platform owner" card. They are stored encrypted in the database (`platform_settings`). **No Vercel/env changes are needed.**
+6. Apply migrations `0033_mail_oauth.sql` and `0034_platform_settings.sql` (already applied live).
 
-Until the two env vars are set the Settings page keeps showing the password form.
+Until the credentials are saved the Settings page keeps showing the password form.
 
 ## Per-client requirements
 
@@ -31,3 +27,5 @@ Until the two env vars are set the Settings page keeps showing the password form
 - `GET /api/mail-oauth/microsoft/callback` exchanges the code, stores the **refresh token encrypted (AES-256-GCM)** in `mail_oauth_connections` (server-only, RLS on, no policies) and redirects back to Settings.
 - Send / verify / reply-check routes receive `oauthMailboxId` instead of a password, swap it for a fresh access token, and use SMTP/IMAP XOAUTH2.
 - `POST /api/mail-oauth/microsoft/disconnect` deletes the stored token.
+
+(`MS_OAUTH_CLIENT_ID` / `MS_OAUTH_CLIENT_SECRET` env vars still work as an optional fallback.)

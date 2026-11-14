@@ -13,10 +13,15 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.19.1] - 2026-11-14
+
+### Changed
+- Microsoft sign-in app credentials are now entered once by the platform owner in Settings and stored encrypted in the database (`platform_settings`, migration 0034). No Vercel environment variables required.
+
 ## [2.19.0] - 2026-11-14
 
 ### Added
-- **Sign in with Microsoft** for Microsoft 365 / Outlook mailboxes (Settings > Hostinger & Webmail > Microsoft 365). Uses OAuth 2.0 (SMTP/IMAP XOAUTH2), so it works when the tenant blocks password SMTP (Security Defaults) and no password is stored. Refresh tokens are encrypted server-side (`mail_oauth_connections`, migration 0033). Needs `MS_OAUTH_CLIENT_ID` / `MS_OAUTH_CLIENT_SECRET`; see `docs/MICROSOFT_MAILBOX_SIGNIN.md`. Password mailboxes are unchanged.
+- **Sign in with Microsoft** for Microsoft 365 / Outlook mailboxes (Settings > Hostinger & Webmail > Microsoft 365). Uses OAuth 2.0 (SMTP/IMAP XOAUTH2), so it works when the tenant blocks password SMTP (Security Defaults) and no password is stored. Refresh tokens are encrypted server-side (`mail_oauth_connections`, migration 0033). The platform owner saves the one Microsoft app's client ID/secret in Settings (stored encrypted in `platform_settings`, migration 0034), so no server env vars are required; see `docs/MICROSOFT_MAILBOX_SIGNIN.md`. Password mailboxes are unchanged.
 
 ## [2.18.9] - 2026-11-05
 
