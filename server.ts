@@ -3518,7 +3518,7 @@ app.post("/api/stripe/create-invoice", async (req, res) => {
         const newCustomer = await stripe.customers.create({
           name: companyName || "Client Account",
           email: clientEmail || undefined,
-          description: `Apex CRM Client: ${companyName}`,
+          description: `AarPex Client: ${companyName}`,
           metadata: {
             crmCompany: companyName || "",
             crmInvoiceId: invoiceId || "",
@@ -3553,7 +3553,7 @@ app.post("/api/stripe/create-invoice", async (req, res) => {
       } else {
         await stripe.invoiceItems.create({
           customer: customerId,
-          description: `Apex CRM Invoice #${invoiceNumber}`,
+          description: `AarPex Invoice #${invoiceNumber}`,
           amount: Math.round(total * 100),
           currency: normalizedCurrency,
         });
@@ -3564,7 +3564,7 @@ app.post("/api/stripe/create-invoice", async (req, res) => {
         customer: customerId,
         collection_method: "send_invoice",
         days_until_due: daysUntilDue,
-        description: notes || `Invoice #${invoiceNumber} from Apex Technologies Inc.`,
+        description: notes || `Invoice #${invoiceNumber} from AarPex`,
         metadata: {
           crmInvoiceId: invoiceId || "",
           crmInvoiceNumber: invoiceNumber || "",
@@ -3634,7 +3634,7 @@ app.post("/api/stripe/create-payment-link", async (req, res) => {
             price_data: {
               currency: (currency || "usd").toLowerCase(),
               product_data: {
-                name: `Invoice #${invoiceNumber} - ${companyName || "Apex CRM"}`,
+                name: `Invoice #${invoiceNumber} - ${companyName || "AarPex"}`,
                 description: description || `Payment for Invoice #${invoiceNumber}`,
               },
               unit_amount: Math.round(amount * 100),
@@ -4446,12 +4446,12 @@ app.post("/api/webmail/send-test", async (req, res) => {
     const info = await transporter.sendMail({
       from: fromAddress,
       to: targetEmail,
-      subject: subject || "Apex CRM - Webmail Integration Test",
+      subject: subject || "AarPex - Webmail Integration Test",
       text: body || `This is an automated verification email sent from your CRM workspace via ${smtpHost}. Your mail configuration is active and working!`,
       attachments: formattedAttachments,
       html: `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 24px; color: #1e293b; background: #f8fafc; border-radius: 12px; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0;">
-          <h2 style="color: #0d9488; margin-top: 0; font-size: 20px;">Apex CRM Webmail Connected</h2>
+          <h2 style="color: #0d9488; margin-top: 0; font-size: 20px;">AarPex Webmail Connected</h2>
           <p style="font-size: 14px; line-height: 1.6; color: #334155;">Hello,</p>
           <p style="font-size: 14px; line-height: 1.6; color: #334155;">This email confirms that your outgoing mail server (<strong>${smtpHost}:${port}</strong>) is correctly connected and authenticated to your CRM workspace.</p>
           <div style="margin: 20px 0; padding: 12px 16px; background: #f1f5f9; border-radius: 8px; font-size: 13px; font-family: monospace;">
@@ -4462,7 +4462,7 @@ app.post("/api/webmail/send-test", async (req, res) => {
             Dispatched: ${new Date().toLocaleString()}
           </div>
           <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-          <p style="font-size: 12px; color: #64748b; margin-bottom: 0;">Sent via Apex CRM Multi-Tenant Webmail Integration</p>
+          <p style="font-size: 12px; color: #64748b; margin-bottom: 0;">Sent via AarPex Multi-Tenant Webmail Integration</p>
         </div>
       `,
     });

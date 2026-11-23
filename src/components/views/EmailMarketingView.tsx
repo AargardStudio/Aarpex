@@ -3,7 +3,8 @@ import { useCRM } from "../../context/CRMContext";
 import { EmailCampaign, EmailFrequency, EmailCampaignTechnique, EmailStep, EmailStepDeliveryResult, SalesTechnique, CampaignOptions } from "../../types";
 import { apiFetch } from "../../lib/apiClient";
 import { computeProductMatches } from "../../lib/productMatching";
-import { getMailboxById, mailboxLabel, mailAuthFields } from "../../lib/webmail";
+import { getMailboxById, mailboxLabel } from "../../lib/webmail";
+import { addDaysToToday, skipWeekend, mergeTags, sendCampaignEmail, Recipient } from "../../lib/campaignSend";
 import {
   Mail,
   Plus,
@@ -65,21 +66,6 @@ const TECHNIQUE_META: Record<
   },
 };
 
-function addDaysToToday(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().split("T")[0];
-}
-
-// Rolls a yyyy-mm-dd date forward off Saturday/Sunday to the next Monday.
-function skipWeekend(iso: string): string {
-  const d = new Date(`${iso}T12:00:00`);
-  const day = d.getDay();
-  if (day === 6) d.setDate(d.getDate() + 2);
-  else if (day === 0) d.setDate(d.getDate() + 1);
-  return d.toISOString().split("T")[0];
-}
-
 const TONES = ["Professional", "Friendly", "Direct & concise", "Formal", "Casual", "Persuasive", "Empathetic", "Confident", "Playful"];
 const LENGTHS: { id: NonNullable<CampaignOptions["length"]>; label: string; hint: string }[] = [
   { id: "Short", label: "Short", hint: "~50-80 words" },
@@ -97,77 +83,6 @@ const REWRITE_ACTIONS = [
   "Add urgency",
   "Simplify the language",
 ];
-
-function mergeTags(template: string, vars: { firstName: string; company: string; jobTitle: string }): string {
-  return (template || "")
-    .replace(/\{\{\s*firstName\s*\}\}/gi, vars.firstName || "there")
-    .replace(/\{\{\s*company\s*\}\}/gi, vars.company || "your company")
-    .replace(/\{\{\s*jobTitle\s*\}\}/gi, vars.jobTitle || "your role");
-}
-
-interface Recipient {
-  id: string;
-  email: string;
-  firstName: string;
-  company: string;
-  jobTitle: string;
-}
-
-// Sends one email and reports back what actually happened instead of
-// assuming success. /api/webmail/send-email only rejects on a genuine
-// network failure -- an SMTP/auth error still comes back as a normal 2xx-or-4xx
-// HTTP response, so we have to read res.ok + the JSON body's `success` flag,
-// not just catch().
-async function sendCampaignEmail(
-  mailCfg: ReturnType<typeof getMailboxById>,
-  currentUser: { email?: string; name?: string } | null | undefined,
-  activeTenant: { name?: string } | null | undefined,
-  recipient: Recipient,
-  subject: string,
-  body: string
-): Promise<EmailStepDeliveryResult> {
-  const sentAt = new Date().toISOString();
-  try {
-    const res = await apiFetch("/api/webmail/send-email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: mailCfg?.email || currentUser?.email,
-        displayName: mailCfg?.displayName || currentUser?.name || activeTenant?.name,
-        ...mailAuthFields(mailCfg),
-        smtpHost: mailCfg?.smtpHost || "smtp.hostinger.com",
-        smtpPort: mailCfg?.smtpPort || 465,
-        to: recipient.email,
-        subject,
-        body,
-      }),
-    });
-    let data: any = null;
-    try {
-      data = await res.json();
-    } catch {
-      // Non-JSON body -- fall through and treat as a failure below.
-    }
-    if (res.ok && data?.success) {
-      return { recipientId: recipient.id, email: recipient.email, success: true, messageId: data.messageId, sentAt };
-    }
-    return {
-      recipientId: recipient.id,
-      email: recipient.email,
-      success: false,
-      error: data?.error || `Server responded ${res.status} ${res.statusText}`.trim(),
-      sentAt,
-    };
-  } catch (err: any) {
-    return {
-      recipientId: recipient.id,
-      email: recipient.email,
-      success: false,
-      error: err?.message || "Network error -- request never reached the server",
-      sentAt,
-    };
-  }
-}
 
 // ----------------------------------------------------------------------------
 // Main View
@@ -1008,6 +923,21 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
               <label className="flex items-start gap-2.5 p-3 rounded-lg bg-[#121418] border border-[#2d323f] cursor-pointer">
                 <input
                   type="checkbox"
+                  checked={!!opts.sendOnLogin}
+                  onChange={(e) => setOpt({ sendOnLogin: e.target.checked })}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="block text-white font-semibold">Send due follow-ups when I sign in</span>
+                  <span className="block text-[11px] text-slate-400">
+                    If a follow-up comes due while nobody is signed in, AarPex sends it automatically the next time someone signs in (people who already replied are skipped). Emails are not sent while everyone is signed out.
+                  </span>
+                </span>
+              </label>
+
+              <label className="flex items-start gap-2.5 p-3 rounded-lg bg-[#121418] border border-[#2d323f] cursor-pointer">
+                <input
+                  type="checkbox"
                   checked={!!opts.skipWeekends}
                   onChange={(e) => setOpt({ skipWeekends: e.target.checked })}
                   className="mt-0.5"
@@ -1401,7 +1331,7 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                   <div><span className="text-slate-500">Campaign</span><div className="font-bold text-white">{name.trim() || `${audienceType} Campaign`}</div></div>
                   <div><span className="text-slate-500">Recipients</span><div className="font-bold text-white">{recipientCount} {audienceType.toLowerCase()}</div></div>
                   <div><span className="text-slate-500">Sending from</span><div className="font-bold text-white break-all">{mb?.email || "No mailbox set up"}</div></div>
-                  <div><span className="text-slate-500">Sequence</span><div className="font-bold text-white">{generatedSteps.length} email{generatedSteps.length === 1 ? "" : "s"}: first goes out now{generatedSteps.length > 1 ? `, then follow-ups every ${frequencyDays} day(s)${opts.skipWeekends ? " (weekdays only)" : ""}` : ""}</div></div>
+                  <div><span className="text-slate-500">Sequence</span><div className="font-bold text-white">{generatedSteps.length} email{generatedSteps.length === 1 ? "" : "s"}: first goes out now{generatedSteps.length > 1 ? `, then follow-ups every ${frequencyDays} day(s)${opts.skipWeekends ? " (weekdays only)" : ""}` : ""}{generatedSteps.length > 1 && opts.sendOnLogin ? "; due follow-ups send automatically when someone signs in" : ""}</div></div>
                 </div>
 
                 <div>
@@ -1650,6 +1580,7 @@ const CampaignDetailModal: React.FC<{ campaign: EmailCampaign; onClose: () => vo
   }, [campaign, leads, repliedIds]);
 
   const today = new Date().toISOString().split("T")[0];
+  const sendOnLogin = !!campaign.options?.sendOnLogin;
 
   // targetRecipients lets "Retry" re-send only to whoever previously failed,
   // instead of hitting everyone (including already-successful recipients)
@@ -1732,6 +1663,21 @@ const CampaignDetailModal: React.FC<{ campaign: EmailCampaign; onClose: () => vo
             </button>
           </div>
         </div>
+
+        <label className="px-6 py-2.5 border-b border-[#2d323f] bg-[#14171d] flex items-start gap-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={sendOnLogin}
+            onChange={(e) => updateEmailCampaign(campaign.id, { options: { ...(campaign.options || {}), sendOnLogin: e.target.checked } })}
+            className="mt-0.5"
+          />
+          <span>
+            <span className="block text-white font-semibold text-[11px]">Send due follow-ups when someone signs in</span>
+            <span className="block text-[10px] text-slate-400">
+              If a follow-up comes due while nobody is signed in, it goes out automatically the next time someone signs in. People who replied are skipped.
+            </span>
+          </span>
+        </label>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar">
           {campaign.steps.map((s) => {

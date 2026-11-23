@@ -621,6 +621,7 @@ export interface CampaignOptions {
   includePS?: boolean;
   useEmoji?: boolean;
   skipWeekends?: boolean; // follow-ups never fall on Sat/Sun
+  sendOnLogin?: boolean; // send due/overdue follow-ups automatically when someone signs in to AarPex
 }
 
 export interface EmailCampaign {

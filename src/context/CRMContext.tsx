@@ -40,6 +40,7 @@ import { LeadGroup,
 import { STORAGE_LIMITS_BYTES } from "../data/subscriptionPlans";
 import { isSupabaseAuthConfigured, getSupabaseAuthClient } from "../config/supabaseAuthClient";
 import { getMailboxById, mailAuthFields, mailboxHasCredentials } from "../lib/webmail";
+import { addDaysToToday, skipWeekend, mergeTags, sendCampaignEmail } from "../lib/campaignSend";
 import { fetchWhatsAppMessages, upsertWhatsAppMessages, phoneDigits, samePhone } from "../lib/whatsappStore";
 import {
   syncTenantTable,
@@ -2944,6 +2945,114 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // IMAP, using whatever webmail credentials are on the active tenant) for
   // any reply from this campaign's audience, and records who has replied so
   // the Email Marketing view can stop sending them further follow-ups.
+  // ---- Send due follow-ups on sign-in --------------------------------------
+  // Follow-ups are normally sent by a person from the browser. For campaigns
+  // with options.sendOnLogin, anything that came due (or went overdue) while
+  // nobody was signed in is sent once, right after the workspace loads. At
+  // most ONE step per campaign per sign-in, so a long absence never fires a
+  // burst of back-to-back follow-ups; later steps are pushed out so the
+  // normal spacing holds from today. Replied-to people are skipped, and
+  // campaigns whose mailbox has no credentials are left alone (nothing would
+  // really be sent).
+  const emailCampaignsRef = useRef(emailCampaigns);
+  emailCampaignsRef.current = emailCampaigns;
+  const loginFollowUpsRanFor = useRef<string>("");
+  const runDueFollowUpsOnLogin = async () => {
+    const today = new Date().toISOString().split("T")[0];
+    const candidates = emailCampaignsRef.current.filter((c) => c.status === "Active" && c.options?.sendOnLogin);
+    for (const c of candidates) {
+      try {
+        const mailCfg = getMailboxById(activeTenant, c.mailboxId);
+        if (!mailboxHasCredentials(mailCfg)) continue;
+        const ordered = [...c.steps].sort((a, b) => a.stepNumber - b.stepNumber);
+        const dueStep = ordered.find(
+          (s) =>
+            s.status === "Scheduled" &&
+            !!s.scheduledDate &&
+            s.scheduledDate <= today &&
+            ordered.filter((p) => p.stepNumber < s.stepNumber).every((p) => p.status === "Sent")
+        );
+        if (!dueStep) continue;
+
+        // Make sure nobody who already replied gets this follow-up.
+        await checkCampaignReplies(c.id).catch(() => {});
+        await new Promise((r) => setTimeout(r, 100));
+        const fresh = emailCampaignsRef.current.find((x) => x.id === c.id) || c;
+        if (fresh.status !== "Active") continue;
+        const stillDue = fresh.steps.find((s) => s.id === dueStep.id);
+        if (!stillDue || stillDue.status !== "Scheduled") continue; // someone sent it meanwhile
+
+        const replied = new Set(fresh.repliedAudienceIds || []);
+        const recipients = leads
+          .filter((l) => fresh.audienceIds.includes(l.id) && !replied.has(l.id) && l.email && l.email.trim())
+          .map((l) => ({
+            id: l.id,
+            email: l.email,
+            firstName: (l.name || "").split(" ")[0] || "there",
+            company: l.company || "your company",
+            jobTitle: (l as any).jobTitle || "your role",
+          }));
+        if (recipients.length === 0) continue;
+
+        const results = await Promise.all(
+          recipients.map((r) => sendCampaignEmail(mailCfg, currentUser, activeTenant, r, mergeTags(dueStep.subject, r), mergeTags(dueStep.body, r)))
+        );
+        const succeeded = results.filter((d) => d.success).length;
+        const failed = results.length - succeeded;
+
+        setEmailCampaigns((prev) =>
+          prev.map((camp) => {
+            if (camp.id !== c.id) return camp;
+            const sorted = [...camp.steps].sort((a, b) => a.stepNumber - b.stepNumber);
+            const nextSteps = camp.steps.map((s) => {
+              if (s.id === dueStep.id) {
+                return { ...s, status: succeeded > 0 ? ("Sent" as const) : ("Failed" as const), sentDate: today, deliveryResults: results };
+              }
+              return s;
+            });
+            // Push later scheduled steps out so spacing holds from today.
+            const rescheduled = nextSteps.map((s) => {
+              if (s.status !== "Scheduled" || s.stepNumber <= dueStep.stepNumber) return s;
+              const gap = sorted.filter((x) => x.stepNumber > dueStep.stepNumber && x.stepNumber <= s.stepNumber).reduce((sum, x) => sum + (x.delayDays || camp.frequencyDays), 0);
+              let target = addDaysToToday(gap);
+              if (camp.options?.skipWeekends) target = skipWeekend(target);
+              return { ...s, scheduledDate: s.scheduledDate && s.scheduledDate > target ? s.scheduledDate : target };
+            });
+            const allSent = rescheduled.every((s) => s.status === "Sent");
+            return { ...camp, steps: rescheduled, status: allSent ? ("Completed" as const) : camp.status };
+          })
+        );
+
+        addActivity({
+          type: "Email",
+          date: today,
+          time: new Date().toTimeString().slice(0, 5),
+          user: "System",
+          description:
+            failed === 0
+              ? `Auto-sent "${c.name}" follow-up ${dueStep.stepNumber - 1} on sign-in — delivered to all ${succeeded} recipient(s)`
+              : `Auto-sent "${c.name}" follow-up ${dueStep.stepNumber - 1} on sign-in — ${succeeded} delivered, ${failed} failed`,
+          outcome: failed === 0 ? "Delivered" : succeeded === 0 ? "Failed" : "Partially Delivered",
+          nextAction: failed > 0 ? "Open the campaign to retry failed sends" : "Next follow-up scheduled",
+        });
+      } catch (err) {
+        console.error("[CRMContext] send-on-sign-in failed for campaign", c.id, err);
+      }
+    }
+  };
+  useEffect(() => {
+    if (isHydratingTenantData || isBootstrapping || !activeTenantId) return;
+    if (!isSupabaseAuthConfigured()) return;
+    if (loginFollowUpsRanFor.current === activeTenantId) return;
+    const t = window.setTimeout(() => {
+      if (loginFollowUpsRanFor.current === activeTenantId) return;
+      loginFollowUpsRanFor.current = activeTenantId;
+      void runDueFollowUpsOnLogin();
+    }, 4000);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHydratingTenantData, isBootstrapping, activeTenantId]);
+
   const checkCampaignReplies = async (campaignId: string): Promise<void> => {
     const campaign = emailCampaigns.find((c) => c.id === campaignId);
     if (!campaign) return;

@@ -13,6 +13,14 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.20.0] - 2026-11-23
+
+### Added
+- **Send due follow-ups when someone signs in** (per campaign, off by default): in the campaign maker and in the campaign detail window. Follow-ups that came due while nobody was signed in are sent automatically a few seconds after the next sign-in. One step per campaign per sign-in; later steps are pushed out so spacing holds; people who replied are skipped; campaigns without a working mailbox are left alone. Not a background server job: nothing is sent while everyone is signed out.
+
+### Changed
+- Email and invoice text now says "AarPex" instead of "Apex" (test email, Stripe invoice descriptions).
+
 ## [2.19.1] - 2026-11-14
 
 ### Changed

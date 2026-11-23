@@ -23,6 +23,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.20.0",
+    date: "2026-11-23",
+    headline: "Follow-ups can send themselves when you sign in",
+    tagline: "Turn on one option per campaign and overdue follow-ups go out the next time someone signs in.",
+    highlights: [
+      { title: "Send on sign-in", description: "Due follow-ups that were missed while nobody was signed in are sent automatically at the next sign-in. People who replied are skipped." },
+      { title: "AarPex branding", description: "Emails and invoice text now say AarPex instead of Apex." },
+    ],
+  },
+  {
     version: "2.19.1",
     date: "2026-11-14",
     headline: "Microsoft sign-in set up from inside AarPex",
