@@ -23,6 +23,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.20.1",
+    date: "2026-11-23",
+    headline: "Send now and Retry failed on the Campaigns page",
+    tagline: "Catch up on a missed batch with one click.",
+    highlights: [
+      { title: "Send now", description: "Send any due or upcoming step to everyone still waiting for it, right from the campaign's sequence." },
+      { title: "Retry failed", description: "Re-send only the emails that failed, without touching the ones that were delivered." },
+    ],
+  },
+  {
     version: "2.20.0",
     date: "2026-11-23",
     headline: "Follow-ups can send themselves when you sign in",

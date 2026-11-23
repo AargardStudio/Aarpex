@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { ListOrdered, ArrowLeft, Search, CheckCircle2, XCircle, Clock, CalendarClock, FileText, Mail, MessageSquareReply, ChevronDown, ChevronRight } from "lucide-react";
+import { Send, RotateCcw, ListOrdered, ArrowLeft, Search, CheckCircle2, XCircle, Clock, CalendarClock, FileText, Mail, MessageSquareReply, ChevronDown, ChevronRight } from "lucide-react";
 import { useCRM } from "../../context/CRMContext";
 import { getMailboxById } from "../../lib/webmail";
 import type { EmailCampaign, EmailStep } from "../../types";
@@ -68,11 +68,33 @@ const counts = (c: EmailCampaign) => {
 };
 
 export const CampaignSequencesView: React.FC = () => {
-  const { emailCampaigns, leads, activeTenant, setActiveNav } = useCRM() as any;
+  const { emailCampaigns, leads, activeTenant, setActiveNav, sendCampaignStep } = useCRM() as any;
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<string>("All");
   const [openId, setOpenId] = useState<string | null>(null);
   const [openStep, setOpenStep] = useState<string | null>(null);
+  const [busyStep, setBusyStep] = useState<string | null>(null);
+  const [stepMsg, setStepMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
+
+  const runSend = async (c: EmailCampaign, st: EmailStep, count: number, onlyFailed: boolean) => {
+    const what = onlyFailed ? `Retry ${count} failed email${count === 1 ? "" : "s"}` : `Send "${st.subject}" to ${count} recipient${count === 1 ? "" : "s"} now`;
+    if (!window.confirm(`${what}? This sends real emails from the campaign's mailbox.`)) return;
+    setBusyStep(st.id);
+    setStepMsg((m) => ({ ...m, [st.id]: { ok: true, text: "Sending…" } }));
+    try {
+      const r = await sendCampaignStep(c.id, st.id, { onlyFailed });
+      setStepMsg((m) => ({
+        ...m,
+        [st.id]: r.ok || r.sent > 0
+          ? { ok: r.failed === 0, text: r.failed === 0 ? `Sent to ${r.sent} recipient${r.sent === 1 ? "" : "s"}.` : `${r.sent} sent, ${r.failed} failed. You can retry the failed ones.` }
+          : { ok: false, text: r.message || (r.failed ? `All ${r.failed} sends failed. Check the mailbox in Settings.` : "Nothing was sent.") },
+      }));
+    } catch (e: any) {
+      setStepMsg((m) => ({ ...m, [st.id]: { ok: false, text: e?.message || "Sending failed." } }));
+    } finally {
+      setBusyStep(null);
+    }
+  };
 
   const campaigns: EmailCampaign[] = emailCampaigns || [];
   const list = useMemo(() => {
@@ -129,6 +151,12 @@ export const CampaignSequencesView: React.FC = () => {
             const expanded = openStep === st.id;
             const Icon = state === "Sent" ? CheckCircle2 : state === "Failed" ? XCircle : state === "Due" ? CalendarClock : state === "Draft" ? FileText : Clock;
             const waiting = state === "Scheduled" || state === "Due" ? audienceWaiting(campaign, st, replied) : 0;
+            const pending = audienceWaiting(campaign, st, replied);
+            const failedCount = res.filter((r) => !r.success && !replied.has(r.recipientId)).length;
+            const prevSent = steps.filter((p) => p.stepNumber < st.stepNumber).every((p) => p.status === "Sent");
+            const canSend = (state === "Due" || state === "Scheduled" || state === "Draft" || (state === "Failed" && res.length === 0)) && pending > 0;
+            const canRetry = (state === "Partial" || state === "Failed") && failedCount > 0;
+            const blockedReason = campaign.status === "Paused" ? "Resume the campaign to send." : !prevSent ? "Send the earlier steps first." : "";
             return (
               <div key={st.id} className="relative mb-4">
                 <span className="absolute -left-6 top-3 w-[22px] h-[22px] rounded-full bg-[#11141c] border border-[#3d4455] flex items-center justify-center">
@@ -153,6 +181,32 @@ export const CampaignSequencesView: React.FC = () => {
                       </div>
                     </div>
                   </button>
+                  {(canSend || canRetry || stepMsg[st.id]) && (
+                    <div className="px-4 pb-3 -mt-1 flex flex-wrap items-center gap-3">
+                      {canSend && (
+                        <button
+                          disabled={!!blockedReason || busyStep === st.id}
+                          title={blockedReason || undefined}
+                          onClick={() => runSend(campaign, st, pending, false)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-50 ${state === "Due" ? "bg-teal-600 hover:bg-teal-500 text-white" : "bg-[#252a36] hover:bg-[#2f3544] text-slate-200 border border-[#3d4455]"}`}
+                        >
+                          <Send className="w-3.5 h-3.5" /> {busyStep === st.id ? "Sending…" : `Send now · ${pending}`}
+                        </button>
+                      )}
+                      {canRetry && (
+                        <button
+                          disabled={!!blockedReason || busyStep === st.id}
+                          title={blockedReason || undefined}
+                          onClick={() => runSend(campaign, st, failedCount, true)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" /> {busyStep === st.id ? "Sending…" : `Retry failed · ${failedCount}`}
+                        </button>
+                      )}
+                      {blockedReason && (canSend || canRetry) && <span className="text-[11px] text-slate-500">{blockedReason}</span>}
+                      {stepMsg[st.id] && <span className={`text-[11px] ${stepMsg[st.id].ok ? "text-emerald-300" : "text-rose-300"}`}>{stepMsg[st.id].text}</span>}
+                    </div>
+                  )}
                   {expanded && (
                     <div className="border-t border-[#2f3547] p-4 space-y-4">
                       <div>
@@ -206,7 +260,7 @@ export const CampaignSequencesView: React.FC = () => {
           {steps.length === 0 && <div className="text-sm text-slate-500">This campaign has no steps yet.</div>}
         </div>
         <p className="text-xs text-slate-500">
-          Follow-ups are sent when you open the campaign in Email Marketing and send them; they are not sent automatically in the background.
+          Use Send now on any step. Follow-ups are not sent in the background while everyone is signed out; turn on "Send due follow-ups when someone signs in" in the campaign's settings to send missed ones at the next sign-in.
           {setActiveNav && (
             <button className="ml-2 text-teal-300 hover:underline" onClick={() => setActiveNav("Email Marketing")}>Open Email Marketing</button>
           )}

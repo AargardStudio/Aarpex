@@ -13,6 +13,11 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.20.1] - 2026-11-23
+
+### Added
+- Campaigns page: **Send now** on every unsent step (initial email or follow-up, including ones that are due or overdue) and **Retry failed** on steps where some emails failed. Skips people who already replied or already received the step, asks for confirmation first, and keeps later follow-ups spaced from the day you send.
+
 ## [2.20.0] - 2026-11-23
 
 ### Added

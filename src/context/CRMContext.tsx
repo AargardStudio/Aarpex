@@ -297,6 +297,7 @@ interface CRMContextType {
   updateEmailCampaign: (id: string, updates: Partial<EmailCampaign>) => void;
   deleteEmailCampaign: (id: string) => void;
   checkCampaignReplies: (campaignId: string) => Promise<void>;
+  sendCampaignStep: (campaignId: string, stepId: string, opts?: { onlyFailed?: boolean }) => Promise<{ ok: boolean; sent: number; failed: number; message?: string }>;
 
   // Products / Services -- the versatile catalog (retainers, subscriptions,
   // packages, B2B products), settable up manually or drafted by AI.
@@ -2957,13 +2958,96 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const emailCampaignsRef = useRef(emailCampaigns);
   emailCampaignsRef.current = emailCampaigns;
   const loginFollowUpsRanFor = useRef<string>("");
+  // Sends one step of a campaign right now. Used by the Campaigns page
+  // ("Send now" / "Retry failed") and by the sign-in runner. Recipients who
+  // already replied, or already received this step, are skipped; with
+  // onlyFailed it re-sends just the ones whose last attempt failed.
+  const sendCampaignStep = async (
+    campaignId: string,
+    stepId: string,
+    opts?: { onlyFailed?: boolean; auto?: boolean }
+  ): Promise<{ ok: boolean; sent: number; failed: number; message?: string }> => {
+    const camp = emailCampaignsRef.current.find((x) => x.id === campaignId);
+    if (!camp) return { ok: false, sent: 0, failed: 0, message: "Campaign not found." };
+    const step = camp.steps.find((x) => x.id === stepId);
+    if (!step) return { ok: false, sent: 0, failed: 0, message: "Step not found." };
+    const mailCfg = getMailboxById(activeTenant, camp.mailboxId);
+    if (!mailboxHasCredentials(mailCfg)) {
+      return { ok: false, sent: 0, failed: 0, message: "This campaign's mailbox isn't connected. Connect it in Settings first." };
+    }
+    const prior = step.deliveryResults || [];
+    const replied = new Set(camp.repliedAudienceIds || []);
+    const alreadyDelivered = new Set(prior.filter((r) => r.success).map((r) => r.recipientId));
+    const failedBefore = new Set(prior.filter((r) => !r.success).map((r) => r.recipientId));
+    const recipients = leads
+      .filter((l) => camp.audienceIds.includes(l.id) && !replied.has(l.id) && l.email && l.email.trim())
+      .filter((l) => !alreadyDelivered.has(l.id))
+      .filter((l) => (opts?.onlyFailed ? failedBefore.has(l.id) : true))
+      .map((l) => ({
+        id: l.id,
+        email: l.email,
+        firstName: (l.name || "").split(" ")[0] || "there",
+        company: l.company || "your company",
+        jobTitle: (l as any).jobTitle || "your role",
+      }));
+    if (recipients.length === 0) return { ok: false, sent: 0, failed: 0, message: "No one is waiting for this email." };
+
+    const results = await Promise.all(
+      recipients.map((r) => sendCampaignEmail(mailCfg, currentUser, activeTenant, r, mergeTags(step.subject, r), mergeTags(step.body, r)))
+    );
+    const succeeded = results.filter((d) => d.success).length;
+    const failed = results.length - succeeded;
+    const today = new Date().toISOString().split("T")[0];
+    const firstSend = step.status !== "Sent";
+
+    setEmailCampaigns((prevAll) =>
+      prevAll.map((c) => {
+        if (c.id !== campaignId) return c;
+        const sorted = [...c.steps].sort((a, b) => a.stepNumber - b.stepNumber);
+        const merged = [...(c.steps.find((x) => x.id === stepId)?.deliveryResults || []).filter((r) => !results.some((n) => n.recipientId === r.recipientId)), ...results];
+        const overall = merged.filter((d) => d.success).length;
+        const withStep = c.steps.map((x) =>
+          x.id === stepId ? { ...x, status: overall > 0 ? ("Sent" as const) : ("Failed" as const), sentDate: today, deliveryResults: merged } : x
+        );
+        // Sent late or early: keep the normal spacing for the steps after it.
+        const rescheduled =
+          firstSend && overall > 0
+            ? withStep.map((x) => {
+                if (x.status !== "Scheduled" || x.stepNumber <= step.stepNumber) return x;
+                const gap = sorted
+                  .filter((y) => y.stepNumber > step.stepNumber && y.stepNumber <= x.stepNumber)
+                  .reduce((sum, y) => sum + (y.delayDays || c.frequencyDays), 0);
+                let target = addDaysToToday(gap);
+                if (c.options?.skipWeekends) target = skipWeekend(target);
+                return { ...x, scheduledDate: target };
+              })
+            : withStep;
+        const allSent = rescheduled.every((x) => x.status === "Sent");
+        return { ...c, steps: rescheduled, status: allSent ? ("Completed" as const) : c.status === "Draft" ? ("Active" as const) : c.status };
+      })
+    );
+
+    const label = step.stepNumber === 1 ? "initial email" : `follow-up ${step.stepNumber - 1}`;
+    addActivity({
+      type: "Email",
+      date: today,
+      time: new Date().toTimeString().slice(0, 5),
+      user: opts?.auto ? "System" : currentUser?.name || "System",
+      description:
+        `${opts?.auto ? "Auto-sent on sign-in" : opts?.onlyFailed ? "Retried" : "Sent now"}: "${camp.name}" ${label} — ` +
+        (failed === 0 ? `delivered to all ${succeeded} recipient(s)` : `${succeeded} delivered, ${failed} failed`),
+      outcome: failed === 0 ? "Delivered" : succeeded === 0 ? "Failed" : "Partially Delivered",
+      nextAction: failed > 0 ? "Retry the failed sends from the Campaigns page" : "Next follow-up scheduled",
+    });
+    return { ok: succeeded > 0, sent: succeeded, failed };
+  };
+
   const runDueFollowUpsOnLogin = async () => {
     const today = new Date().toISOString().split("T")[0];
     const candidates = emailCampaignsRef.current.filter((c) => c.status === "Active" && c.options?.sendOnLogin);
     for (const c of candidates) {
       try {
-        const mailCfg = getMailboxById(activeTenant, c.mailboxId);
-        if (!mailboxHasCredentials(mailCfg)) continue;
+        if (!mailboxHasCredentials(getMailboxById(activeTenant, c.mailboxId))) continue;
         const ordered = [...c.steps].sort((a, b) => a.stepNumber - b.stepNumber);
         const dueStep = ordered.find(
           (s) =>
@@ -2973,7 +3057,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ordered.filter((p) => p.stepNumber < s.stepNumber).every((p) => p.status === "Sent")
         );
         if (!dueStep) continue;
-
         // Make sure nobody who already replied gets this follow-up.
         await checkCampaignReplies(c.id).catch(() => {});
         await new Promise((r) => setTimeout(r, 100));
@@ -2981,60 +3064,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (fresh.status !== "Active") continue;
         const stillDue = fresh.steps.find((s) => s.id === dueStep.id);
         if (!stillDue || stillDue.status !== "Scheduled") continue; // someone sent it meanwhile
-
-        const replied = new Set(fresh.repliedAudienceIds || []);
-        const recipients = leads
-          .filter((l) => fresh.audienceIds.includes(l.id) && !replied.has(l.id) && l.email && l.email.trim())
-          .map((l) => ({
-            id: l.id,
-            email: l.email,
-            firstName: (l.name || "").split(" ")[0] || "there",
-            company: l.company || "your company",
-            jobTitle: (l as any).jobTitle || "your role",
-          }));
-        if (recipients.length === 0) continue;
-
-        const results = await Promise.all(
-          recipients.map((r) => sendCampaignEmail(mailCfg, currentUser, activeTenant, r, mergeTags(dueStep.subject, r), mergeTags(dueStep.body, r)))
-        );
-        const succeeded = results.filter((d) => d.success).length;
-        const failed = results.length - succeeded;
-
-        setEmailCampaigns((prev) =>
-          prev.map((camp) => {
-            if (camp.id !== c.id) return camp;
-            const sorted = [...camp.steps].sort((a, b) => a.stepNumber - b.stepNumber);
-            const nextSteps = camp.steps.map((s) => {
-              if (s.id === dueStep.id) {
-                return { ...s, status: succeeded > 0 ? ("Sent" as const) : ("Failed" as const), sentDate: today, deliveryResults: results };
-              }
-              return s;
-            });
-            // Push later scheduled steps out so spacing holds from today.
-            const rescheduled = nextSteps.map((s) => {
-              if (s.status !== "Scheduled" || s.stepNumber <= dueStep.stepNumber) return s;
-              const gap = sorted.filter((x) => x.stepNumber > dueStep.stepNumber && x.stepNumber <= s.stepNumber).reduce((sum, x) => sum + (x.delayDays || camp.frequencyDays), 0);
-              let target = addDaysToToday(gap);
-              if (camp.options?.skipWeekends) target = skipWeekend(target);
-              return { ...s, scheduledDate: s.scheduledDate && s.scheduledDate > target ? s.scheduledDate : target };
-            });
-            const allSent = rescheduled.every((s) => s.status === "Sent");
-            return { ...camp, steps: rescheduled, status: allSent ? ("Completed" as const) : camp.status };
-          })
-        );
-
-        addActivity({
-          type: "Email",
-          date: today,
-          time: new Date().toTimeString().slice(0, 5),
-          user: "System",
-          description:
-            failed === 0
-              ? `Auto-sent "${c.name}" follow-up ${dueStep.stepNumber - 1} on sign-in — delivered to all ${succeeded} recipient(s)`
-              : `Auto-sent "${c.name}" follow-up ${dueStep.stepNumber - 1} on sign-in — ${succeeded} delivered, ${failed} failed`,
-          outcome: failed === 0 ? "Delivered" : succeeded === 0 ? "Failed" : "Partially Delivered",
-          nextAction: failed > 0 ? "Open the campaign to retry failed sends" : "Next follow-up scheduled",
-        });
+        await sendCampaignStep(c.id, dueStep.id, { auto: true });
       } catch (err) {
         console.error("[CRMContext] send-on-sign-in failed for campaign", c.id, err);
       }
@@ -4583,6 +4613,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateEmailCampaign,
         deleteEmailCampaign,
         checkCampaignReplies,
+        sendCampaignStep,
 
         addProduct,
         updateProduct,
