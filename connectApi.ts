@@ -23,10 +23,11 @@
 import crypto from "crypto";
 import type express from "express";
 import { ENTITIES, pub, sha256, token, newId, nowIso, type EntityDef } from "./integrationApi";
+import { EXT_SCOPES, registerConnectExt } from "./connectExt";
 
 const BASE = "/api/connect/v1";
 const ADMIN = "/api/connect-admin";
-const API_VERSION = "1.0.0";
+const API_VERSION = "1.1.0";
 const KEY_PREFIX = "agc_live_";
 const RATE_PER_MIN = Math.max(10, Number(process.env.CONNECT_RATE_PER_MIN) || 60);
 const MAX_ACTIVE_KEYS = Math.max(1, Number(process.env.CONNECT_MAX_KEYS) || 10);
@@ -54,6 +55,7 @@ export const CONNECT_SCOPES: { scope: string; label: string; description: string
   { scope: `${r.key}:read`, label: `Read ${r.title.toLowerCase()}`, description: `List and view ${r.title.toLowerCase()}.` },
   { scope: `${r.key}:write`, label: `Change ${r.title.toLowerCase()}`, description: `Create, edit and delete ${r.title.toLowerCase()}. Deleting also needs { "confirm": true }.` },
 ]);
+CONNECT_SCOPES.push(...EXT_SCOPES);
 const SCOPE_SET = new Set(CONNECT_SCOPES.map((s) => s.scope));
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -119,7 +121,16 @@ export function registerConnectApi(
         if (key.expires_at && new Date(key.expires_at).getTime() <= Date.now()) return fail(req, res, 401, "key_expired", "This API key has expired. Create or rotate a key in AarPex.");
         const asked = String(req.headers["x-business-id"] || "");
         if (asked && asked !== key.tenant_id) return fail(req, res, 403, "forbidden", "This key is not scoped to that business.");
-        const r = rate(key.id);
+        let r = rate(key.id); // in-memory fallback
+        try {
+          const { data: hitsNow, error: rlErr } = await db().rpc("connect_rate_hit", { p_key: key.id });
+          if (!rlErr && typeof hitsNow === "number") {
+            const resetIn = 60 - (Math.floor(Date.now() / 1000) % 60);
+            r = { limited: hitsNow > RATE_PER_MIN, remaining: Math.max(0, RATE_PER_MIN - hitsNow), resetIn };
+          }
+        } catch {
+          /* keep the in-memory result */
+        }
         res.setHeader("X-RateLimit-Limit", String(RATE_PER_MIN));
         res.setHeader("X-RateLimit-Remaining", String(r.remaining));
         res.setHeader("X-RateLimit-Reset", String(r.resetIn));
@@ -243,6 +254,10 @@ export function registerConnectApi(
     for (const k of def.writable) if (body[k] !== undefined) out[k] = body[k];
     return out;
   }
+
+  // Campaigns, bulk import/export, summary and the MCP server. Registered
+  // before the generic /:id routes so /leads/import and /leads/export win.
+  registerConnectExt({ app, BASE, db, guard, wrap, fail, audit, emitSoon });
 
   for (const r of RESOURCES) {
     const def = ENTITIES[r.key];

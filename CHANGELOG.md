@@ -13,6 +13,17 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.21.0] - 2026-11-25
+
+### Added
+- Aargard Connect API 1.1: campaigns (list, get, create as draft, edit draft, pause, resume, archive, delete, per-step results), bulk lead import (JSON or CSV, up to 1,000 rows per call, dry-run preview, dedupe by email, `mailto:` cleanup, Idempotency-Key), lead export (JSON or CSV, cursor paging) and a workspace summary. New scopes: `campaigns:read`, `campaigns:write`, `campaigns:delete`, `leads:import`, `leads:export`.
+- Hosted MCP server at `/api/mcp` (Streamable HTTP, stateless) using the same `agc_live_` workspace key. Manage and read only: it never sends email.
+- Settings > API shows the MCP URL and the new permissions when creating a key.
+
+### Changed
+- API rate limiting is now stored in the database (migration 0035) so it holds across serverless instances; it falls back to per-instance counting until the migration is applied.
+- Open browser tabs now also refresh campaigns after an API change, so a stale tab cannot overwrite them.
+
 ## [2.20.2] - 2026-11-25
 
 ### Fixed

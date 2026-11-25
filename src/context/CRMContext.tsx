@@ -827,16 +827,17 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return;
         }
         if (v === lastSeen) return;
-        const [l, d, p, t, a, g] = await Promise.all([
+        const [l, d, p, t, a, g, ec] = await Promise.all([
           fetchTenantTable<Lead>("leads", activeTenantId),
           fetchTenantTable<Deal>("deals", activeTenantId),
           fetchTenantTable<Pipeline>("pipelines", activeTenantId),
           fetchTenantTable<Task>("tasks", activeTenantId),
           fetchTenantTable<Activity>("activities", activeTenantId),
           fetchTenantTable<LeadGroup>("lead_groups", activeTenantId),
+          fetchTenantTable<EmailCampaign>("email_campaigns", activeTenantId),
         ]);
         // Don't clobber anything the user typed while we were fetching.
-        if (cancelled || hasPendingSyncs() || !l || !d || !p || !t || !a || !g) return;
+        if (cancelled || hasPendingSyncs() || !l || !d || !p || !t || !a || !g || !ec) return;
         lastSeen = v;
         setLeads(l);
         setDeals(d);
@@ -844,6 +845,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setTasks(t);
         setActivities(a);
         setLeadGroups(g);
+        setEmailCampaigns(ec);
       } catch {
         /* try again next tick */
       }

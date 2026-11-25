@@ -140,6 +140,7 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
 app.use((req, res, next) => {
   if (req.path === "/api/health") return next();
   if (req.path === "/api/cron/agent-scan") return next();
+  if (req.path === "/api/mcp") return next(); // hosted MCP server: authenticates itself with the same agc_live_ key (connectExt.ts)
   if (req.path.startsWith("/api/connect/v1")) return next(); // Aargard Connect public API: authenticates itself with an agc_live_ key (connectApi.ts)
   if (req.path.startsWith("/api/aargard-integration/")) return next(); // Founder's Dashboard API: authenticates itself with a per-connection API key (integrationApi.ts)
   if (req.path === "/api/mail-oauth/microsoft/callback") return next(); // Microsoft redirects the browser here; it authenticates itself with a signed state (mailOAuth.ts)

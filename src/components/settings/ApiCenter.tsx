@@ -144,6 +144,9 @@ export const ApiCenter: React.FC = () => {
   const maxReq = Math.max(1, ...days.map((d) => ov!.usage_30d.by_day[d].requests));
   const errRate = ov && ov.usage_30d.requests ? Math.round((ov.usage_30d.errors / ov.usage_30d.requests) * 1000) / 10 : 0;
   const baseUrl = ov?.base_url || `${window.location.origin}/api/connect/v1`;
+  const mcpUrl = baseUrl.replace(/\/api\/connect\/v1\/?$/, "") + "/api/mcp";
+  const EXTRA_READ = ["campaigns:read", "leads:export"];
+  const EXTRA_ALL = ["campaigns:read", "campaigns:write", "leads:import", "leads:export"]; // delete stays opt-in
 
   const TabBtn: React.FC<{ id: Tab; icon: React.ReactNode; label: string }> = ({ id, icon, label }) => (
     <button
@@ -219,6 +222,12 @@ export const ApiCenter: React.FC = () => {
               <code className="flex-1 break-all text-teal-300">{baseUrl}</code>
               <CopyBtn text={baseUrl} />
             </div>
+            <div className="text-slate-400 pt-1">MCP connector URL (for Claude and other MCP clients)</div>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 break-all text-teal-300">{mcpUrl}</code>
+              <CopyBtn text={mcpUrl} />
+            </div>
+            <div className="text-slate-500">Authenticate with an API key below as a Bearer token. Manage and read only: nothing is ever emailed through the API or MCP.</div>
             <div className="text-slate-500">Version {ov?.api_version}. Limit: {ov?.rate_limit_per_minute} requests per minute per key.</div>
           </div>
 
@@ -307,8 +316,8 @@ export const ApiCenter: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">2. What can it do?</span>
                   <span className="flex gap-1.5">
-                    <button type="button" onClick={() => setForm({ ...form, scopes: grouped.map(([, g]) => g.read) })} className="px-2 py-0.5 rounded bg-[#252a36] hover:bg-[#2f3544]">Read only</button>
-                    <button type="button" onClick={() => setForm({ ...form, scopes: grouped.flatMap(([, g]) => [g.read, g.write]) })} className="px-2 py-0.5 rounded bg-[#252a36] hover:bg-[#2f3544]">Everything</button>
+                    <button type="button" onClick={() => setForm({ ...form, scopes: [...grouped.map(([, g]) => g.read), ...EXTRA_READ] })} className="px-2 py-0.5 rounded bg-[#252a36] hover:bg-[#2f3544]">Read only</button>
+                    <button type="button" onClick={() => setForm({ ...form, scopes: [...grouped.flatMap(([, g]) => [g.read, g.write]), ...EXTRA_ALL] })} className="px-2 py-0.5 rounded bg-[#252a36] hover:bg-[#2f3544]">Everything</button>
                     <button type="button" onClick={() => setForm({ ...form, scopes: [] })} className="px-2 py-0.5 rounded bg-[#252a36] hover:bg-[#2f3544]">Clear</button>
                   </span>
                 </div>
@@ -325,6 +334,15 @@ export const ApiCenter: React.FC = () => {
                         </label>
                       </span>
                     </div>
+                  ))}
+                  {(ov?.scopes || []).filter((c) => ["campaigns:read", "campaigns:write", "campaigns:delete", "leads:import", "leads:export"].includes(c.scope)).map((c) => (
+                    <label key={c.scope} className="flex items-start gap-2 px-2.5 py-2" title={c.description}>
+                      <input type="checkbox" className="mt-0.5" checked={form.scopes.includes(c.scope)} onChange={() => toggleScope(c.scope)} />
+                      <span>
+                        <span className="font-semibold text-white">{c.label}</span>
+                        <span className="block text-slate-500">{c.description}</span>
+                      </span>
+                    </label>
                   ))}
                 </div>
                 <p className="text-slate-500 mt-1">Give each connection only what it needs. Keys can never manage your team, billing or settings.</p>

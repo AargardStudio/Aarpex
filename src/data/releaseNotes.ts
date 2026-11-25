@@ -23,6 +23,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.21.0",
+    date: "2026-11-25",
+    headline: "Connect AarPex to your own tools and to Claude",
+    tagline: "A campaigns API, bulk lead import and export, and an MCP connector.",
+    highlights: [
+      { title: "MCP connector", description: "Add AarPex to Claude or any MCP client with one URL and a workspace API key. Search leads, review campaigns and import data in plain language." },
+      { title: "Campaigns API", description: "Create draft campaigns, pause, resume and archive them, and read per-step results. Sending stays in AarPex." },
+      { title: "Bulk import and export", description: "Import up to 1,000 leads per call from JSON or CSV with a dry-run preview and duplicate checks, and export with filters as JSON or CSV." },
+    ],
+  },
+  {
     version: "2.20.2",
     date: "2026-11-25",
     headline: "More reliable campaign sending",
