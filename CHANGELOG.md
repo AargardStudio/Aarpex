@@ -13,6 +13,14 @@ match) in the same commit.
 
 ## [Unreleased]
 
+## [2.20.2] - 2026-11-25
+
+### Fixed
+- Campaign sends no longer fire every email at once. They go out 3 at a time with a short pause, which stops Gmail/Google Workspace answering "421-4.3.0 Temporary System Problem" for part of the list.
+- Temporary mail-server errors (421/450/451/452, "try again later", timeouts) are retried automatically after a wait before a send is counted as failed.
+- Each address is emailed once per step even if several leads share it, and `mailto:` prefixes / capitals are cleaned from addresses (client and server). Duplicates no longer show as "waiting" on the Campaigns page.
+- Sending progress ("Sending... 40/153") shows on the Campaigns page.
+
 ## [2.20.1] - 2026-11-23
 
 ### Added

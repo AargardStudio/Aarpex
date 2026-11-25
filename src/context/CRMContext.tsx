@@ -40,7 +40,7 @@ import { LeadGroup,
 import { STORAGE_LIMITS_BYTES } from "../data/subscriptionPlans";
 import { isSupabaseAuthConfigured, getSupabaseAuthClient } from "../config/supabaseAuthClient";
 import { getMailboxById, mailAuthFields, mailboxHasCredentials } from "../lib/webmail";
-import { addDaysToToday, skipWeekend, mergeTags, sendCampaignEmail } from "../lib/campaignSend";
+import { addDaysToToday, skipWeekend, mergeTags, sendCampaignEmail, sendInBatches, pendingForStep, cleanEmail } from "../lib/campaignSend";
 import { fetchWhatsAppMessages, upsertWhatsAppMessages, phoneDigits, samePhone } from "../lib/whatsappStore";
 import {
   syncTenantTable,
@@ -297,7 +297,7 @@ interface CRMContextType {
   updateEmailCampaign: (id: string, updates: Partial<EmailCampaign>) => void;
   deleteEmailCampaign: (id: string) => void;
   checkCampaignReplies: (campaignId: string) => Promise<void>;
-  sendCampaignStep: (campaignId: string, stepId: string, opts?: { onlyFailed?: boolean }) => Promise<{ ok: boolean; sent: number; failed: number; message?: string }>;
+  sendCampaignStep: (campaignId: string, stepId: string, opts?: { onlyFailed?: boolean; onProgress?: (done: number, total: number) => void }) => Promise<{ ok: boolean; sent: number; failed: number; message?: string }>;
 
   // Products / Services -- the versatile catalog (retainers, subscriptions,
   // packages, B2B products), settable up manually or drafted by AI.
@@ -2965,7 +2965,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const sendCampaignStep = async (
     campaignId: string,
     stepId: string,
-    opts?: { onlyFailed?: boolean; auto?: boolean }
+    opts?: { onlyFailed?: boolean; auto?: boolean; onProgress?: (done: number, total: number) => void }
   ): Promise<{ ok: boolean; sent: number; failed: number; message?: string }> => {
     const camp = emailCampaignsRef.current.find((x) => x.id === campaignId);
     if (!camp) return { ok: false, sent: 0, failed: 0, message: "Campaign not found." };
@@ -2975,25 +2975,19 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!mailboxHasCredentials(mailCfg)) {
       return { ok: false, sent: 0, failed: 0, message: "This campaign's mailbox isn't connected. Connect it in Settings first." };
     }
-    const prior = step.deliveryResults || [];
-    const replied = new Set(camp.repliedAudienceIds || []);
-    const alreadyDelivered = new Set(prior.filter((r) => r.success).map((r) => r.recipientId));
-    const failedBefore = new Set(prior.filter((r) => !r.success).map((r) => r.recipientId));
-    const recipients = leads
-      .filter((l) => camp.audienceIds.includes(l.id) && !replied.has(l.id) && l.email && l.email.trim())
-      .filter((l) => !alreadyDelivered.has(l.id))
-      .filter((l) => (opts?.onlyFailed ? failedBefore.has(l.id) : true))
-      .map((l) => ({
-        id: l.id,
-        email: l.email,
-        firstName: (l.name || "").split(" ")[0] || "there",
-        company: l.company || "your company",
-        jobTitle: (l as any).jobTitle || "your role",
-      }));
+    const recipients = pendingForStep(camp, step, leads, !!opts?.onlyFailed).map((l) => ({
+      id: l.id,
+      email: cleanEmail(l.email),
+      firstName: (l.name || "").split(" ")[0] || "there",
+      company: l.company || "your company",
+      jobTitle: (l as any).jobTitle || "your role",
+    }));
     if (recipients.length === 0) return { ok: false, sent: 0, failed: 0, message: "No one is waiting for this email." };
 
-    const results = await Promise.all(
-      recipients.map((r) => sendCampaignEmail(mailCfg, currentUser, activeTenant, r, mergeTags(step.subject, r), mergeTags(step.body, r)))
+    const results = await sendInBatches(
+      recipients,
+      (r) => sendCampaignEmail(mailCfg, currentUser, activeTenant, r, mergeTags(step.subject, r), mergeTags(step.body, r)),
+      { onProgress: opts?.onProgress }
     );
     const succeeded = results.filter((d) => d.success).length;
     const failed = results.length - succeeded;
@@ -3089,8 +3083,8 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const emailsByAudienceId = new Map<string, string>();
     campaign.audienceIds.forEach((id) => {
-      const email = leads.find((l) => l.id === id)?.email;
-      if (email && email.trim()) emailsByAudienceId.set(id, email.trim().toLowerCase());
+      const email = cleanEmail(leads.find((l) => l.id === id)?.email);
+      if (email) emailsByAudienceId.set(id, email);
     });
 
     const addresses = Array.from(new Set(emailsByAudienceId.values()));

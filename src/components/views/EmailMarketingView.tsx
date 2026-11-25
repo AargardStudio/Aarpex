@@ -4,7 +4,7 @@ import { EmailCampaign, EmailFrequency, EmailCampaignTechnique, EmailStep, Email
 import { apiFetch } from "../../lib/apiClient";
 import { computeProductMatches } from "../../lib/productMatching";
 import { getMailboxById, mailboxLabel } from "../../lib/webmail";
-import { addDaysToToday, skipWeekend, mergeTags, sendCampaignEmail, Recipient } from "../../lib/campaignSend";
+import { addDaysToToday, skipWeekend, mergeTags, sendCampaignEmail, sendInBatches, dedupeByEmail, cleanEmail, Recipient } from "../../lib/campaignSend";
 import {
   Mail,
   Plus,
@@ -372,11 +372,10 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   };
 
   const buildRecipients = (): Recipient[] => {
-    return leads
-      .filter((l) => selectedIds.includes(l.id))
+    return dedupeByEmail(leads.filter((l) => selectedIds.includes(l.id)))
       .map((l) => ({
         id: l.id,
-        email: l.email,
+        email: cleanEmail(l.email),
         firstName: (l.name || "").split(" ")[0] || "there",
         company: l.company || "your company",
         jobTitle: l.jobTitle || "your role",
@@ -577,10 +576,8 @@ const CampaignWizardModal: React.FC<{ onClose: () => void }> = ({ onClose }) => 
         // Send step 1 to every recipient right now (personalizing merge tags
         // per recipient), and compute the due dates for the remaining steps.
         const step1 = steps[0];
-        const deliveryResults = await Promise.all(
-          recipients.map((r) =>
-            sendCampaignEmail(mailCfg, currentUser, activeTenant, r, mergeTags(step1.subject, r), mergeTags(step1.body, r))
-          )
+        const deliveryResults = await sendInBatches(recipients, (r) =>
+          sendCampaignEmail(mailCfg, currentUser, activeTenant, r, mergeTags(step1.subject, r), mergeTags(step1.body, r))
         );
         const succeeded = deliveryResults.filter((d) => d.success).length;
         const failed = deliveryResults.length - succeeded;
@@ -1568,11 +1565,10 @@ const CampaignDetailModal: React.FC<{ campaign: EmailCampaign; onClose: () => vo
   // Follow-ups skip anyone who has already replied -- see the Inbox section,
   // which is what populates campaign.repliedAudienceIds.
   const recipients: Recipient[] = useMemo(() => {
-    return leads
-      .filter((l) => campaign.audienceIds.includes(l.id) && !repliedIds.includes(l.id))
+    return dedupeByEmail(leads.filter((l) => campaign.audienceIds.includes(l.id) && !repliedIds.includes(l.id)))
       .map((l) => ({
         id: l.id,
-        email: l.email,
+        email: cleanEmail(l.email),
         firstName: (l.name || "").split(" ")[0] || "there",
         company: l.company || "your company",
         jobTitle: l.jobTitle || "your role",
@@ -1589,10 +1585,8 @@ const CampaignDetailModal: React.FC<{ campaign: EmailCampaign; onClose: () => vo
     setSendingStepId(step.id);
     try {
       const mailCfg = getMailboxById(activeTenant, campaign.mailboxId);
-      const newResults = await Promise.all(
-        targetRecipients.map((r) =>
-          sendCampaignEmail(mailCfg, currentUser, activeTenant, r, mergeTags(step.subject, r), mergeTags(step.body, r))
-        )
+      const newResults = await sendInBatches(targetRecipients, (r) =>
+        sendCampaignEmail(mailCfg, currentUser, activeTenant, r, mergeTags(step.subject, r), mergeTags(step.body, r))
       );
       const succeeded = newResults.filter((d) => d.success).length;
       const failed = newResults.length - succeeded;

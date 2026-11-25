@@ -4361,7 +4361,7 @@ function normalizeRecipients(input: any): { valid: string[]; invalid: string[] }
   for (const entry of raw) {
     if (entry === null || entry === undefined) continue;
     for (const piece of String(entry).split(/[,;]/)) {
-      const candidate = piece.trim();
+      const candidate = piece.trim().replace(/^mailto:/i, "").split("?")[0].trim();
       if (!candidate) continue;
       if (EMAIL_SHAPE_RE.test(candidate)) valid.push(candidate);
       else invalid.push(candidate);

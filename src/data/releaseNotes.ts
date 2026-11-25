@@ -23,6 +23,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2.20.2",
+    date: "2026-11-25",
+    headline: "More reliable campaign sending",
+    tagline: "Paced sending, automatic retries and no more duplicate emails.",
+    highlights: [
+      { title: "Paced sending", description: "Emails go out a few at a time, so Google and other mail servers stop rejecting part of a big campaign." },
+      { title: "Automatic retries", description: "Temporary server errors are retried after a short wait before being marked failed." },
+      { title: "No duplicates", description: "Each address is emailed once per step, and mailto: prefixes in scraped addresses are cleaned." },
+    ],
+  },
+  {
     version: "2.20.1",
     date: "2026-11-23",
     headline: "Send now and Retry failed on the Campaigns page",

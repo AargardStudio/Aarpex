@@ -3,6 +3,7 @@ import { Send, RotateCcw, ListOrdered, ArrowLeft, Search, CheckCircle2, XCircle,
 import { useCRM } from "../../context/CRMContext";
 import { getMailboxById } from "../../lib/webmail";
 import type { EmailCampaign, EmailStep } from "../../types";
+import { pendingForStep } from "../../lib/campaignSend";
 
 // Campaigns overview: every campaign in the workspace in one list. Opening a
 // campaign shows its sequence -- the initial email and each follow-up, with
@@ -82,7 +83,10 @@ export const CampaignSequencesView: React.FC = () => {
     setBusyStep(st.id);
     setStepMsg((m) => ({ ...m, [st.id]: { ok: true, text: "Sending…" } }));
     try {
-      const r = await sendCampaignStep(c.id, st.id, { onlyFailed });
+      const r = await sendCampaignStep(c.id, st.id, {
+        onlyFailed,
+        onProgress: (done: number, total: number) => setStepMsg((m) => ({ ...m, [st.id]: { ok: true, text: `Sending… ${done}/${total}` } })),
+      });
       setStepMsg((m) => ({
         ...m,
         [st.id]: r.ok || r.sent > 0
@@ -150,9 +154,9 @@ export const CampaignSequencesView: React.FC = () => {
             const ok = res.filter((r) => r.success).length;
             const expanded = openStep === st.id;
             const Icon = state === "Sent" ? CheckCircle2 : state === "Failed" ? XCircle : state === "Due" ? CalendarClock : state === "Draft" ? FileText : Clock;
-            const waiting = state === "Scheduled" || state === "Due" ? audienceWaiting(campaign, st, replied) : 0;
-            const pending = audienceWaiting(campaign, st, replied);
-            const failedCount = res.filter((r) => !r.success && !replied.has(r.recipientId)).length;
+            const waiting = state === "Scheduled" || state === "Due" ? pendingForStep(campaign, st, leads || []).length : 0;
+            const pending = pendingForStep(campaign, st, leads || []).length;
+            const failedCount = pendingForStep(campaign, st, leads || [], true).length;
             const prevSent = steps.filter((p) => p.stepNumber < st.stepNumber).every((p) => p.status === "Sent");
             const canSend = (state === "Due" || state === "Scheduled" || state === "Draft" || (state === "Failed" && res.length === 0)) && pending > 0;
             const canRetry = (state === "Partial" || state === "Failed") && failedCount > 0;
@@ -326,9 +330,3 @@ export const CampaignSequencesView: React.FC = () => {
     </div>
   );
 };
-
-// Recipients still waiting for this step: not replied and not already sent it.
-function audienceWaiting(c: EmailCampaign, st: EmailStep, replied: Set<string>): number {
-  const done = new Set((st.deliveryResults || []).filter((r) => r.success).map((r) => r.recipientId));
-  return c.audienceIds.filter((id) => !replied.has(id) && !done.has(id)).length;
-}
